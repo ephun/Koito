@@ -28,8 +28,8 @@ URI when present; otherwise title/artist/album). It makes no fuzzy or cross-serv
 matches. It counts music records reporting `reason_end=trackdone`, following the
 old importer, but retains short, skipped, nonmusic, and invalid records with an
 explanation. Played milliseconds are not assumed to be a recording's duration.
-The UI names this policy explicitly. Broader qualification and matching controls
-belong to the later Filters work.
+This policy is internal to the first projection. Broader qualification and
+matching controls belong to the later Filters work.
 
 The compatibility projection is rebuildable from preserved records, writes to
 Koito's existing catalog/listens, and tracks which listens it owns. It must not
@@ -49,6 +49,9 @@ sizes; never extract arbitrary archive paths or execute supporting files.
 The Imports page must show receipt status, filenames, source/account, record and
 play counts, errors, record payloads and explanations, original-file download,
 and a rebuild action. No public endpoint exposes raw evidence.
+The upload form is generic: recognize supported content regardless of the outer
+filename and reject unsupported files. Keep policy details and explanatory prose
+out of the page; show controls, data, and concise action results.
 
 Acceptance tests cover repeats, renamed uploads, zipped/standalone overlap,
 overlapping exports, repeated rows within one file, distinct accounts, unknown

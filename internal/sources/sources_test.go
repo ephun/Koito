@@ -332,3 +332,34 @@ func TestFailedProjectionPreservesPreviousView(t *testing.T) {
 		t.Fatal("rebuild could not recover", after)
 	}
 }
+
+func TestImportDetectsContentAndRejectsUnsupportedFiles(t *testing.T) {
+	s := testStore(t)
+	data := []byte("[" + complete + "]")
+	mustImport(t, s, data, "history.data", "me")
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	member, err := z.Create("Streaming_History_Audio_2020.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = member.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err = z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result := mustImport(t, s, buf.Bytes(), "archive.data", "me")
+	if result.Added != 0 || result.Reused != 1 {
+		t.Fatal("renamed ZIP was not detected", result)
+	}
+	for _, input := range []string{"%PDF-1.7 unsupported", `[{"artist":"Someone","track":"Something"}]`} {
+		_, err = s.ImportSpotify(context.Background(), strings.NewReader(input), "upload.json", "me", 1)
+		if err == nil || err.Error() != "Unsupported file." {
+			t.Fatal("unsupported upload did not get a direct error", err)
+		}
+	}
+	if count(t, s, "source_records") != 1 {
+		t.Fatal("unsupported upload created records")
+	}
+}

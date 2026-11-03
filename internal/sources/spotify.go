@@ -78,7 +78,18 @@ func (s *Store) ImportSpotify(ctx context.Context, input io.Reader, filename, ac
 	}()
 	var parsed []parsedFile
 	p, _ := s.FilePath(f.Hash)
-	if strings.EqualFold(filepath.Ext(filename), ".zip") {
+	probe, e := os.Open(p)
+	if e != nil {
+		return result, e
+	}
+	var signature [4]byte
+	_, e = io.ReadFull(probe, signature[:])
+	probe.Close()
+	if e != nil && e != io.EOF && e != io.ErrUnexpectedEOF {
+		return result, e
+	}
+	isZip := bytes.Equal(signature[:], []byte{'P', 'K', 3, 4}) || bytes.Equal(signature[:], []byte{'P', 'K', 5, 6})
+	if isZip {
 		z, e := zip.OpenReader(p)
 		if e != nil {
 			return result, fmt.Errorf("invalid ZIP: %w", e)
@@ -120,7 +131,7 @@ func (s *Store) ImportSpotify(ctx context.Context, input io.Reader, filename, ac
 			parsed = append(parsed, parsedFile{child, rows})
 		}
 		if len(parsed) == 0 {
-			return result, errors.New("ZIP contains no Spotify extended Streaming_History_*.json files")
+			return result, errors.New("Unsupported file.")
 		}
 	} else {
 		rows, e := s.parseSpotify(f)
@@ -177,7 +188,7 @@ func (s *Store) parseSpotify(f File) ([]json.RawMessage, error) {
 	dec := json.NewDecoder(file)
 	token, err := dec.Token()
 	if err != nil || token != json.Delim('[') {
-		return nil, errors.New("expected a Spotify extended history JSON array")
+		return nil, errors.New("Unsupported file.")
 	}
 	out := []json.RawMessage{}
 	for dec.More() {
@@ -191,10 +202,10 @@ func (s *Store) parseSpotify(f File) ([]json.RawMessage, error) {
 		}
 		// Reject other JSON exports, but retain missing or invalid values for review.
 		if _, ok := fields["ts"]; !ok {
-			return nil, errors.New("entry lacks extended-history ts field")
+			return nil, errors.New("Unsupported file.")
 		}
 		if _, ok := fields["ms_played"]; !ok {
-			return nil, errors.New("entry lacks extended-history ms_played field")
+			return nil, errors.New("Unsupported file.")
 		}
 		out = append(out, bytes.Clone(raw))
 	}
