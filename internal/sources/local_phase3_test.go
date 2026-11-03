@@ -49,6 +49,20 @@ func TestLocalPhase3Libraries(t *testing.T) {
 		require.Equal(t, 14020, tracks)
 		require.Equal(t, 47748, total)
 	}
+	libraries, err := s.Libraries(ctx)
+	require.NoError(t, err)
+	require.Len(t, libraries, 1)
+	require.Len(t, libraries[0].Files, 2)
+	require.Len(t, libraries[0].Tracks, 14020)
+	require.EqualValues(t, 47748, libraries[0].Reported)
+	equivalent := 0
+	for _, file := range libraries[0].Files {
+		if file.Equivalent {
+			equivalent++
+		}
+	}
+	require.Equal(t, 1, equivalent)
+	t.Logf("XML and JSON reconcile to %d tracks and %d reported cumulative plays", len(libraries[0].Tracks), libraries[0].Reported)
 	for i := 0; i < 2; i++ {
 		result, err := s.Rebuild(ctx)
 		require.NoError(t, err)
