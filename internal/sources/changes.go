@@ -152,7 +152,7 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	if err = validateNewMatch(records, added); err != nil {
 		return preview, matchPlan{}, config, added, err
 	}
-	plan, err := calculateMatches(ctx, records, config, decisions)
+	plan, err := calculateView(ctx, tx, records, config, decisions)
 	if err != nil {
 		return preview, plan, config, added, err
 	}
@@ -163,7 +163,7 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	preview.Examples = []PreviewExample{}
 	beforeKeys := map[int64]string{}
 	beforeGroups := map[string][]int64{}
-	rows, err := tx.QueryContext(ctx, `SELECT record_id,play_key FROM source_interpretations WHERE policy=? AND play_key<>'' ORDER BY record_id`, Policy)
+	rows, err := tx.QueryContext(ctx, `SELECT i.record_id,i.play_key FROM source_interpretations i JOIN source_plays p ON p.play_key=i.play_key AND p.policy=i.policy WHERE i.policy=? ORDER BY i.record_id`, Policy)
 	if err != nil {
 		return preview, plan, config, added, err
 	}
@@ -175,6 +175,26 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 			return preview, plan, config, added, err
 		}
 		beforeKeys[id] = key
+		beforeGroups[key] = append(beforeGroups[key], id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	// Inferred events can share one supporting record. Their own play keys
+	// identify them independently from the record-to-observed-play relation.
+	rows, err = tx.QueryContext(ctx, `SELECT r.play_key,r.record_id FROM source_play_records r JOIN source_play_details d ON d.play_key=r.play_key WHERE d.evidence_level<>'observed' ORDER BY r.play_key,r.record_id`)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	for rows.Next() {
+		var key string
+		var id int64
+		if err = rows.Scan(&key, &id); err != nil {
+			rows.Close()
+			return preview, plan, config, added, err
+		}
 		beforeGroups[key] = append(beforeGroups[key], id)
 	}
 	err = rows.Err()
@@ -216,6 +236,23 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	}
 	touched := map[string]bool{}
 	for _, play := range plan.Plays {
+		if play.Evidence != "observed" {
+			prior, exists := previous[play.Key]
+			same := exists && prior.representative == play.Representative && prior.unix == play.At.Unix() && equalIDs(beforeGroups[play.Key], play.Records)
+			old := [][]int64{}
+			if exists {
+				touched[play.Key] = true
+				old = append(old, beforeGroups[play.Key])
+			}
+			if !same {
+				preview.Changed++
+				if len(preview.Examples) < 12 {
+					r := byID[play.Representative]
+					preview.Examples = append(preview.Examples, PreviewExample{Before: old, After: play.Records, Title: r.Values.Title, Artist: r.Values.Artist})
+				}
+			}
+			continue
+		}
 		same := len(play.Records) > 0
 		oldKeys := map[string]bool{}
 		old := [][]int64{}
@@ -341,7 +378,7 @@ func (s *Store) Save(ctx context.Context, change FilterChange) (RuleVersion, err
 	if err = validateNewMatch(records, decision); err != nil {
 		return RuleVersion{}, err
 	}
-	plan, err := calculateMatches(ctx, records, config, decisions)
+	plan, err := calculateView(ctx, tx, records, config, decisions)
 	if err != nil {
 		return RuleVersion{}, err
 	}

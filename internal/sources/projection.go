@@ -13,6 +13,9 @@ type ProjectionResult struct {
 	Records    int    `json:"records"`
 	Plays      int    `json:"plays"`
 	Collisions int    `json:"collisions"`
+	Estimated  int64  `json:"estimated"`
+	LastPlayed int64  `json:"last_played"`
+	Undated    int64  `json:"undated"`
 }
 type spotifyItem struct {
 	Timestamp string `json:"ts"`

@@ -11,17 +11,20 @@ import (
 )
 
 type matchingRecord struct {
-	ID       int64        `json:"id"`
-	SourceID int64        `json:"source_id"`
-	Service  string       `json:"service"`
-	FileHash string       `json:"file_hash"`
-	Ordinal  int          `json:"ordinal"`
-	Parser   string       `json:"parser"`
-	Payload  string       `json:"payload,omitempty"`
-	UserID   int32        `json:"-"`
-	Values   recordValues `json:"values"`
-	Start    time.Time    `json:"time"`
-	Basis    string       `json:"time_basis"`
+	ID        int64        `json:"id"`
+	SourceID  int64        `json:"source_id"`
+	Service   string       `json:"service"`
+	FileHash  string       `json:"file_hash"`
+	Ordinal   int          `json:"ordinal"`
+	Parser    string       `json:"parser"`
+	Payload   string       `json:"payload,omitempty"`
+	UserID    int32        `json:"-"`
+	Values    recordValues `json:"values"`
+	Start     time.Time    `json:"time"`
+	Basis     string       `json:"time_basis"`
+	Device    string       `json:"device,omitempty"`
+	LibraryID string       `json:"library_id,omitempty"`
+	TrackID   string       `json:"track_id,omitempty"`
 }
 
 type MatchDecision struct {
@@ -33,18 +36,25 @@ type MatchDecision struct {
 }
 
 type plannedPlay struct {
-	Key            string  `json:"key"`
-	Records        []int64 `json:"records"`
-	Representative int64   `json:"representative"`
-	Reason         string  `json:"reason"`
+	Key            string      `json:"key"`
+	Records        []int64     `json:"records"`
+	Representative int64       `json:"representative"`
+	Reason         string      `json:"reason"`
+	At             time.Time   `json:"at,omitempty"`
+	Evidence       string      `json:"evidence,omitempty"`
+	IntervalStart  time.Time   `json:"interval_start,omitempty"`
+	IntervalEnd    time.Time   `json:"interval_end,omitempty"`
+	Attribution    Attribution `json:"attribution"`
 }
 
 type matchPlan struct {
-	Records   []matchingRecord
-	Plays     []plannedPlay
-	Reasons   map[int64]string
-	Keys      map[int64]string
-	Ambiguous map[int64][]int64
+	Records      []matchingRecord
+	Plays        []plannedPlay
+	Reasons      map[int64]string
+	Keys         map[int64]string
+	Ambiguous    map[int64][]int64
+	Aggregates   []AggregateContribution
+	Attributions map[string]Attribution
 }
 
 func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig) ([]matchingRecord, error) {
@@ -73,6 +83,21 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
 	r.Start = r.Values.Time
 	r.Basis = r.Values.TimeMeaning
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(r.Payload), &fields)
+	for _, key := range []string{"device_name", "device", "platform"} {
+		if value := rawString(fields[key]); value != "" {
+			r.Device = value
+			break
+		}
+	}
+	if r.Service == "itunes" {
+		var row libraryEnvelope
+		_ = json.Unmarshal([]byte(r.Payload), &row)
+		r.LibraryID = row.LibraryID
+		r.TrackID = libraryText(row.Fields, "Persistent ID")
+		r.Device = libraryText(row.Fields, "Device")
+	}
 	if r.Service == "spotify" && playRule.Settings.SpotifyTime == "estimated_start" && r.Values.Reason == "counted" {
 		// Subtract actual played time, never an assumed recording duration. Guard
 		// duration conversion against overflow and implausible pre-epoch results.

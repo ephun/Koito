@@ -7,12 +7,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 type RuleScope struct {
-	Service  string `json:"service,omitempty"`
-	SourceID int64  `json:"source_id,omitempty"`
-	FileHash string `json:"file_hash,omitempty"`
+	Service   string `json:"service,omitempty"`
+	SourceID  int64  `json:"source_id,omitempty"`
+	FileHash  string `json:"file_hash,omitempty"`
+	LibraryID string `json:"library_id,omitempty"`
+	TrackID   string `json:"track_id,omitempty"`
+	RecordID  int64  `json:"record_id,omitempty"`
+	Artist    string `json:"artist,omitempty"`
+	Device    string `json:"device,omitempty"`
+	From      string `json:"from,omitempty"`
+	Until     string `json:"until,omitempty"`
 }
 type RuleSettings struct {
 	CaseSensitive     bool   `json:"case_sensitive"`
@@ -21,6 +29,13 @@ type RuleSettings struct {
 	SpotifyTime       string `json:"spotify_time,omitempty"`
 	PreferredSource   string `json:"preferred_source,omitempty"`
 	Timezone          string `json:"timezone"`
+	Listener          string `json:"listener,omitempty"`
+	SharePercent      *int   `json:"share_percent,omitempty"`
+	EvidenceSourceID  int64  `json:"evidence_source_id,omitempty"`
+	MinimumMatches    int    `json:"minimum_matches,omitempty"`
+	CountMode         string `json:"count_mode,omitempty"`
+	UseLastPlayed     bool   `json:"use_last_played,omitempty"`
+	EstimateTimes     bool   `json:"estimate_times,omitempty"`
 }
 type Rule struct {
 	ID       string       `json:"id"`
@@ -157,10 +172,10 @@ func validateRules(config RuleConfig) error {
 			return errors.New("Rule IDs must be unique.")
 		}
 		ids[rule.ID] = true
-		if rule.Scope.SourceID < 0 {
+		if rule.Scope.SourceID < 0 || rule.Scope.RecordID < 0 {
 			return errors.New("Invalid source scope.")
 		}
-		if rule.Scope.Service != "" && rule.Scope.Service != "spotify" && rule.Scope.Service != "lastfm" {
+		if rule.Scope.Service != "" && rule.Scope.Service != "spotify" && rule.Scope.Service != "lastfm" && rule.Scope.Service != "itunes" {
 			return errors.New("Invalid service scope.")
 		}
 		if rule.Scope.FileHash != "" {
@@ -168,6 +183,30 @@ func validateRules(config RuleConfig) error {
 			if e != nil || len(b) != 32 {
 				return errors.New("Invalid file scope.")
 			}
+		}
+		var from, until time.Time
+		for name, value := range map[string]string{"from": rule.Scope.From, "until": rule.Scope.Until} {
+			if value == "" {
+				continue
+			}
+			date, err := time.Parse(time.RFC3339Nano, value)
+			if err != nil {
+				return errors.New("Date scopes need an explicit timezone.")
+			}
+			if name == "from" {
+				from = date
+			} else {
+				until = date
+			}
+		}
+		if !from.IsZero() && !until.IsZero() && !until.After(from) {
+			return errors.New("The end must follow the start.")
+		}
+		if len(rule.Scope.LibraryID) > 200 || len(rule.Scope.TrackID) > 200 || len(rule.Scope.Artist) > 1000 || len(rule.Scope.Device) > 1000 {
+			return errors.New("Rule scope is too long.")
+		}
+		if rule.Settings.SharePercent != nil && (*rule.Settings.SharePercent < 0 || *rule.Settings.SharePercent > 100) {
+			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
 		case rule.Type == "matching" && rule.Subtype == "music":
@@ -189,7 +228,42 @@ func validateRules(config RuleConfig) error {
 			if rule.Settings.PreferredSource != "spotify" && rule.Settings.PreferredSource != "lastfm" {
 				return errors.New("Invalid displayed source.")
 			}
+		case rule.Type == "attribution" && rule.Subtype == "direct":
+			if rule.Settings.Listener != "self" && rule.Settings.Listener != "other" && rule.Settings.Listener != "unknown" {
+				return errors.New("Choose a listener.")
+			}
+		case rule.Type == "attribution" && rule.Subtype == "aggregate":
+			if rule.Scope.Service != "itunes" || rule.Settings.SharePercent == nil {
+				return errors.New("Aggregate attribution needs an iTunes scope and share.")
+			}
+			if rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
+				return errors.New("Aggregate shares apply to whole counts.")
+			}
+		case rule.Type == "attribution" && rule.Subtype == "heuristic":
+			if rule.Scope.Service == "" {
+				return errors.New("Choose a source for heuristic attribution.")
+			}
+			if rule.Settings.EvidenceSourceID <= 0 || rule.Settings.MinimumMatches < 1 || rule.Settings.MinimumMatches > 100000 {
+				return errors.New("Choose an evidence source and minimum matches.")
+			}
+			if rule.Scope.Service == "itunes" && rule.Settings.SharePercent == nil {
+				return errors.New("Library heuristics need an explicit share.")
+			}
+		case rule.Type == "inference" && rule.Subtype == "count":
+			if rule.Scope.Service != "itunes" {
+				return errors.New("Count inference needs an iTunes scope.")
+			}
+			if rule.Settings.CountMode != "maximum" && rule.Settings.CountMode != "latest" && rule.Settings.CountMode != "reset_total" {
+				return errors.New("Choose how to interpret cumulative counts.")
+			}
+			if rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
+				return errors.New("Count inference applies to whole counts.")
+			}
+		case rule.Type == "inference" && rule.Subtype == "time" && rule.Scope.Service == "itunes":
 		case rule.Type == "inference" && rule.Subtype == "time":
+			if rule.Scope.LibraryID != "" || rule.Scope.TrackID != "" || rule.Scope.RecordID != 0 || rule.Scope.Artist != "" || rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
+				return errors.New("Timezone rules use source and file scopes.")
+			}
 			if rule.Scope.Service == "spotify" {
 				return errors.New("CSV timezone rules apply to Last.fm.")
 			}

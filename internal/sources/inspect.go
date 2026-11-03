@@ -3,8 +3,10 @@ package sources
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type InspectedRecord struct {
@@ -14,9 +16,11 @@ type InspectedRecord struct {
 }
 
 type RecordInspection struct {
-	Record       InspectedRecord   `json:"record"`
-	Contributors []InspectedRecord `json:"contributors"`
-	Candidates   []InspectedRecord `json:"candidates"`
+	Record        InspectedRecord         `json:"record"`
+	Contributors  []InspectedRecord       `json:"contributors"`
+	Candidates    []InspectedRecord       `json:"candidates"`
+	Attribution   *Attribution            `json:"attribution,omitempty"`
+	Contributions []AggregateContribution `json:"contributions"`
 }
 
 const inspectedColumns = `r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id,COALESCE(i.reason,'not projected'),COALESCE(i.play_key,'')`
@@ -59,6 +63,43 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 		return result, fmt.Errorf("Unknown record.")
 	}
 	result.Record = rows[0]
+	result.Contributions = []AggregateContribution{}
+	if result.Record.PlayKey != "" {
+		var raw string
+		err = tx.QueryRowContext(ctx, `SELECT attribution_json FROM source_play_details WHERE play_key=?`, result.Record.PlayKey).Scan(&raw)
+		if err != nil && err != sql.ErrNoRows {
+			return result, err
+		}
+		if err == nil {
+			var value Attribution
+			if err = json.Unmarshal([]byte(raw), &value); err != nil {
+				return result, err
+			}
+			result.Attribution = &value
+		}
+	}
+	contributions, err := tx.QueryContext(ctx, `SELECT a.details_json FROM source_aggregates a JOIN source_aggregate_records r ON r.aggregate_key=a.aggregate_key WHERE r.record_id=? ORDER BY a.aggregate_key`, id)
+	if err != nil {
+		return result, err
+	}
+	for contributions.Next() {
+		var raw string
+		var value AggregateContribution
+		if err = contributions.Scan(&raw); err != nil {
+			contributions.Close()
+			return result, err
+		}
+		if err = json.Unmarshal([]byte(raw), &value); err != nil {
+			contributions.Close()
+			return result, err
+		}
+		result.Contributions = append(result.Contributions, value)
+	}
+	err = contributions.Err()
+	contributions.Close()
+	if err != nil {
+		return result, err
+	}
 	result.Contributors = []InspectedRecord{}
 	result.Candidates = []InspectedRecord{}
 	if result.Record.PlayKey != "" {
@@ -72,17 +113,24 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 }
 
 type PlayListItem struct {
-	Key      string `json:"key"`
-	RecordID int64  `json:"record_id"`
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	Time     string `json:"time"`
-	Records  int    `json:"records"`
-	Reason   string `json:"reason"`
+	Key         string       `json:"key"`
+	RecordID    int64        `json:"record_id"`
+	Title       string       `json:"title"`
+	Artist      string       `json:"artist"`
+	Album       string       `json:"album"`
+	Time        string       `json:"time"`
+	Records     int          `json:"records"`
+	Reason      string       `json:"reason"`
+	Evidence    string       `json:"evidence"`
+	Attribution *Attribution `json:"attribution,omitempty"`
+	Cursor      string       `json:"cursor"`
 }
 
 func (s *Store) Plays(ctx context.Context, after int64, query string, ambiguous bool) ([]PlayListItem, error) {
+	return s.PlaysAfter(ctx, after, "", query, ambiguous)
+}
+
+func (s *Store) PlaysAfter(ctx context.Context, after int64, afterKey, query string, ambiguous bool) ([]PlayListItem, error) {
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
@@ -92,8 +140,8 @@ func (s *Store) Plays(ctx context.Context, after int64, query string, ambiguous 
 	if err != nil {
 		return nil, err
 	}
-	where := `WHERE r.id>? AND EXISTS(SELECT 1 FROM source_plays p WHERE p.policy='filters-v1' AND p.representative_record=r.id)`
-	args := []any{after}
+	where := `WHERE (r.id>? OR (r.id=? AND p.play_key>? AND ?<>''))`
+	args := []any{after, after, afterKey, afterKey}
 	if ambiguous {
 		where += ` AND EXISTS(SELECT 1 FROM source_match_candidates c JOIN source_interpretations other ON other.record_id=c.record_id AND other.policy='filters-v1' WHERE other.play_key=i.play_key)`
 	}
@@ -101,17 +149,34 @@ func (s *Store) Plays(ctx context.Context, after int64, query string, ambiguous 
 		where += ` AND (CAST(r.id AS TEXT)=? OR r.payload LIKE ? ESCAPE '\')`
 		args = append(args, query, "%"+strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)+"%")
 	}
-	rows, err := inspectedRecords(ctx, tx, version.Config, where+` ORDER BY r.id LIMIT 100`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT `+inspectedColumns+`,p.play_key,p.listened_at,COALESCE(d.evidence_level,'observed'),d.attribution_json,(SELECT COUNT(*) FROM source_play_records pr WHERE pr.play_key=p.play_key)`+inspectedTables+` JOIN source_plays p ON p.representative_record=r.id AND p.policy='filters-v1' LEFT JOIN source_play_details d ON d.play_key=p.play_key `+where+` ORDER BY r.id,p.play_key LIMIT 100`, args...)
 	if err != nil {
 		return nil, err
 	}
 	out := []PlayListItem{}
-	for _, r := range rows {
+	defer rows.Close()
+	for rows.Next() {
+		var r InspectedRecord
+		var key, level string
+		var attribution sql.NullString
+		var unix int64
 		var n int
-		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_interpretations WHERE policy=? AND play_key=?`, Policy, r.PlayKey).Scan(&n); err != nil {
+		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID, &r.Reason, &r.PlayKey, &key, &unix, &level, &attribution, &n); err != nil {
 			return nil, err
 		}
-		out = append(out, PlayListItem{Key: r.PlayKey, RecordID: r.ID, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, Time: r.Start.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), Records: n, Reason: r.Reason})
+		interpretMatchingRecord(&r.matchingRecord, version.Config)
+		item := PlayListItem{Key: key, RecordID: r.ID, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, Time: time.Unix(unix, 0).UTC().Format(time.RFC3339Nano), Records: n, Reason: r.Reason, Evidence: level, Cursor: fmt.Sprintf("%d:%s", r.ID, key)}
+		if level != "observed" {
+			item.Reason = level
+		}
+		if attribution.Valid {
+			var value Attribution
+			if err = json.Unmarshal([]byte(attribution.String), &value); err != nil {
+				return nil, err
+			}
+			item.Attribution = &value
+		}
+		out = append(out, item)
 	}
-	return out, nil
+	return out, rows.Err()
 }

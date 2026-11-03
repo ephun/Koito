@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gabehf/koito/engine/middleware"
 	"github.com/gabehf/koito/internal/sources"
@@ -26,7 +27,18 @@ func FiltersHandler(store *sources.Store) http.HandlerFunc {
 			value, err = store.Filters(r.Context())
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/plays":
 			after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
-			value, err = store.Plays(r.Context(), after, r.URL.Query().Get("q"), r.URL.Query().Get("ambiguous") == "true")
+			afterKey := ""
+			if cursor := r.URL.Query().Get("cursor"); cursor != "" {
+				left, right, ok := strings.Cut(cursor, ":")
+				parsed, e := strconv.ParseInt(left, 10, 64)
+				if !ok || e != nil || parsed <= 0 || len(right) != 64 {
+					http.Error(w, "Invalid play cursor.", 400)
+					return
+				}
+				after = parsed
+				afterKey = right
+			}
+			value, err = store.PlaysAfter(r.Context(), after, afterKey, r.URL.Query().Get("q"), r.URL.Query().Get("ambiguous") == "true")
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/record":
 			id, e := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 			if e != nil || id <= 0 {

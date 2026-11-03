@@ -3,6 +3,9 @@ package sources
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,4 +73,55 @@ func TestLocalPhase3Libraries(t *testing.T) {
 		require.Zero(t, result.Plays)
 		require.Zero(t, count(t, s, "listens"))
 	}
+	fingerprint := func(query string) string {
+		rows, err := s.DB.Query(query)
+		require.NoError(t, err)
+		defer rows.Close()
+		h := sha256.New()
+		for rows.Next() {
+			var text string
+			require.NoError(t, rows.Scan(&text))
+			fmt.Fprintf(h, "%d:%s", len(text), text)
+		}
+		require.NoError(t, rows.Err())
+		return hex.EncodeToString(h.Sum(nil))
+	}
+	rawQuery := `SELECT json_array(id,source_id,file_hash,ordinal,kind,payload,parser) FROM source_records ORDER BY id`
+	before := fingerprint(rawQuery)
+	saveTestRules(t, s, countRules()[0])
+	var available, attributed int64
+	require.NoError(t, s.DB.QueryRow(`SELECT COALESCE(SUM(available_count),0),COALESCE(SUM(attributed_count),0) FROM source_aggregates`).Scan(&available, &attributed))
+	require.EqualValues(t, 47748, available)
+	require.Zero(t, attributed)
+	// Explicit acceptance settings exercise mechanics. They are not saved as
+	// personal attribution defaults in the application.
+	saveTestRules(t, s, countRules()[1], Rule{ID: "test-time", Type: "inference", Subtype: "time", Enabled: true, Scope: RuleScope{Service: "itunes"}, Settings: RuleSettings{UseLastPlayed: true, EstimateTimes: true}})
+	var last, estimated, undated, overlap int64
+	require.NoError(t, s.DB.QueryRow(`SELECT SUM(available_count),SUM(attributed_count),SUM(last_played_count),SUM(estimated_count),SUM(undated_count),SUM(overlap_count) FROM source_aggregates`).Scan(&available, &attributed, &last, &estimated, &undated, &overlap))
+	require.EqualValues(t, 47748, available)
+	require.LessOrEqual(t, attributed, available)
+	require.Greater(t, estimated, int64(0))
+	require.EqualValues(t, attributed-overlap, last+estimated+undated)
+	require.EqualValues(t, last+estimated, count(t, s, "listens"))
+	var invalidTimes int
+	require.NoError(t, s.DB.QueryRow(`SELECT COUNT(*) FROM source_plays p JOIN source_play_details d ON d.play_key=p.play_key WHERE d.evidence_level='estimated' AND (p.listened_at<CAST(strftime('%s',d.interval_start) AS INTEGER) OR p.listened_at>CAST(strftime('%s',d.interval_end) AS INTEGER))`).Scan(&invalidTimes))
+	require.Zero(t, invalidTimes)
+	viewQuery := `SELECT json_array(p.play_key,p.listened_at,d.evidence_level,d.interval_start,d.interval_end,d.attribution_json) FROM source_plays p JOIN source_play_details d ON d.play_key=p.play_key ORDER BY p.play_key`
+	view := fingerprint(viewQuery)
+	_, err = s.Rebuild(ctx)
+	require.NoError(t, err)
+	require.Equal(t, view, fingerprint(viewQuery))
+	require.Equal(t, before, fingerprint(rawQuery))
+	t.Logf("Explicit test attribution: available=%d attributed=%d last_played=%d estimated=%d undated=%d matched_endpoints=%d", available, attributed, last, estimated, undated, overlap)
+	change := currentChange(t, s)
+	change.Config.Rules[len(change.Config.Rules)-1].Enabled = false
+	_, err = s.Save(ctx, change)
+	require.NoError(t, err)
+	require.Zero(t, count(t, s, "listens"))
+	change = currentChange(t, s)
+	change.Config.Rules[3].Enabled = false
+	_, err = s.Save(ctx, change)
+	require.NoError(t, err)
+	require.Zero(t, count(t, s, "source_aggregates"))
+	require.Equal(t, before, fingerprint(rawQuery))
 }
