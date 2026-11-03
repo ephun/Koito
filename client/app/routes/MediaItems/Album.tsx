@@ -1,6 +1,6 @@
 import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
 import TopTracks from "~/components/TopTracks";
-import { mergeAlbums, type Album } from "api/api";
+import { type Album } from "api/api";
 import LastPlayed from "~/components/LastPlayed";
 import MediaLayout from "./MediaLayout";
 import ActivityGrid from "~/components/ActivityGrid";
@@ -36,17 +36,6 @@ export default function Album() {
       listenCount={album.listen_count}
       firstListen={album.first_listen}
       imgItemId={album.id}
-      mergeFunc={mergeAlbums}
-      mergeCleanerFunc={(r, id) => {
-        r.artists = [];
-        r.tracks = [];
-        for (let i = 0; i < r.albums.length; i++) {
-          if (r.albums[i].id === id) {
-            r.albums.splice(i, 1);
-          }
-        }
-        return r;
-      }}
       subContent={
         <>
           {album.artists.length > 0 && !album.is_various_artists && (

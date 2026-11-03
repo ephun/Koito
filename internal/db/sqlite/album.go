@@ -551,51 +551,6 @@ func (s *Sqlite) AlbumsWithoutImages(ctx context.Context, from int32) ([]*models
 	return albums, rows.Err()
 }
 
-func (s *Sqlite) MergeAlbums(ctx context.Context, fromId, toId int32, replaceImage bool) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("MergeAlbums: BeginTx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// fetch artists from fromId before moving tracks (for re-association)
-	fromArtists, err := s.artistsForRelease(ctx, fromId)
-	if err != nil {
-		return fmt.Errorf("MergeAlbums: fetch from artists: %w", err)
-	}
-
-	if replaceImage {
-		var image, imageSrc sql.NullString
-		tx.QueryRowContext(ctx, `SELECT image, image_source FROM releases WHERE id = ?`, fromId).
-			Scan(&image, &imageSrc)
-		if image.Valid {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE releases SET image = ?, image_source = ? WHERE id = ?`,
-				image, imageSrc, toId); err != nil {
-				return fmt.Errorf("MergeAlbums: update image: %w", err)
-			}
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tracks SET release_id = ? WHERE release_id = ?`, toId, fromId); err != nil {
-		return fmt.Errorf("MergeAlbums: move tracks: %w", err)
-	}
-
-	for _, artist := range fromArtists {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT OR IGNORE INTO artist_releases (artist_id, release_id, is_primary) VALUES (?,?,0)`,
-			artist.ID, toId); err != nil {
-			return fmt.Errorf("MergeAlbums: associate artist: %w", err)
-		}
-	}
-
-	if err := cleanOrphanedEntries(ctx, tx); err != nil {
-		return fmt.Errorf("MergeAlbums: clean: %w", err)
-	}
-	return tx.Commit()
-}
-
 func (s *Sqlite) CountAlbums(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64

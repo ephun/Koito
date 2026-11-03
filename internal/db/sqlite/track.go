@@ -553,53 +553,6 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 	}, nil
 }
 
-func (s *Sqlite) MergeTracks(ctx context.Context, fromId, toId int32) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("MergeTracks: BeginTx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// check if tracks are in different releases
-	var fromRelease, toRelease int32
-	tx.QueryRowContext(ctx, `SELECT release_id FROM tracks WHERE id = ?`, fromId).Scan(&fromRelease)
-	tx.QueryRowContext(ctx, `SELECT release_id FROM tracks WHERE id = ?`, toId).Scan(&toRelease)
-
-	// redirect all listens (ignore conflicts — same timestamp already exists for toId)
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE OR IGNORE listens SET track_id = ? WHERE track_id = ?`, toId, fromId); err != nil {
-		return fmt.Errorf("MergeTracks: redirect listens: %w", err)
-	}
-
-	if fromRelease != toRelease {
-		// associate fromId's artists with toId's release
-		rows, err := tx.QueryContext(ctx,
-			`SELECT artist_id FROM artist_tracks WHERE track_id = ?`, fromId)
-		if err != nil {
-			return fmt.Errorf("MergeTracks: fetch artists: %w", err)
-		}
-		var artistIDs []int32
-		for rows.Next() {
-			var aid int32
-			rows.Scan(&aid)
-			artistIDs = append(artistIDs, aid)
-		}
-		rows.Close()
-		for _, aid := range artistIDs {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT OR IGNORE INTO artist_releases (artist_id, release_id, is_primary) VALUES (?,?,0)`,
-				aid, toRelease); err != nil {
-				return fmt.Errorf("MergeTracks: associate artist to release: %w", err)
-			}
-		}
-	}
-
-	if err := cleanOrphanedEntries(ctx, tx); err != nil {
-		return fmt.Errorf("MergeTracks: clean: %w", err)
-	}
-	return tx.Commit()
-}
-
 func (s *Sqlite) CountTracks(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64

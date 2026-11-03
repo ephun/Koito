@@ -194,76 +194,6 @@ func doSubmitListens(t *testing.T) {
 	}
 }
 
-func doSubmitListensForMergeConflict(t *testing.T) {
-	login(t)
-	getApiKey(t, session)
-	tt := time.Now().Add(-2 * time.Hour).Unix() // yesterday
-	bodies := []string{fmt.Sprintf(`{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": %d,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"efc787f0-046f-4a60-beff-77b398c8cdf4"
-						],
-						"artist_names": [
-							"さユり"
-						],
-						"duration_ms": 275960,
-						"recording_mbid": "21524d55-b1f8-45d1-b172-976cba447199",
-						"release_group_mbid": "3281e0d9-fa44-4337-a8ce-6f264beeae16",
-						"release_mbid": "eb790e90-0065-4852-b47d-bbeede4aa9fc",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "さユり",
-					"release_name": "酸欠少女",
-					"track_name": "花の塔"
-				}
-			}
-		]
-	}`, tt),
-		fmt.Sprintf(`{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": %d,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"efc787f0-046f-4a60-beff-77b398c8cdf4"
-						],
-						"artist_names": [
-							"Sayuri"
-						],
-						"duration_ms": 241560,
-						"recording_mbid": "21524d55-b1f8-45d1-b172-976cba447199",
-						"release_group_mbid": "3281e0d9-fa44-4337-a8ce-6f264beeae16",
-						"release_mbid": "eb790e90-0065-4852-b47d-bbeede4aa9fc",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "Sayuri",
-					"release_name": "Sanketsu Girl",
-					"track_name": "Tower of Flower"
-				}
-			}
-		]
-	}`, tt)}
-	for _, body := range bodies {
-		req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		respBytes, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-	}
-}
-
 func TestGetters(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
@@ -325,73 +255,36 @@ func TestGetters(t *testing.T) {
 	truncateTestData(t)
 }
 
-func TestMerge(t *testing.T) {
+func TestLegacyMergeEndpointsRemoved(t *testing.T) {
 	truncateTestData(t)
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/track/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/2")
-	require.NoError(t, err)
-	var track models.Track
-	err = json.NewDecoder(resp.Body).Decode(&track)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, track.ListenCount)
-
-	truncateTestData(t)
-
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/2")
-	require.NoError(t, err)
-	var artist models.Artist
-	err = json.NewDecoder(resp.Body).Decode(&artist)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, artist.ListenCount)
-
-	truncateTestData(t)
-
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/album/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/2")
-	require.NoError(t, err)
-	var album models.Album
-	err = json.NewDecoder(resp.Body).Decode(&album)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, album.ListenCount)
-
-	truncateTestData(t)
-}
-
-func TestMerge_ConflictingListens(t *testing.T) {
-	truncateTestData(t)
-	t.Run("Submit Listens For Merge Conflict", doSubmitListensForMergeConflict)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/1/merge", strings.NewReader(`{"merge_from_id":2}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1")
-	require.NoError(t, err)
-	var artist models.Artist
-	err = json.NewDecoder(resp.Body).Decode(&artist)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, artist.ListenCount) // conflicting listens should be ignored on merge, so only one remains
-
-	// old artist deleted
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/2")
-	require.NoError(t, err)
-	assert.Equal(t, 404, resp.StatusCode)
+	t.Cleanup(func() { truncateTestData(t) })
+	doSubmitListens(t)
+	for _, entity := range []string{"artist", "album", "track"} {
+		t.Run(entity, func(t *testing.T) {
+			endpoint := "/apis/web/v1/" + entity + "/1"
+			before, err := http.Get(host() + endpoint)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, before.StatusCode)
+			original, err := io.ReadAll(before.Body)
+			before.Body.Close()
+			require.NoError(t, err)
+			response, err := makeAuthRequest(t, session, http.MethodPost, endpoint+"/merge", strings.NewReader(`{"merge_from_id":2}`))
+			require.NoError(t, err)
+			response.Body.Close()
+			require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+			after, err := http.Get(host() + endpoint)
+			require.NoError(t, err)
+			defer after.Body.Close()
+			require.Equal(t, http.StatusOK, after.StatusCode)
+			unchanged, err := io.ReadAll(after.Body)
+			require.NoError(t, err)
+			require.JSONEq(t, string(original), string(unchanged))
+			other, err := http.Get(host() + "/apis/web/v1/" + entity + "/2")
+			require.NoError(t, err)
+			other.Body.Close()
+			require.Equal(t, http.StatusOK, other.StatusCode)
+		})
+	}
 }
 
 func TestValidateToken(t *testing.T) {

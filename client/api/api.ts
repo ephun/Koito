@@ -89,32 +89,6 @@ function replaceImage(
   });
 }
 
-function mergeTracks(from: number, to: number): Promise<Response> {
-  return fetch(`/apis/web/v1/track/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from }),
-  });
-}
-function mergeAlbums(
-  from: number,
-  to: number,
-  replaceImage: boolean,
-): Promise<Response> {
-  return fetch(`/apis/web/v1/album/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from, replace_image: replaceImage }),
-  });
-}
-function mergeArtists(
-  from: number,
-  to: number,
-  replaceImage: boolean,
-): Promise<Response> {
-  return fetch(`/apis/web/v1/artist/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from, replace_image: replaceImage }),
-  });
-}
 function login(
   username: string,
   password: string,
@@ -295,9 +269,6 @@ export {
   getTopAlbums,
   search,
   replaceImage,
-  mergeTracks,
-  mergeAlbums,
-  mergeArtists,
   imageUrl,
   login,
   logout,

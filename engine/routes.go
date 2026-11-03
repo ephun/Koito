@@ -112,7 +112,6 @@ func bindRoutes(
 
 			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))
 			r.Delete("/artist/{id}/aliases", handlers.DeleteArtistAliasHandler(db))
-			r.Post("/artist/{id}/merge", handlers.MergeArtistsHandler(db))
 			r.Post("/artist/{id}/aliases", handlers.CreateArtistAliasHandler(db))
 			r.Patch("/artist/{id}", handlers.UpdateArtistHandler(db))
 			r.Patch("/artist/{id}/image", handlers.ReplaceArtistImageHandler(db))
@@ -120,7 +119,6 @@ func bindRoutes(
 
 			r.Delete("/album/{id}", handlers.DeleteAlbumHandler(db))
 			r.Delete("/album/{id}/aliases", handlers.DeleteAlbumAliasHandler(db))
-			r.Post("/album/{id}/merge", handlers.MergeAlbumsHandler(db))
 			r.Post("/album/{id}/aliases", handlers.CreateAlbumAliasHandler(db))
 			r.Patch("/album/{id}", handlers.UpdateAlbumHandler(db))
 			r.Patch("/album/{id}/image", handlers.ReplaceAlbumImageHandler(db))
@@ -130,7 +128,6 @@ func bindRoutes(
 			r.Delete("/track/{id}", handlers.DeleteTrackHandler(db))
 			r.Delete("/track/{id}/aliases", handlers.DeleteTrackAliasHandler(db))
 			r.Delete("/track/{id}/artists/{artist_id}", handlers.DeleteTrackArtistHandler(db))
-			r.Post("/track/{id}/merge", handlers.MergeTracksHandler(db))
 			r.Post("/track/{id}/aliases", handlers.CreateTrackAliasHandler(db))
 			r.Post("/track/{id}/artists", handlers.AddTrackArtistsHandler(db))
 			r.Patch("/track/{id}", handlers.UpdateTrackHandler(db))

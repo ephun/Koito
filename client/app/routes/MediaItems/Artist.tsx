@@ -1,6 +1,6 @@
 import { useLoaderData, type LoaderFunctionArgs } from "react-router";
 import TopTracks from "~/components/TopTracks";
-import { mergeArtists, type Artist } from "api/api";
+import { type Artist } from "api/api";
 import LastPlayed from "~/components/LastPlayed";
 import MediaLayout from "./MediaLayout";
 import ArtistAlbums from "~/components/ArtistAlbums";
@@ -39,17 +39,6 @@ export default function Artist() {
       listenCount={artist.listen_count}
       firstListen={artist.first_listen}
       imgItemId={artist.id}
-      mergeFunc={mergeArtists}
-      mergeCleanerFunc={(r, id) => {
-        r.albums = [];
-        r.tracks = [];
-        for (let i = 0; i < r.artists.length; i++) {
-          if (r.artists[i].id === id) {
-            r.artists.splice(i, 1);
-          }
-        }
-        return r;
-      }}
       subContent={<></>}
     >
       <div className="flex flex-col gap-14">

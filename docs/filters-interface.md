@@ -2,12 +2,15 @@
 
 ## Vocabulary and hierarchy
 
+The taxonomy in [the development plan](development-plan.md#2-rules-and-their-types) is authoritative.
+Use its existing types and subtypes when adding controls.
+
 Files contain records. Rules interpret records into plays and the view.
 Filters manages those rules.
 
 | Type | Subtypes |
 |---|---|
-| Matching | Music, Play |
+| Matching | Music matching, play matching |
 | Inference | Count, Time, Context |
 | Attribution | Direct, Heuristic, Aggregate |
 | Qualification | Completion, Repetition, Validity |
@@ -72,13 +75,13 @@ Track merges redirect listens.
 Cleanup removes entries that become orphaned.
 
 The routine editing toolbar now omits Merge.
-The underlying legacy methods and endpoints remain implemented.
-Their replacement belongs to the catalog redesign.
+The legacy endpoints, handlers, database methods, and unused client controls are removed.
+Reversible replacements belong to the catalog redesign.
 
 | User intent | Replacement |
 |---|---|
-| Identify the same artist or recording | Matching, Music |
-| Identify one listen reported by several records | Matching, Play |
+| Identify the same artist or recording | Matching, music matching |
+| Identify one listen reported by several records | Matching, play matching |
 | Report album editions together | Presentation, Grouping |
 | Choose names for the view | Presentation, Naming |
 

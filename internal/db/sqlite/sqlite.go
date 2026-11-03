@@ -271,7 +271,7 @@ func parseNullableUUID(s sql.NullString) *uuid.UUID {
 // associations where the artist has no tracks in the release, and removes
 // artists with no tracks. Mirrors PG CleanOrphanedEntries + the orphan trigger.
 func cleanOrphanedEntries(ctx context.Context, tx *sql.Tx) error {
-	// delete tracks with no listens (e.g. the "from" track after a merge)
+	// delete tracks with no listens
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM tracks WHERE id NOT IN (SELECT DISTINCT track_id FROM listens)`); err != nil {
 		return err

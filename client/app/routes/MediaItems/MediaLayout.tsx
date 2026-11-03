@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { average } from "color.js";
-import { type ImageList, type SearchResponse } from "api/api";
+import { type ImageList } from "api/api";
 import ImageDropHandler from "~/components/ImageDropHandler";
 import { Edit, ImageIcon, Plus, Trash } from "lucide-react";
 import { useAppContext } from "~/providers/AppProvider";
@@ -13,16 +13,6 @@ import { timeListenedString } from "~/utils/utils";
 import { Link } from "react-router";
 import useWindowWidth from "~/hooks/useWindowWidth";
 
-export type MergeFunc = (
-  from: number,
-  to: number,
-  replaceImage: boolean,
-) => Promise<Response>;
-export type MergeSearchCleanerFunc = (
-  r: SearchResponse,
-  id: number,
-) => SearchResponse;
-
 interface Props {
   type: "Track" | "Album" | "Artist";
   title: string;
@@ -34,8 +24,6 @@ interface Props {
   timeListened: number;
   firstListen: number; // unix
   imgItemId: number;
-  mergeFunc: MergeFunc;
-  mergeCleanerFunc: MergeSearchCleanerFunc;
   children: React.ReactNode;
   subContent: React.ReactNode;
 }
