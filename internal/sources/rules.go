@@ -66,6 +66,21 @@ type FilterState struct {
 	History   []RuleVersion   `json:"history"`
 	TimeFiles []TimeFile      `json:"time_files"`
 	Decisions []MatchDecision `json:"decisions"`
+	Sources   []SourceSummary `json:"sources"`
+	Files     []FilterFile    `json:"files"`
+	Libraries []FilterLibrary `json:"libraries"`
+}
+
+type FilterFile struct {
+	Hash     string `json:"hash"`
+	SourceID int64  `json:"source_id"`
+	Service  string `json:"service"`
+	Filename string `json:"filename"`
+}
+type FilterLibrary struct {
+	ID       string `json:"id"`
+	SourceID int64  `json:"source_id"`
+	Filename string `json:"filename"`
 }
 
 type sqlReader interface {
@@ -156,6 +171,60 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 			return state, err
 		}
 		state.Decisions = append(state.Decisions, d)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return state, err
+	}
+	state.Sources, err = s.Summary(ctx)
+	if err != nil {
+		return state, err
+	}
+	state.Files = []FilterFile{}
+	state.Libraries = []FilterLibrary{}
+	rows, err = s.DB.QueryContext(ctx, `SELECT DISTINCT e.file_hash,e.source_id,a.service,COALESCE((SELECT name FROM source_members m WHERE m.file_hash=e.file_hash ORDER BY parent_hash,position LIMIT 1),(SELECT filename FROM import_receipts i WHERE i.file_hash=e.file_hash ORDER BY id LIMIT 1),substr(e.file_hash,1,12)) FROM source_extractions e JOIN source_accounts a ON a.id=e.source_id WHERE e.parser<>? ORDER BY e.source_id,e.file_hash`, ITunesExpanded)
+	if err != nil {
+		return state, err
+	}
+	for rows.Next() {
+		var f FilterFile
+		if err = rows.Scan(&f.Hash, &f.SourceID, &f.Service, &f.Filename); err != nil {
+			rows.Close()
+			return state, err
+		}
+		state.Files = append(state.Files, f)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return state, err
+	}
+	rows, err = s.DB.QueryContext(ctx, `SELECT DISTINCT json_extract(payload,'$.library_id'),source_id,file_hash FROM source_records WHERE kind='library' AND json_extract(payload,'$.library_id')<>'' ORDER BY source_id,id`)
+	if err != nil {
+		return state, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var library FilterLibrary
+		var hash string
+		if err = rows.Scan(&library.ID, &library.SourceID, &hash); err != nil {
+			return state, err
+		}
+		key := fmt.Sprintf("%d:%s", library.SourceID, library.ID)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		library.Filename = library.ID
+		for _, f := range state.Files {
+			if f.Hash == hash && f.SourceID == library.SourceID {
+				library.Filename = f.Filename
+				break
+			}
+		}
+		state.Libraries = append(state.Libraries, library)
 	}
 	return state, rows.Err()
 }

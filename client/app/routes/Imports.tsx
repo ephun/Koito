@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import RecordInspector from "~/components/RecordInspector";
 
-type Source = { id: number; service: string; records: number; plays: number; first: string; last: string };
+type Source = { id: number; service: string; records: number; plays: number; undated: number; first: string; last: string };
 type Receipt = { id: number; source_id: number; hash: string; filename: string; status: string; error: string; created_at: number };
 type RawRecord = { id: number; file_hash: string; ordinal: number; kind: string; payload: string; reason: string; play_key: string };
 type Overview = { sources: Source[]; receipts: Receipt[] };
@@ -85,7 +85,7 @@ export default function Imports() {
   if (user?.role !== "admin") return <main className="w-full max-w-5xl p-6"><h1>Imports</h1><p>Administrator login required.</p></main>;
 
   return <main className="w-full max-w-6xl p-4 sm:p-8 space-y-6">
-    <title>Imports — Koito</title>
+    <title>Imports | Koito</title>
     <header className="flex flex-wrap items-start justify-between gap-4">
       <h1>Imports</h1>
       <div className="flex flex-wrap gap-2">
@@ -104,7 +104,7 @@ export default function Imports() {
     {!!overview?.sources.some(s => s.records > 0) && <section className={panel}>
       <h2>Sources</h2>
       <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left [&_th]:pr-4 [&_td]:pr-4"><thead><tr><th>Source</th><th>Records</th><th>Plays</th><th>Dates (UTC)</th><th>Inspect</th></tr></thead><tbody>
-        {overview.sources.filter(s => s.records > 0).map(s => <tr key={s.id} className="border-t border-(--color-bg-tertiary)"><td className="py-3">{sourceName(s)}</td><td>{s.records.toLocaleString()}</td><td>{s.plays.toLocaleString()}</td><td>{s.first ? `${s.first} – ${s.last}` : "—"}</td><td><button className={button} disabled={busy || loadingRecords} onClick={() => loadRecords(s)}>Records</button></td></tr>)}
+        {overview.sources.filter(s => s.records > 0).map(s => <tr key={s.id} className="border-t border-(--color-bg-tertiary)"><td className="py-3">{sourceName(s)}</td><td>{s.records.toLocaleString()}</td><td>{(s.plays + (s.undated || 0)).toLocaleString()}{!!s.undated && <span className="block text-xs text-(--color-fg-secondary)">{s.undated.toLocaleString()} undated</span>}</td><td>{s.first ? `${s.first} – ${s.last}` : "—"}</td><td><button className={button} disabled={busy || loadingRecords} onClick={() => loadRecords(s)}>Records</button></td></tr>)}
       </tbody></table></div>
     </section>}
     {source && <section className={panel}>
@@ -121,4 +121,4 @@ export default function Imports() {
 
 function formatPayload(payload: string) { try { return JSON.stringify(JSON.parse(payload), null, 2); } catch { return payload; } }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service; }
+function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service === "itunes" ? "iTunes" : source.service; }

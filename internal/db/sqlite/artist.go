@@ -65,8 +65,7 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	}
 
 	var listenCount int64
-	s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`,
+	s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&listenCount)
 
 	var timeListened int64
@@ -88,13 +87,13 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	}
 
 	var rank int64
-	s.db.QueryRowContext(ctx, `
+	s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT rank FROM (
 			SELECT at2.artist_id,
 			       RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
 			FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id
 			GROUP BY at2.artist_id
-		) WHERE artist_id = ?`,
+		) WHERE artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&rank)
 
 	return &models.Artist{
@@ -398,7 +397,7 @@ func (s *Sqlite) GetTopArtistsPaginated(ctx context.Context, opts db.GetItemsOpt
 		JOIN artists_with_name awn ON awn.id = r.artist_id
 		ORDER BY r.rank, r.artist_id`
 
-	rows, err := s.db.QueryContext(ctx, query, t1.Unix(), t2.Unix(), opts.Limit, offset)
+	rows, err := s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.Limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("GetTopArtistsPaginated: %w", err)
 	}
@@ -533,10 +532,10 @@ func (s *Sqlite) SetPrimaryTrackArtist(ctx context.Context, id int32, artistId i
 func (s *Sqlite) CountArtists(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT COUNT(DISTINCT at2.artist_id)
 		FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id
-		WHERE l.listened_at BETWEEN ? AND ?`,
+		WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }

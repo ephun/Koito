@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
@@ -13,6 +15,7 @@ import (
 
 type StatsResponse struct {
 	ListenCount     int64   `json:"listen_count"`
+	UndatedCount    int64   `json:"undated_count"`
 	TrackCount      int64   `json:"track_count"`
 	AlbumCount      int64   `json:"album_count"`
 	ArtistCount     int64   `json:"artist_count"`
@@ -42,6 +45,14 @@ func StatsHandler(store statsStore) http.HandlerFunc {
 		l.Debug().Msg("StatsHandler: Fetching statistics")
 
 		cacheKeyString := fmt.Sprintf("stats_%s_%s", r.URL.Query().Encode(), tf.Timezone.String())
+		if provider, ok := store.(interface{ SourceDatabase() *sql.DB }); ok {
+			var run int64
+			if err := provider.SourceDatabase().QueryRowContext(r.Context(), `SELECT COALESCE(MAX(id),0) FROM source_projection_runs`).Scan(&run); err != nil {
+				utils.WriteError(w, "Could not load statistics.", 500)
+				return
+			}
+			cacheKeyString += fmt.Sprintf("_view_%d", run)
+		}
 
 		if cachedStatsI, ok := memkv.Store.Get(cacheKeyString); ok {
 			if cachedStats, ok := cachedStatsI.(*StatsResponse); ok {
@@ -103,17 +114,28 @@ func StatsHandler(store statsStore) http.HandlerFunc {
 		}
 
 		l.Debug().Msg("StatsHandler: Successfully fetched statistics")
+		var undated int64
+		if counter, ok := store.(interface {
+			CountUndatedListens(context.Context, db.Timeframe) (int64, error)
+		}); ok {
+			undated, err = counter.CountUndatedListens(r.Context(), tf)
+			if err != nil {
+				utils.WriteError(w, "Could not load undated totals.", 500)
+				return
+			}
+		}
 
 		resp := &StatsResponse{
 			ListenCount:     listens,
+			UndatedCount:    undated,
 			TrackCount:      tracks,
 			AlbumCount:      albums,
 			ArtistCount:     artists,
 			MinutesListened: timeListenedS / 60,
 			DaysActive:      activeDays,
-			AvgDailyPlays:   float32(listens) / float32(activeDays),
-			TracksPerArtist: float32(tracks) / float32(artists),
-			AlbumsPerArtist: float32(albums) / float32(artists),
+			AvgDailyPlays:   statsRatio(listens-undated, int64(activeDays)),
+			TracksPerArtist: statsRatio(tracks, artists),
+			AlbumsPerArtist: statsRatio(albums, artists),
 			LongestStreak:   longestStreak,
 		}
 
@@ -122,4 +144,11 @@ func StatsHandler(store statsStore) http.HandlerFunc {
 		// save to cache for 30 minutes
 		memkv.Store.Set(cacheKeyString, resp, 30*time.Minute)
 	}
+}
+
+func statsRatio(amount, total int64) float32 {
+	if total == 0 {
+		return 0
+	}
+	return float32(amount) / float32(total)
 }

@@ -20,15 +20,19 @@ Filters manages those rules.
 Use type headings, then subtype sections, then individual settings.
 Add each type when its first usable rule ships.
 Show source and file scope beside scoped rules.
-Add date scope when its storage and rules are implemented.
+Date scope is available for supported attribution and time rules.
 
 ## Current layout
 
 | Type | Subtype | Controls |
 |---|---|---|
-| Matching | Music | Case comparison and missing albums |
-| Matching | Play | Time tolerance |
-| Inference | Time | Spotify timestamp interpretation and Last.fm timezones |
+| Matching | Music matching | Case comparison and missing albums |
+| Matching | Play matching | Time tolerance |
+| Inference | Count | Library totals, latest counts, and explicit reset interpretation |
+| Inference | Time | Spotify timestamps, Last.fm timezones, and library timing |
+| Attribution | Direct | Personal, other, or unknown listening |
+| Attribution | Heuristic | Explicit personal evidence and minimum matching plays |
+| Attribution | Aggregate | A selected share of cumulative counts |
 
 Each matching section has one On/Off switch.
 Its settings become disabled and muted when switched off.
@@ -47,6 +51,11 @@ Saved versions and manual decisions remain available for later controls.
 Imports and listening history provide record inspection.
 Koito's existing search locates music.
 Record inspection contains supporting records and contextual matching actions.
+Library inspection also shows count contributions and attribution.
+Library timing controls depend on Count rules.
+Scope conditions are added individually inside Scope.
+Context labels summarize selected artist, device, track, and date conditions.
+The source preference design remains separate from attribution controls.
 
 ## Source preference
 

@@ -11,8 +11,7 @@ import (
 func (s *Sqlite) CountListens(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM listens WHERE listened_at BETWEEN ? AND ?`,
+	err := s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens WHERE listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }
@@ -23,21 +22,21 @@ func (s *Sqlite) CountListensToItem(ctx context.Context, opts db.TimeListenedOpt
 	var err error
 	switch {
 	case opts.ArtistID > 0:
-		err = s.db.QueryRowContext(ctx, `
+		err = s.db.QueryRowContext(ctx, countedListeningQuery(`
 			SELECT COUNT(*) FROM listens l
 			JOIN artist_tracks at2 ON l.track_id = at2.track_id
-			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?`,
+			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?`, opts.Timeframe),
 			t1.Unix(), t2.Unix(), opts.ArtistID).Scan(&count)
 	case opts.AlbumID > 0:
-		err = s.db.QueryRowContext(ctx, `
+		err = s.db.QueryRowContext(ctx, countedListeningQuery(`
 			SELECT COUNT(*) FROM listens l
 			JOIN tracks t ON l.track_id = t.id
-			WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?`,
+			WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?`, opts.Timeframe),
 			t1.Unix(), t2.Unix(), opts.AlbumID).Scan(&count)
 	case opts.TrackID > 0:
-		err = s.db.QueryRowContext(ctx, `
+		err = s.db.QueryRowContext(ctx, countedListeningQuery(`
 			SELECT COUNT(*) FROM listens
-			WHERE listened_at BETWEEN ? AND ? AND track_id = ?`,
+			WHERE listened_at BETWEEN ? AND ? AND track_id = ?`, opts.Timeframe),
 			t1.Unix(), t2.Unix(), opts.TrackID).Scan(&count)
 	default:
 		return 0, errors.New("CountListensToItem: an id must be provided")

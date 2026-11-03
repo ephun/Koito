@@ -8,6 +8,7 @@ type SourceSummary struct {
 	Service string `json:"service"`
 	Records int    `json:"records"`
 	Plays   int    `json:"plays"`
+	Undated int64  `json:"undated"`
 	First   string `json:"first"`
 	Last    string `json:"last"`
 }
@@ -15,11 +16,16 @@ type SourceSummary struct {
 func (s *Store) Summary(ctx context.Context) ([]SourceSummary, error) {
 	rows, err := s.DB.QueryContext(ctx, `WITH contributions AS (
  SELECT DISTINCT r.source_id,p.play_key,p.listened_at FROM source_records r
- JOIN source_interpretations i ON i.record_id=r.id AND i.policy=? AND i.play_key<>''
+ JOIN source_play_records i ON i.record_id=r.id
+ JOIN source_plays p ON p.play_key=i.play_key AND p.policy=?
+ UNION
+ SELECT DISTINCT r.source_id,p.play_key,p.listened_at FROM source_records r
+ JOIN source_interpretations i ON i.record_id=r.id AND i.policy='filters-v1'
  JOIN source_plays p ON p.play_key=i.play_key AND p.policy=i.policy
  ) SELECT a.id,a.account,a.service,
  (SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id),
  (SELECT COUNT(*) FROM contributions c WHERE c.source_id=a.id),
+ (SELECT COALESCE(SUM(g.undated_count),0) FROM source_aggregates g JOIN source_records r ON r.id=g.representative_record WHERE r.source_id=a.id),
  COALESCE((SELECT datetime(MIN(c.listened_at),'unixepoch') FROM contributions c WHERE c.source_id=a.id),''),
  COALESCE((SELECT datetime(MAX(c.listened_at),'unixepoch') FROM contributions c WHERE c.source_id=a.id),'')
  FROM source_accounts a ORDER BY a.id`, Policy)
@@ -30,7 +36,7 @@ func (s *Store) Summary(ctx context.Context) ([]SourceSummary, error) {
 	out := []SourceSummary{}
 	for rows.Next() {
 		var v SourceSummary
-		if err = rows.Scan(&v.ID, &v.Account, &v.Service, &v.Records, &v.Plays, &v.First, &v.Last); err != nil {
+		if err = rows.Scan(&v.ID, &v.Account, &v.Service, &v.Records, &v.Plays, &v.Undated, &v.First, &v.Last); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

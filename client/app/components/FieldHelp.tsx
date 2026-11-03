@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 
 export default function FieldHelp({ label, children }: { label: string; children: string }) {
@@ -7,6 +7,12 @@ export default function FieldHelp({ label, children }: { label: string; children
   const [open, setOpen] = useState(false);
   const [left, setLeft] = useState(0);
   const [below, setBelow] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", dismiss);
+    return () => window.removeEventListener("keydown", dismiss);
+  }, [open]);
   function show() {
     const box = anchor.current?.getBoundingClientRect();
     if (box) {

@@ -47,11 +47,13 @@ func (s *Sqlite) DeleteListen(ctx context.Context, trackId int32, listenedAt tim
 // both the count query and the artistsForTrack call would deadlock if
 // executed while the outer *sql.Rows is still holding the only connection.
 type listenRow struct {
-	playKey    string
-	recordID   int64
-	listenedAt int64
-	trackID    int32
-	title      string
+	evidence         string
+	attributionBasis string
+	playKey          string
+	recordID         int64
+	listenedAt       int64
+	trackID          int32
+	title            string
 }
 
 func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) (*db.PaginatedResponse[*models.Listen], error) {
@@ -92,7 +94,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	switch {
 	case opts.TrackID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND t.id = ?
@@ -101,7 +103,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	case opts.AlbumID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?
@@ -110,7 +112,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	case opts.ArtistID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			JOIN artist_tracks at2 ON t.id = at2.track_id
@@ -120,7 +122,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	default:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ?
@@ -135,7 +137,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	var raw []listenRow
 	for rows.Next() {
 		var r listenRow
-		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title, &r.playKey, &r.recordID); err != nil {
+		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title, &r.playKey, &r.recordID, &r.evidence, &r.attributionBasis); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -152,9 +154,11 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	listens := make([]*models.Listen, 0, len(raw))
 	for _, r := range raw {
 		l := &models.Listen{
-			PlayKey:  r.playKey,
-			RecordID: r.recordID,
-			Time:     time.Unix(r.listenedAt, 0).UTC(),
+			PlayKey:          r.playKey,
+			Evidence:         r.evidence,
+			AttributionBasis: r.attributionBasis,
+			RecordID:         r.recordID,
+			Time:             time.Unix(r.listenedAt, 0).UTC(),
 			Track: models.SimpleTrack{
 				ID:    r.trackID,
 				Title: r.title,

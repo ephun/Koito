@@ -304,7 +304,11 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 					if at.IsZero() {
 						at = other.Start
 					}
-					if r.UserID != other.UserID || !musicCompatible(r.Values, other.Values, music) || !from.IsZero() && at.Before(from) || !until.IsZero() && at.After(until) {
+					precision := time.Second
+					if p.Evidence == "observed" && other.Values.Precision > int64(precision) {
+						precision = time.Duration(other.Values.Precision)
+					}
+					if r.UserID != other.UserID || !musicCompatible(r.Values, other.Values, music) || !from.IsZero() && !at.Add(precision).After(from) || !until.IsZero() && at.After(until) {
 						continue
 					}
 					candidates[p.Key] = p
@@ -394,6 +398,24 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 				i := sort.Search(len(merged), func(i int) bool { return merged[i].until.After(at) })
 				return i < len(merged) && !at.Before(merged[i].from)
 			}
+			nextAvailable := func(at time.Time) (time.Time, bool) {
+				for !at.After(until) {
+					i := sort.Search(len(merged), func(i int) bool { return merged[i].until.After(at) })
+					if i < len(merged) && !at.Before(merged[i].from) {
+						end := merged[i].until
+						at = time.Unix(end.Unix(), 0).UTC()
+						if at.Before(end) {
+							at = at.Add(time.Second)
+						}
+						continue
+					}
+					if !used[at.Unix()] {
+						return at, true
+					}
+					at = at.Add(time.Second)
+				}
+				return time.Time{}, false
+			}
 			addPlay := func(at time.Time, level string, index int64) {
 				p := plannedPlay{Key: digest([]byte(fmt.Sprintf("inference:%s:%s:%d", contribution.Key, level, index))), Representative: r.ID, Records: append([]int64{}, contribution.Records...), Reason: level, At: at, Evidence: level, IntervalStart: from, IntervalEnd: until, Attribution: contribution.Attribution}
 				plan.Plays = append(plan.Plays, p)
@@ -429,8 +451,9 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 						denominator++
 						offset := span/denominator*i + (span%denominator)*i/denominator
 						at := time.Unix(from.Unix()+offset, 0).UTC()
-						if occupiedAt(at) {
-							continue
+						at, free := nextAvailable(at)
+						if !free {
+							break
 						}
 						addPlay(at, "estimated", i)
 						contribution.Estimated++

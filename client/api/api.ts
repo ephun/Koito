@@ -348,6 +348,8 @@ type Alias = {
 type Listen = {
   play_key?: string;
   record_id?: number;
+  evidence?: string;
+  attribution_basis?: string;
   time: string;
   track: SimpleTrack;
 };
@@ -380,6 +382,7 @@ type SimpleArtists = {
   id: number;
 };
 type Stats = {
+  undated_count: number;
   listen_count: number;
   track_count: number;
   album_count: number;

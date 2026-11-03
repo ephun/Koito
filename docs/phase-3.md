@@ -1,6 +1,6 @@
 # Phase 3: iTunes, inference, and attribution
 
-Phase 3 is in progress.
+Phase 3 implementation and acceptance checks are complete.
 The [development plan](development-plan.md#phase-3-itunes-inference-and-attribution) defines its full scope.
 The existing filter taxonomy remains authoritative.
 
@@ -57,20 +57,39 @@ These issues require interpretation before affected estimates can enter the view
 Snapshot order uses supplied dates rather than upload order.
 
 The reconciliation and inference engines are exercised through automated tests.
-Interface integration remains unfinished.
+Filters, contextual inspection, history labels, and all-time statistics expose their results.
 
 Private-file acceptance reconciles the XML and converted JSON into one library.
 It verifies 14,020 tracks and 47,748 reported cumulative plays across both files.
 The expanded file remains a separate set of 56,210 derived records.
 
-## Remaining Phase 3 work
+## Interface and totals
 
-- Integrate the implemented rules into the Filters hierarchy.
-- Expose contribution details through contextual record inspection.
-- Include undated amounts in suitable totals while preserving calendar boundaries.
-- Mark inferred evidence in listening history.
-- Provide concise controls and inspectable contributions using the existing interface hierarchy.
-- Verify every Phase 3 acceptance criterion against fixtures and private source data.
+Filters uses the existing Matching, Inference, and Attribution hierarchy.
+Count and Time controls appear when library records are present.
+Direct, Heuristic, and Aggregate attribution rules are added explicitly.
+Scope conditions appear on demand.
+Disabled rules retain their settings and disable their controls.
+Library timing depends on enabled Count rules.
+Hover and keyboard help use short sentences.
+Escape dismisses help during hover or focus.
+
+One Save changes action publishes the view.
+Discard restores saved settings.
+Incomplete scope conditions require completion or removal before saving an enabled rule.
+Stored versions remain available internally.
+
+Record inspection shows reported, interpreted, attributed, observed, estimated, and undated amounts.
+Supporting records and date intervals remain available there.
+History labels identify estimated times, reported endpoints, and heuristic attribution.
+
+Undated amounts contribute to all-time play totals and rankings.
+Their tracks, albums, and artists contribute to all-time counts.
+Date ranges, calendar activity, streaks, and daily averages retain dated listening semantics.
+Duration totals retain dated event semantics.
+The dashboard shows the undated portion when present.
+Imports includes undated amounts in its source totals.
+Statistics cache keys include the current view publication.
 
 ## Attribution and inference backend
 
@@ -123,7 +142,7 @@ Disabling inference removes its contributions while preserving files and records
 Schema rollback follows the existing requirement to restore a pre-migration backup.
 
 The backend supports contextual contribution inspection and composite cursors for inferred events sharing one record.
-Visible controls, history labels, and aggregate statistics remain unfinished.
+The interface exposes these contributions through the existing Filters and Imports pages.
 
 ## Backend acceptance results
 
@@ -133,7 +152,7 @@ Explicit test attribution yielded 47,084 qualified personal contributions.
 Those settings exercised the implementation in an isolated database.
 They are not personal attribution defaults.
 
-The test produced 4,592 last-played entries, 41,009 estimates, and 1,480 undated contributions.
+The test produced 4,592 last-played entries, 41,039 estimates, and 1,450 undated contributions.
 Three reported endpoints matched existing inferred library endpoints.
 Repeated rebuilding reproduced the same play keys, times, and evidence details.
 The raw-record hash remained unchanged.
@@ -141,4 +160,47 @@ Disabling Time removed generated events.
 Disabling Count removed aggregate contributions.
 
 The full Go suite and focused attribution and inference tests passed.
-Frontend controls and native statistics integration remain open Phase 3 requirements.
+Client type checks, the production build, and Chromium and Firefox acceptance passed.
+Browser checks cover 320-pixel and 390-pixel layouts, long filenames, scoped rules, help, and persisted settings.
+
+## Historical script evaluation
+
+The earlier expansion applies a minimum count of one to missing or zero counts.
+That assumption explains the larger derived export.
+Original library counts and expanded rows remain separate in this fork.
+
+The old iTunes thinning formula uses a fixed cap below its comparison threshold.
+It switches to a source ratio above that threshold.
+For example, 100 target plays and nine comparison rows permit 40 target rows.
+Ten comparison rows instead permit 20 target rows.
+That discontinuity makes the historical formula unsuitable as an automatic default.
+The comparison source list also includes playlist entries.
+Membership records supply context for later attribution work.
+
+The thinning expression references a discarded `n_target` column.
+Its row numbers span the source rather than each track.
+Fractional selection sequences also complicate the intended retained amount.
+These details support treating the scripts as examples rather than importing their output as established attribution.
+
+Current rules use explicit personal shares and explicitly attributed evidence sources.
+Historical source ratios and caps remain personal choices for later refinement.
+
+## Phase 3 acceptance audit
+
+| Requirement | Evidence |
+|---|---|
+| Original files, metadata, playlists, and repeated imports | `itunes_test.go` and private-file hash comparisons |
+| Snapshot identity, copies, resets, invalid dates, and unknown counts | `library_test.go` and `inference_test.go` |
+| Separate totals, endpoint use, and time estimation | Filters browser acceptance and inference tests |
+| Direct decisions by source, device, date, and record | `attribution_test.go` and scoped browser controls |
+| Heuristics and partial aggregate attribution | Attribution and inference tests, plus browser acceptance |
+| Deterministic estimates and observed overlap | Inference tests, interval boundary tests, and private-file rebuild hashes |
+| Preserved evidence after disabling rules or publication failures | Source preservation and transaction failure tests |
+| Undated totals, rankings, and calendar boundaries | `counted_listening_test.go` and dashboard browser checks |
+| Reported counts remain distinct from expanded rows | Private-file acceptance verifies 47,748 reported plays and 56,210 derived rows |
+| Minimal interface, hover help, and small screens | Chromium and Firefox acceptance at desktop, 390 pixels, and 320 pixels |
+
+The implemented controls are ready for personal preference review.
+Library attribution starts unknown.
+New inference and attribution rules start disabled.
+Personal shares and evidence sources take effect through saved rules.

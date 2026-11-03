@@ -5,6 +5,13 @@ export type RuleSettings = {
   spotify_time?: string;
   preferred_source?: string;
   timezone: string;
+  listener?: string;
+  share_percent?: number;
+  evidence_source_id?: number;
+  minimum_matches?: number;
+  count_mode?: string;
+  use_last_played?: boolean;
+  estimate_times?: boolean;
 };
 
 export type Rule = {
@@ -12,16 +19,30 @@ export type Rule = {
   type: string;
   subtype: string;
   enabled: boolean;
-  scope: { service?: string; source_id?: number; file_hash?: string };
+  scope: RuleScope;
   settings: RuleSettings;
 };
 
 export type RuleConfig = { rules: Rule[] };
+export type RuleScope = {
+  service?: string; source_id?: number; file_hash?: string; library_id?: string; track_id?: string;
+  record_id?: number; artist?: string; device?: string; from?: string; until?: string;
+};
+export type FilterSource = { id: number; service: string; records: number; plays: number; undated: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
   current: RuleVersion;
   time_files: { hash: string; filename: string; source_id: number; records: number }[];
+  sources: FilterSource[];
+  files: { hash: string; source_id: number; service: string; filename: string }[];
+  libraries: { id: string; source_id: number; filename: string }[];
 };
+
+export function sourceName(service: string) {
+  return ({ spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes" } as Record<string, string>)[service] || service;
+}
+
+export const defaultRuleSettings: RuleSettings = { case_sensitive: true, match_missing_album: true, tolerance_seconds: 0, timezone: "" };
 export type FilterChange = {
   base_version: number;
   config: RuleConfig;

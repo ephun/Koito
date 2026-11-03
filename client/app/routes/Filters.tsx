@@ -2,12 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "~/providers/AppProvider";
-import FieldHelp from "~/components/FieldHelp";
+import { Option, Switch, filterButton as button, filterInput as input, filterCard as card } from "~/components/FilterControls";
+import { AddScopedRule, ScopedRule, libraryRule, subtypeName } from "~/components/ScopedFilterRules";
 import { filterRequest, FilterRequestError, type FilterState, type Rule, type RuleConfig, type RuleSettings, type RuleVersion } from "~/utils/filterRules";
-
-const button = "rounded border border-(--color-bg-tertiary) px-4 py-2 hover:bg-(--color-bg-tertiary) disabled:opacity-50 disabled:cursor-default";
-const input = "min-w-0 max-w-full rounded border border-(--color-bg-tertiary) bg-(--color-bg) px-3 py-2 disabled:cursor-default";
-const card = "rounded-lg border border-(--color-bg-tertiary) bg-(--color-bg-secondary) divide-y divide-(--color-bg-tertiary)";
 
 export default function Filters() {
   const { user } = useAppContext();
@@ -28,6 +25,9 @@ export default function Filters() {
     setStale(false);
     try {
       const state = await filterRequest<FilterState>();
+      state.sources ||= [];
+      state.files ||= [];
+      state.libraries ||= [];
       setSaved(state);
       setDraft(structuredClone(state.current.config));
     } catch (error) {
@@ -47,8 +47,23 @@ export default function Filters() {
     setMessage("");
   }
 
+  function upsert(rule: Rule) {
+    setDraft(previous => previous && ({ rules: previous.rules.some(existing => existing.id === rule.id)
+      ? previous.rules.map(existing => existing.id === rule.id ? rule : existing)
+      : [...previous.rules, rule] }));
+    setMessage("");
+  }
+  function remove(id: string) {
+    setDraft(previous => previous && ({ rules: previous.rules.filter(rule => rule.id !== id) }));
+    setMessage("");
+  }
+
   async function save() {
     if (!saved || !draft || saving) return;
+    if (draft.rules.some(rule => rule.enabled && Object.entries(rule.scope).some(([key, value]) => key !== "service" && key !== "source_id" && (value === "" || value === 0)))) {
+      setError("Complete or remove empty scope conditions.");
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -67,7 +82,16 @@ export default function Filters() {
 
   const music = draft?.rules.find(rule => rule.type === "matching" && rule.subtype === "music");
   const plays = draft?.rules.find(rule => rule.type === "matching" && rule.subtype === "play");
-  const time = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && !rule.scope.file_hash && !rule.scope.source_id);
+  const time = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && !rule.scope.file_hash && !rule.scope.source_id);
+  const librarySources = saved?.sources.filter(source => source.service === "itunes" && source.records > 0) || [];
+  const countRules = visibleLibraryRules("count");
+  const libraryTimes = visibleLibraryRules("time");
+  function visibleLibraryRules(subtype: "count" | "time") {
+    const rules = draft?.rules.filter(rule => rule.type === "inference" && rule.subtype === subtype && rule.scope.service === "itunes") || [];
+    return rules.length ? rules : librarySources.map(source => libraryRule(source, subtype));
+  }
+  const countEnabled = (timeRule: Rule) => countRules.some(rule => rule.enabled &&
+    (["source_id", "file_hash", "library_id", "track_id", "record_id", "artist"] as const).every(key => !rule.scope[key] || !timeRule.scope[key] || rule.scope[key] === timeRule.scope[key]));
   const dirty = !!saved && !!draft && JSON.stringify(saved.current.config) !== JSON.stringify(draft);
 
   function override(file: FilterState["time_files"][number], update: Partial<RuleSettings> | { enabled: boolean }) {
@@ -94,7 +118,7 @@ export default function Filters() {
     <header className="flex flex-wrap items-center justify-between gap-4">
       <h1>Filters</h1>
       <div className="flex items-center gap-3">
-        {dirty && <button type="button" className="px-2 py-2 text-(--color-fg-secondary) hover:underline disabled:opacity-50" disabled={saving} onClick={() => { setDraft(structuredClone(saved!.current.config)); setMessage(""); }}>Discard</button>}
+        {dirty && <button type="button" className="px-2 py-2 text-(--color-fg-secondary) hover:underline disabled:opacity-50" disabled={saving} onClick={() => { setDraft(structuredClone(saved!.current.config)); setMessage(""); setError(""); }}>Discard</button>}
         <button type="button" className={button} disabled={!dirty || saving || loading} onClick={save}>{saving ? "Saving..." : "Save changes"}</button>
       </div>
     </header>
@@ -109,7 +133,7 @@ export default function Filters() {
     {music && plays && <section aria-labelledby="matching-title" className="space-y-3">
       <h2 id="matching-title">Matching</h2>
       <div className={card}>
-        <RuleGroup title="Music" label="Music matching" rule={music} busy={saving} onToggle={enabled => edit(music.id, { enabled })}>
+        <RuleGroup title="Music matching" label="Music matching" rule={music} busy={saving} onToggle={enabled => edit(music.id, { enabled })}>
           <Option label="Case" id="music-case" help="Choose how capitalization affects music matching.">
             <select id="music-case" className={input} disabled={saving || !music.enabled} value={music.settings.case_sensitive ? "exact" : "ignore"} onChange={event => edit(music.id, { case_sensitive: event.target.value === "exact" })}>
               <option value="exact">Match exact case</option>
@@ -120,7 +144,7 @@ export default function Filters() {
             <Switch id="missing-albums" label="Match missing albums" checked={music.settings.match_missing_album} disabled={saving || !music.enabled} onChange={match_missing_album => edit(music.id, { match_missing_album })} />
           </Option>
         </RuleGroup>
-        <RuleGroup title="Plays" label="Play matching" rule={plays} busy={saving} onToggle={enabled => edit(plays.id, { enabled })}>
+        <RuleGroup title="Play matching" label="Play matching" rule={plays} busy={saving} onToggle={enabled => edit(plays.id, { enabled })}>
           <Option label="Time tolerance" id="play-tolerance" help="Allow extra seconds between matching timestamps.">
             <span className="flex items-center gap-2"><input id="play-tolerance" aria-label="Time tolerance in seconds" className={`${input} w-24`} type="number" min="0" max="3600" step="1" disabled={saving || !plays.enabled} value={plays.settings.tolerance_seconds} onChange={event => edit(plays.id, { tolerance_seconds: Number(event.target.value) })} /><span className="text-sm text-(--color-fg-secondary)">seconds</span></span>
           </Option>
@@ -131,6 +155,11 @@ export default function Filters() {
     {plays && <section aria-labelledby="inference-title" className="space-y-3">
       <h2 id="inference-title">Inference</h2>
       <div className={card}>
+        {!!librarySources.length && saved && <div>
+          <h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>
+          {countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
+          <AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} />
+        </div>}
         <section className="space-y-4 p-4 sm:p-5" aria-label="Time inference">
           <h3 className="text-lg font-medium normal-case tracking-normal">Time</h3>
           <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
@@ -156,9 +185,25 @@ export default function Filters() {
               })}</div>
             </details>
           </div>}
+          {!!librarySources.length && saved && <div className="divide-y divide-(--color-bg-tertiary) border-t border-(--color-bg-tertiary)">
+            {libraryTimes.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} blocked={!countEnabled(rule)} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
+            <AddScopedRule state={saved} type="inference" subtype="time" busy={saving} onAdd={upsert} />
+          </div>}
           <datalist id="filter-timezones">{["UTC", "America/Denver", "America/New_York", "America/Los_Angeles"].map(zone => <option key={zone} value={zone} />)}</datalist>
         </section>
       </div>
+    </section>}
+
+    {saved?.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
+      <h2 id="attribution-title">Attribution</h2>
+      {["direct", "heuristic", "aggregate"].map(subtype => {
+        const rules = draft?.rules.filter(rule => rule.type === "attribution" && rule.subtype === subtype) || [];
+        return !!rules.length && <div key={subtype} className="space-y-3">
+          <h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3>
+          <div className={card}>{rules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}</div>
+        </div>;
+      })}
+      <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>
     </section>}
   </main>;
 }
@@ -168,20 +213,6 @@ function RuleGroup({ title, label, rule, busy, onToggle, children }: { title: st
     <div className="flex items-center justify-between gap-4"><h3 className="text-lg font-medium normal-case tracking-normal">{title}</h3><Switch label={label} checked={rule.enabled} disabled={busy} onChange={onToggle} /></div>
     <div className={`${rule.enabled ? "" : "opacity-50"} space-y-4`}>{children}</div>
   </section>;
-}
-
-function Option({ label, id, help, children }: { label: string; id?: string; help: string; children: ReactNode }) {
-  return <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center sm:gap-6">
-    <span className="inline-flex items-center gap-1 text-sm"><label htmlFor={id}>{label}</label><FieldHelp label={label}>{help}</FieldHelp></span>
-    <div className="flex max-w-full items-center sm:justify-end">{children}</div>
-  </div>;
-}
-
-function Switch({ id, label, checked, disabled, onChange }: { id?: string; label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
-  return <button id={id} type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)} className="inline-flex shrink-0 items-center gap-2 rounded px-1 py-1 disabled:cursor-default disabled:opacity-50">
-    <span aria-hidden="true" className="w-6 text-left text-xs text-(--color-fg-secondary)">{checked ? "On" : "Off"}</span>
-    <span aria-hidden="true" className={`${checked ? "bg-(--color-primary)" : "bg-(--color-bg-tertiary)"} relative h-5 w-9 rounded-full transition-colors`}><span className={`${checked ? "translate-x-4" : "translate-x-0"} absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-(--color-bg) shadow-sm transition-transform`} /></span>
-  </button>;
 }
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Could not save rules."; }

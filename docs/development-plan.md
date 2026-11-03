@@ -6,7 +6,7 @@ This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 and 2 are complete. Phase 3 is in progress. Later phases below are proposed
+Phases 1 through 3 are complete. Phase 4 is next. Later phases below are proposed
 work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
@@ -340,7 +340,7 @@ interchangeable expected totals for an import.
 ### 3.2 Add inference rules
 
 - Define separate controls for using totals, using known last-played evidence,
-  and estimating additional play times. The exact options need user review.
+  and estimating additional play times. The implemented options are ready for user review.
 - Allow undated counts to contribute to suitable totals without inserting
   invented events into calendar charts.
 - If time estimates are enabled, keep their supporting interval, uncertainty,
@@ -706,15 +706,14 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Begin Phase 3 with the original family iTunes library and its existing JSON
-conversion. Preserve count snapshots and playlist/library metadata through the
-same import path before generating any additional plays.
+Phase 3 is implemented and verified. See [the Phase 3 notes](phase-3.md) for
+behavior, decisions, source acceptance, and the requirement audit.
 
-First establish library/track identity, count changes between snapshots, invalid
-or unknown dates, and the relation to observed Spotify/Last.fm history. Then
-preview separate count, time and attribution rules against those examples.
-Historical expansion scripts remain examples to evaluate rather than defaults.
+Begin Phase 4 with recording and release distinctions in the existing schema.
+Audit manual edits, aliases, deletion, automatic matching, and live submissions.
+Replace routine catalog corrections with reversible Music matching, Naming,
+and Grouping rules from the established taxonomy.
 
-Phase 2 is the foundation: Imports preserves files and records, while Filters
-saves reversible interpretations. Phase 3 should extend those mechanisms for
-aggregate evidence and attribution, retaining the existing matching behavior.
+Field-specific source preference also needs concrete examples before controls
+return to Filters. Keep original music identities and source album associations
+available throughout the catalog redesign.

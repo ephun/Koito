@@ -5,6 +5,7 @@ import { type Listen, type NowPlaying } from "api/api";
 import { Link } from "react-router";
 import { timeSince } from "~/utils/utils";
 import { useAppContext } from "~/providers/AppProvider";
+import FieldHelp from "./FieldHelp";
 
 interface ListensTableProps {
   listens: Listen[];
@@ -93,6 +94,9 @@ export default function ListensTable({
                 >
                   {item.track.title}
                 </Link>
+                {item.evidence === "estimated" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Estimated<FieldHelp label="Estimated play">Estimated from a library count and its supported dates.</FieldHelp></span>}
+                {item.evidence === "last_played" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Last played<FieldHelp label="Last-played evidence">Reported as the library's most recent play.</FieldHelp></span>}
+                {item.attribution_basis === "heuristic" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Heuristic<FieldHelp label="Heuristic attribution">Assigned to you using the enabled heuristic.</FieldHelp></span>}
               </div>
             </td>
             <td

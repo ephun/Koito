@@ -80,8 +80,8 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 	ret.Artists = artists
 
 	var listenCount int64
-	s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`,
+	s.db.QueryRowContext(ctx, countedListeningQuery(`
+		SELECT COUNT(*) FROM listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		id).Scan(&listenCount)
 	ret.ListenCount = listenCount
 
@@ -102,13 +102,13 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 	ret.FirstListen = firstListenUnix
 
 	var rank int64
-	s.db.QueryRowContext(ctx, `
+	s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT rank FROM (
 			SELECT t.release_id,
 			       RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
 			FROM listens l JOIN tracks t ON l.track_id = t.id
 			GROUP BY t.release_id
-		) WHERE release_id = ?`, id).Scan(&rank)
+		) WHERE release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&rank)
 	ret.AllTimeRank = rank
 
 	return &ret, nil
@@ -433,7 +433,7 @@ func (s *Sqlite) GetTopAlbumsPaginated(ctx context.Context, opts db.GetItemsOpts
 			JOIN releases_with_title rwt ON rwt.id = r.release_id
 			ORDER BY r.rank, r.release_id`
 
-		rows, err = s.db.QueryContext(ctx, query, opts.ArtistID, t1.Unix(), t2.Unix(), opts.Limit, offset)
+		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), opts.ArtistID, t1.Unix(), t2.Unix(), opts.Limit, offset)
 	} else {
 		query := `
 			WITH AlbumCounts AS (
@@ -456,7 +456,7 @@ func (s *Sqlite) GetTopAlbumsPaginated(ctx context.Context, opts db.GetItemsOpts
 			JOIN releases_with_title rwt ON rwt.id = r.release_id
 			ORDER BY r.rank, r.release_id`
 
-		rows, err = s.db.QueryContext(ctx, query, t1.Unix(), t2.Unix(), opts.Limit, offset)
+		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.Limit, offset)
 	}
 
 	if err != nil {
@@ -482,19 +482,21 @@ func (s *Sqlite) GetTopAlbumsPaginated(ctx context.Context, opts db.GetItemsOpts
 		a.Image = catalog.BuildImageList(parseNullableUUID(image))
 		a.VariousArtists = variousArtists == 1
 
-		// Fetch artists for the release (Note: This is still an N+1 query.
-		// If performance allows in the future, consider batching this or using JSON_GROUP_ARRAY in SQL).
-		a.Artists, err = s.artistsForRelease(ctx, a.ID)
-		if err != nil {
-			return nil, err
-		}
-
 		item.Item = &a
 		albums = append(albums, item)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for i := range albums {
+		albums[i].Item.Artists, err = s.artistsForRelease(ctx, albums[i].Item.ID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &db.PaginatedResponse[db.RankedItem[*models.Album]]{
@@ -554,10 +556,10 @@ func (s *Sqlite) AlbumsWithoutImages(ctx context.Context, from int32) ([]*models
 func (s *Sqlite) CountAlbums(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT COUNT(DISTINCT t.release_id)
 		FROM listens l JOIN tracks t ON l.track_id = t.id
-		WHERE l.listened_at BETWEEN ? AND ?`,
+		WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }

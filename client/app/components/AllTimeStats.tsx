@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, type Stats } from "api/api";
 import CardHeader from "./primitives/CardHeader";
+import FieldHelp from "./FieldHelp";
 
 const getStats = (period: string) =>
   apiFetch<Stats>("/apis/web/v1/stats", { period });
@@ -43,8 +44,9 @@ export default function AllTimeStats() {
             Minutes
           </div>
           <div>
-            <span className={numberClasses}>{data.listen_count}</span> Plays
+            <span className={numberClasses}>{data.listen_count.toLocaleString()}</span> Plays
           </div>
+          {!!data.undated_count && <div className="flex items-center gap-1 text-sm text-(--color-fg-secondary)">{data.undated_count.toLocaleString()} undated<FieldHelp label="Undated plays">Included in all-time totals. Calendar statistics use dated plays.</FieldHelp></div>}
           <div>
             <span className={numberClasses}>{data.track_count}</span> Tracks
           </div>

@@ -292,3 +292,29 @@ func TestInferenceDateScopeContainsTheWholeCountInterval(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 7, readAggregate(t, s).Attributed)
 }
+
+func TestInferenceReservesObservedIntervalsCrossingTheLibraryBoundary(t *testing.T) {
+	s := testStore(t)
+	track := libraryFixtureTrack("A", 3)
+	track["Date Added"] = "2020-01-01T00:00:30Z"
+	track["Play Date UTC"] = "2020-01-01T00:01:30Z"
+	importLibrarySnapshot(t, s, "ONE", "2020-01-02T00:00:00Z", []map[string]any{track})
+	_, err := s.Import(context.Background(), bytes.NewBufferString("Artist,Album,Song,\"01 Jan 2020, 00:00\"\n"), "lastfm.csv", 1)
+	require.NoError(t, err)
+	change := currentChange(t, s)
+	change.Config.Rules[2].Settings.Timezone = "UTC"
+	change.Config.Rules = append(change.Config.Rules, countRules()...)
+	change.Config.Rules = append(change.Config.Rules, Rule{ID: "time", Type: "inference", Subtype: "time", Enabled: true, Scope: RuleScope{Service: "itunes"}, Settings: RuleSettings{EstimateTimes: true}})
+	_, err = s.Save(context.Background(), change)
+	require.NoError(t, err)
+	contribution := readAggregate(t, s)
+	require.EqualValues(t, 1, contribution.Observed)
+	require.Equal(t, 3, count(t, s, "listens"))
+	plays, err := s.Plays(context.Background(), 0, "", false)
+	require.NoError(t, err)
+	for _, play := range plays {
+		if play.Evidence == "estimated" {
+			require.GreaterOrEqual(t, play.Time, "2020-01-01T00:01:00Z")
+		}
+	}
+}
