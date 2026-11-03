@@ -3,6 +3,12 @@
 Status: complete, verified locally on Windows. The full requirements
 are in the [development plan](development-plan.md#phase-2-lastfm-imports-and-first-matching-controls).
 
+The current interface follows the [Filters layout](filters-interface.md).
+One Save action updates rules and the view.
+Hover help explains settings.
+Record inspection opens from Imports and listening history.
+The original preview and version APIs remain available internally.
+
 ## Imports
 
 The existing Import file action detects Spotify extended history and Last.fm

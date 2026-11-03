@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Download, RefreshCw, Upload } from "lucide-react";
 import { useAppContext } from "~/providers/AppProvider";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
+import RecordInspector from "~/components/RecordInspector";
 
 type Source = { id: number; service: string; records: number; plays: number; first: string; last: string };
 type Receipt = { id: number; source_id: number; hash: string; filename: string; status: string; error: string; created_at: number };
@@ -22,6 +24,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export default function Imports() {
   const { user } = useAppContext();
   const queryClient = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const inspectedRecord = Number(params.get("record"));
   const [overview, setOverview] = useState<Overview>();
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -89,6 +93,7 @@ export default function Imports() {
         <button className={button} disabled={busy} onClick={() => fileInput.current?.click()}><Upload size={16} />Import file</button>
       </div>
     </header>
+    {inspectedRecord > 0 && <RecordInspector id={inspectedRecord} onClose={() => setParams(previous => { previous.delete("record"); return previous; })} onSaved={async () => { await refresh(); if (source) await loadRecords(source); }} />}
     <input ref={fileInput} type="file" multiple hidden disabled={busy} onChange={e => {
       const selected = Array.from(e.currentTarget.files || []);
       e.currentTarget.value = "";
@@ -104,7 +109,7 @@ export default function Imports() {
     </section>}
     {source && <section className={panel}>
       <h2>Records · {sourceName(source)}</h2>
-      <div className="space-y-2">{records.map(r => <details key={r.id} className="rounded border border-(--color-bg-tertiary) p-3"><summary className="cursor-pointer">#{r.id} · {r.kind} · {r.reason} · row {r.ordinal}</summary><p className="text-sm break-all">File: {r.file_hash}{r.play_key && ` · Play: ${r.play_key}`}</p><a className="underline" href={`/filters?record=${r.id}`}>Inspect matching</a><pre className="overflow-auto max-h-80 p-3 text-sm">{formatPayload(r.payload)}</pre><a className="underline" href={`${base}/file?hash=${r.file_hash}`}>Download original source file</a></details>)}</div>
+      <div className="space-y-2">{records.map(r => <details key={r.id} className="rounded border border-(--color-bg-tertiary) p-3"><summary className="cursor-pointer">#{r.id} · {r.kind} · {r.reason} · row {r.ordinal}</summary><p className="text-sm break-all">File: {r.file_hash}{r.play_key && ` · Play: ${r.play_key}`}</p><a className="underline" href={`/imports?record=${r.id}`}>Inspect matching</a><pre className="overflow-auto max-h-80 p-3 text-sm">{formatPayload(r.payload)}</pre><a className="underline" href={`${base}/file?hash=${r.file_hash}`}>Download original source file</a></details>)}</div>
       {hasMore && <button className={`${button} mt-4`} disabled={busy || loadingRecords} onClick={() => loadRecords(source, records.at(-1)?.id)}>Load more</button>}
     </section>}
     {!!overview?.receipts.length && <section className={panel}>

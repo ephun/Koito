@@ -43,7 +43,7 @@ func TestFiltersHTTP(t *testing.T) {
 			t.Fatal("unauthenticated access", path, res.Code)
 		}
 	}
-	for _, path := range []string{"/preview", "/apply"} {
+	for _, path := range []string{"/preview", "/apply", "/save"} {
 		if res := request("POST", path, "{}", false); res.Code != 403 {
 			t.Fatal("unauthenticated mutation", res.Code)
 		}
@@ -78,6 +78,20 @@ func TestFiltersHTTP(t *testing.T) {
 	}
 	if res = request("POST", "/preview", `{"unknown":true}`, true); res.Code != 400 {
 		t.Fatal("invalid change accepted")
+	}
+	res = request("GET", "", "", true)
+	if err = json.Unmarshal(res.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	change = sources.FilterChange{BaseVersion: state.Current.ID, Config: state.Current.Config}
+	raw, _ = json.Marshal(change)
+	res = request("POST", "/save", string(raw), true)
+	if res.Code != 200 {
+		t.Fatal("direct save failed", res.Code, res.Body.String())
+	}
+	res = request("POST", "/save", string(raw), true)
+	if res.Code != 409 {
+		t.Fatal("stale direct save accepted", res.Code)
 	}
 	fileRequest := httptest.NewRequest("GET", "/apis/web/v1/imports/file?hash="+upload.Hash, nil)
 	fileRequest = fileRequest.WithContext(context.WithValue(fileRequest.Context(), middleware.UserContextKey, &models.User{ID: 1, Role: models.UserRoleAdmin}))

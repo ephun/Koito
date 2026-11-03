@@ -35,7 +35,7 @@ func FiltersHandler(store *sources.Store) http.HandlerFunc {
 				return
 			}
 			value, err = store.Inspect(r.Context(), id)
-		case r.Method == http.MethodPost && (r.URL.Path == "/apis/web/v1/filters/preview" || r.URL.Path == "/apis/web/v1/filters/apply"):
+		case r.Method == http.MethodPost && (r.URL.Path == "/apis/web/v1/filters/preview" || r.URL.Path == "/apis/web/v1/filters/apply" || r.URL.Path == "/apis/web/v1/filters/save"):
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
@@ -47,6 +47,8 @@ func FiltersHandler(store *sources.Store) http.HandlerFunc {
 			}
 			if r.URL.Path == "/apis/web/v1/filters/preview" {
 				value, err = store.Preview(r.Context(), change)
+			} else if r.URL.Path == "/apis/web/v1/filters/save" {
+				value, err = store.Save(r.Context(), change)
 			} else {
 				value, err = store.Apply(r.Context(), change)
 			}

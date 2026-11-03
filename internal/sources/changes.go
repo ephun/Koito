@@ -120,6 +120,25 @@ func resolveChange(ctx context.Context, tx *sql.Tx, change FilterChange) (RuleVe
 	return current, config, decisions, added, nil
 }
 
+func validateNewMatch(records []matchingRecord, decision *MatchDecision) error {
+	if decision == nil || decision.Action != "match" {
+		return nil
+	}
+	var selected []matchingRecord
+	for _, record := range records {
+		if record.ID == decision.Left || record.ID == decision.Right {
+			selected = append(selected, record)
+		}
+	}
+	if len(selected) != 2 || selected[0].UserID != selected[1].UserID {
+		return fmt.Errorf("Records must belong to the same user.")
+	}
+	if selected[0].Values.Reason != "counted" || selected[1].Values.Reason != "counted" {
+		return fmt.Errorf("Both records need usable music and time before matching.")
+	}
+	return nil
+}
+
 func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (FilterPreview, matchPlan, RuleConfig, *MatchDecision, error) {
 	var preview FilterPreview
 	current, config, decisions, added, err := resolveChange(ctx, tx, change)
@@ -130,19 +149,8 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	if err != nil {
 		return preview, matchPlan{}, config, added, err
 	}
-	if added != nil && added.Action == "match" {
-		var selected []matchingRecord
-		for _, record := range records {
-			if record.ID == added.Left || record.ID == added.Right {
-				selected = append(selected, record)
-			}
-		}
-		if len(selected) != 2 || selected[0].UserID != selected[1].UserID {
-			return preview, matchPlan{}, config, added, fmt.Errorf("Records must belong to the same user.")
-		}
-		if selected[0].Values.Reason != "counted" || selected[1].Values.Reason != "counted" {
-			return preview, matchPlan{}, config, added, fmt.Errorf("Both records need usable music and time before matching.")
-		}
+	if err = validateNewMatch(records, added); err != nil {
+		return preview, matchPlan{}, config, added, err
 	}
 	plan, err := calculateMatches(ctx, records, config, decisions)
 	if err != nil {
@@ -309,6 +317,39 @@ func (s *Store) Apply(ctx context.Context, change FilterChange) (RuleVersion, er
 	if change.Token == "" || change.Token != preview.Token {
 		return RuleVersion{}, ErrStalePreview
 	}
+	return savePlan(ctx, tx, preview.BaseVersion, config, plan, decision, change)
+}
+
+// Save calculates and publishes one change in a transaction. The explicit
+// preview/apply API remains available to callers that need a separate preview.
+func (s *Store) Save(ctx context.Context, change FilterChange) (RuleVersion, error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return RuleVersion{}, err
+	}
+	defer tx.Rollback()
+	current, config, decisions, decision, err := resolveChange(ctx, tx, change)
+	if err != nil {
+		return RuleVersion{}, err
+	}
+	records, err := loadMatchingRecords(ctx, tx, config)
+	if err != nil {
+		return RuleVersion{}, err
+	}
+	if err = validateNewMatch(records, decision); err != nil {
+		return RuleVersion{}, err
+	}
+	plan, err := calculateMatches(ctx, records, config, decisions)
+	if err != nil {
+		return RuleVersion{}, err
+	}
+	return savePlan(ctx, tx, current.ID, config, plan, decision, change)
+}
+
+func savePlan(ctx context.Context, tx *sql.Tx, baseVersion int64, config RuleConfig, plan matchPlan, decision *MatchDecision, change FilterChange) (RuleVersion, error) {
+	var err error
 	label := "Edit rules"
 	if change.RestoreVersion != 0 {
 		label = fmt.Sprintf("Restore rules %d", change.RestoreVersion)
@@ -326,7 +367,7 @@ func (s *Store) Apply(ctx context.Context, change FilterChange) (RuleVersion, er
 	if err != nil {
 		return RuleVersion{}, err
 	}
-	id, err := insertID(ctx, tx, `INSERT INTO filter_versions(parent_id,config_json,label,created_at) VALUES(?,?,?,?)`, preview.BaseVersion, string(raw), label, time.Now().Unix())
+	id, err := insertID(ctx, tx, `INSERT INTO filter_versions(parent_id,config_json,label,created_at) VALUES(?,?,?,?)`, baseVersion, string(raw), label, time.Now().Unix())
 	if err != nil {
 		return RuleVersion{}, err
 	}

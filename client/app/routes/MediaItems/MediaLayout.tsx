@@ -2,9 +2,8 @@ import React, { useEffect, useState } from "react";
 import { average } from "color.js";
 import { type ImageList, type SearchResponse } from "api/api";
 import ImageDropHandler from "~/components/ImageDropHandler";
-import { Edit, ImageIcon, Merge, Plus, Trash } from "lucide-react";
+import { Edit, ImageIcon, Plus, Trash } from "lucide-react";
 import { useAppContext } from "~/providers/AppProvider";
-import MergeModal from "~/components/modals/MergeModal";
 import ImageReplaceModal from "~/components/modals/ImageReplaceModal";
 import DeleteModal from "~/components/modals/DeleteModal";
 import EditModal from "~/components/modals/EditModal/EditModal";
@@ -43,7 +42,6 @@ interface Props {
 
 export default function MediaLayout(props: Props) {
   const [bgColor, setBgColor] = useState<string>("(--color-bg)");
-  const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -193,16 +191,6 @@ export default function MediaLayout(props: Props) {
                   </button>
                 )}
                 <button
-                  title="Merge Items"
-                  className="hover:cursor-pointer"
-                  onClick={() => setMergeModalOpen(true)}
-                >
-                  <Merge
-                    size={iconSize}
-                    className="hover:stroke-(--color-fg-secondary)"
-                  />
-                </button>
-                <button
                   title="Delete Item"
                   className="hover:cursor-pointer"
                   onClick={() => setDeleteModalOpen(true)}
@@ -224,15 +212,6 @@ export default function MediaLayout(props: Props) {
                   id={props.imgItemId}
                   musicbrainzId={props.musicbrainzId}
                   type={props.type === "Track" ? "Album" : props.type}
-                />
-                <MergeModal
-                  currentTitle={props.title}
-                  mergeFunc={props.mergeFunc}
-                  mergeCleanerFunc={props.mergeCleanerFunc}
-                  type={props.type}
-                  currentId={props.id}
-                  open={mergeModalOpen}
-                  setOpen={setMergeModalOpen}
                 />
                 <DeleteModal
                   open={deleteModalOpen}

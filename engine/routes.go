@@ -107,6 +107,7 @@ func bindRoutes(
 				r.Get("/filters/record", filters)
 				r.Post("/filters/preview", filters)
 				r.Post("/filters/apply", filters)
+				r.Post("/filters/save", filters)
 			}
 
 			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))

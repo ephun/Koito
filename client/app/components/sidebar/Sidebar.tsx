@@ -29,12 +29,12 @@ export default function Sidebar() {
             pt-2
             sm:py-10
             sm:px-3
-            px-4
+            px-3
             bg-(--color-bg)
             text-(--color-fg-secondary)
         "
     >
-      <div className="flex gap-4 sm:flex-col">
+      <div className="flex gap-2 sm:gap-4 sm:flex-col">
         <SidebarSearch size={iconSize} />
         <div className="hidden sm:flex"></div>
         <SidebarItem
@@ -58,7 +58,7 @@ export default function Sidebar() {
         {user?.role === "admin" && <SidebarItem space={10} to="/imports" name="Imports" onClick={() => {}} modal={<></>}><Upload size={iconSize} /></SidebarItem>}
         {user?.role === "admin" && <SidebarItem space={10} to="/filters" name="Filters" onClick={() => {}} modal={<></>}><SlidersHorizontal size={iconSize} /></SidebarItem>}
       </div>
-      <div className="flex gap-4 sm:flex-col">
+      <div className="flex gap-2 sm:gap-4 sm:flex-col">
         <SidebarItem
           icon
           keyHint={<ExternalLink size={14} />}
