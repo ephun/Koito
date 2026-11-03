@@ -11,24 +11,24 @@ Back up that directory together with `koito.db`; the database alone is not a
 complete backup. Paths are derived from hashes, never uploaded filenames.
 
 The additive migration leaves existing catalog, listens, and aliases intact.
-New tables keep sources/accounts, files, receipts, archive membership, and raw
+New tables keep sources, origin metadata, files, receipts, archive membership, and raw
 records separate from derived interpretations. Raw records retain every field
 and every occurrence, including identical rows at distinct positions. Original
 bytes are authoritative for formatting. Parsed record fields are conveniences.
 
-Re-uploading the same bytes under the same account reuses their records. Archive
+Re-uploading the same bytes reuses their records. Archive
 members are independently content-addressed, so uploading a member separately
 does not multiply records. Different exports retain separate record occurrences;
-the minimal matching policy links overlapping records into plays.
+the minimal matching rule links overlapping records into plays.
 
-## First policy
+## First rules
 
 `spotify-v1` matches stored source, original timestamp and track identity (Spotify
 URI when present; otherwise title/artist/album). It makes no fuzzy or cross-service
 matches. It counts music records reporting `reason_end=trackdone`, following the
 old importer, but retains short, skipped, nonmusic, and invalid records with an
 explanation. Played milliseconds are not assumed to be a recording's duration.
-This policy is internal to the first projection. Broader qualification and
+These rules are internal to the first projection. Broader qualification and
 matching controls belong to the later Filters work.
 
 The compatibility projection is rebuildable from preserved records, writes to
@@ -51,8 +51,11 @@ The Imports page must show receipt status, filenames, source, record and
 play counts, errors, record payloads and explanations, original-file download,
 and a rebuild action. No public endpoint exposes raw evidence.
 The upload form is generic: recognize supported content regardless of the outer
-filename and reject unsupported files. Keep policy details and explanatory prose
+filename and reject unsupported files. Keep rule details and explanatory prose
 out of the page; show controls, data, and concise action results.
+
+The remaining phases and shared vocabulary are in the
+[development plan](development-plan.md).
 
 Acceptance tests cover repeats, renamed uploads, zipped/standalone overlap,
 overlapping exports, repeated rows within one file, distinct accounts, unknown
