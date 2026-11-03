@@ -1,16 +1,35 @@
 # Koito fork: development phases
 
-Updated November 2, 2026.
+Updated November 3, 2026.
 
 This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phase 1 is complete. Phase 2 is next. Later phases below are proposed work,
-not features that already exist. Specific matching thresholds, attribution
+Phase 1 is complete. Phase 2 has partial implementation in the working tree;
+it is not complete. Later phases below are proposed work, not features that
+already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
 defaults. There are no calendar estimates in this plan.
+
+The development order is **preserved imports first, then the first working
+Filters controls, then additional importers and rules together**. Supporting
+every file format is not a prerequisite for Filters. Each added importer must
+preserve the evidence needed by its rules before those rules affect the view.
+
+## Reading this plan
+
+- Sections 1–3 define the vocabulary, rule types, and shared requirements.
+- The phase overview gives the sequence and dependencies.
+- Each phase defines its work, acceptance criteria, and unresolved choices.
+- The final sections map source formats and upstream issues to phases and list
+  the immediate implementation steps.
+
+The local [source survey](../data_dump/SOURCE_SURVEY_2026-11-02.md) supplies the
+inventory and historical examples. It contains private source details and is
+not part of the repository. This plan contains the coverage needed to work
+without publishing those files.
 
 ## 1. Vocabulary
 
@@ -112,12 +131,57 @@ prerequisite for the first useful rules.
 - Keep the existing history usable while replacing individual parts. A failed
   import or rebuild must not damage the previous usable view.
 
+### Storage boundary
+
+The storage model covers the database, original files on disk, their links,
+and how a replacement view is published. These are the responsibilities to
+preserve as the schema evolves; the table names can follow the existing code.
+
+| What is stored | Required contents | How it changes |
+|---|---|---|
+| Files on disk | Original upload bytes and extracted member bytes, addressed by hash | Reuse identical bytes; retain original downloads even after a failed import |
+| File information and import history | Hash, size, filename, attempt outcome, archive/member links, source | Add attempts and provenance without multiplying records |
+| Records | Complete fields, file position, source, reader version | Append new evidence; never overwrite records to clean metadata |
+| Rules and manual changes | Type, subtype, scope, settings, enabled state, versions, explicit matches/splits | Save changes with a way to undo them |
+| Plays and their supporting records | Every contributing record, chosen fields, timing, estimates and reasons | Rebuild when rules or evidence change |
+| View | History, catalog, collections, charts and statistics | Publish a consistent result after a successful rebuild |
+
+Original files currently live beneath
+`<config>/sources/sha256/<first two hex>/<sha256>`. The SQLite database stores
+their links and extracted records. Both belong in a backup. The repository and
+`data_dump` are not the application's permanent storage directories.
+
+Import identity ends at recognizing an existing file and its record occurrences.
+Deciding that records describe one play belongs to Matching. Importing must not
+discard a record because another service or export appears to cover it.
+
+A reader correction must not create a second copy of the same evidence that
+then counts independently. Preserve the original reading, record the correction
+or replacement reading, and make the active interpretation explicit. This needs
+a defined migration path before changing a reader used by existing imports.
+
+### Publishing and undo
+
+1. Read the preserved records and selected rule versions.
+2. Calculate the proposed plays and view, including supporting-record links.
+3. Preview changed counts and representative changes when the user edits rules.
+4. Verify that the preview still refers to the current files, records, rules,
+   and manual decisions before applying it.
+5. Publish the complete replacement atomically. On failure, retain the previous
+   usable view and the newly stored evidence for retry.
+6. Undo by restoring earlier settings or reversing a manual decision, then
+   rebuilding. Keep the history of changes.
+
+Rebuilding must be deterministic for the same evidence and rules. Later imports
+can change results without rewriting the earlier evidence. Manual corrections
+must remain attached to stable records or music identities across rebuilds.
+
 ## 4. Phase overview
 
 | Phase | Deliverable | Status / dependency |
 |---|---|---|
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
-| 2 | Last.fm imports and the first matching rules in Filters | Next; builds on 1 |
+| 2 | Last.fm imports and the first matching rules in Filters | In progress; builds on 1 |
 | 3 | iTunes counts, inference, and shared-history attribution | After 2 |
 | 4 | Music identity, album distinctions, bulk cleanup, and genre tags | After 2; uses 3 examples |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
@@ -165,6 +229,11 @@ Limits carried into the next phases:
 **Outcome:** Spotify and Last.fm histories can overlap without counting an
 established play twice, and the matching is visible and reversible in Filters.
 
+**Status:** Last.fm readers, timestamp handling, fixtures, and initial saved-rule
+storage have been started locally. The active rebuild still uses the fixed
+Spotify rules, and there is no Filters route. Importing Last.fm records alone
+does not complete this phase or prove that those records affect the view.
+
 ### 2.1 Import Last.fm records
 
 - Support the headerless CSV found in the dump, including its UTF-8 BOM.
@@ -204,6 +273,27 @@ established play twice, and the matching is visible and reversible in Filters.
   source for displayed fields must not discard unmatched history.
 - Let the user inspect contributing records and correct a wrong match or split.
 
+### 2.4 Implementation sequence
+
+| Step | Deliverable | Verification |
+|---|---|---|
+| 2A | Shared import path for Spotify and the located Last.fm layouts | Repeated, renamed, standalone and ZIP uploads preserve bytes and fields without adding duplicate records |
+| 2B | Timestamp interpretation for each layout, including unknown timezone and local-time ambiguity | Epoch, start/end, minute precision and daylight-saving examples remain distinguishable |
+| 2C | Saved rules and independent manual match/split history | Settings persist; undo adds a reversible change; rebuilding retains manual decisions |
+| 2D | Matching calculation shared by preview and rebuild | Known pairs combine, repeats stay distinct, ambiguous candidates remain inspectable |
+| 2E | Atomic replacement of the view with stale-preview detection | Failed replacement leaves the previous view usable; changed evidence requires a fresh preview |
+| 2F | Filters page and contributing-record inspection | Edit, preview, apply, undo, match and split work in the browser with concise controls |
+| 2G | Local acceptance against overlapping real exports | Record-to-play links, unmatched plays, originals and repeat-import stability are checked together |
+
+Steps may be developed together, but each must pass its own checks. If Koito's
+track/whole-second listen key prevents a valid split or collapses genuine plays,
+fix that display constraint in this phase. Do not count a collision as a proven
+match or invent different timestamps to fit the old key.
+
+**Deferred:** broad alias/regex cleanup, shared-listener attribution, iTunes
+count expansion, and the remaining source formats. The first Filters page needs
+the rules used here, not placeholder controls for every later type.
+
 **Done when:**
 
 1. Both Last.fm CSV layouts and representative JSON/JSONL files import without
@@ -214,6 +304,8 @@ established play twice, and the matching is visible and reversible in Filters.
 5. Changing and undoing a rule changes the view without changing source files
    or records; manual decisions survive rebuilding.
 6. Matching does not hide original album information or unmatched source plays.
+7. A preview cannot overwrite newer imports or manual changes; a failed apply
+   leaves the previous view intact.
 
 **Decisions to settle in this phase:** timestamp interpretation for each export,
 the first supported matching settings, how ambiguous matches are presented, and
@@ -498,6 +590,12 @@ consistently. This completes the capture portion of
 locally, explained, backed up, and rebuilt without relying on the old database
 as an unquestioned source of truth.
 
+- Finish bulk intake for the packaging actually needed by the dump: ZIP,
+  TAR.GZ, and selected folder batches. Use the same record readers as individual
+  uploads, preserve container/member links, and bound nesting and expanded size.
+  Bring a shared container reader forward if an earlier source requires it.
+  A folder batch is a selection of files, not permission to import every file
+  from an environment or server backup as listening data.
 - Build a file inventory for the full dump: original exports, repeated copies,
   archive members, older processed files, database snapshots, and supporting
   documents. Identify by content rather than assuming paths imply uniqueness.
@@ -571,6 +669,7 @@ or retaining a ZIP alone is not equivalent to reading its relevant records.
 | YARG/YARGfm | Score SQLite, song metadata, matching game/scrobble evidence | 7 |
 | Clone Hero | Documented score/cache binary versions | 7, after format verification |
 | Earlier projects | Needed normalized CSV/JSON/JSONL/SQLite; mappings, reviews, summaries, rule settings | 3/4/6/9, according to record meaning |
+| Backup containers and folder batches | ZIP, TAR.GZ, selected folder files; shared readers, nested-member links and size limits | ZIP foundation in 1; remaining bulk intake in 9 or earlier when needed |
 | Last.fm app PDF, scripts, settings, unknown files | Supporting-file preservation or direct unsupported result; no invented plays | 9 |
 | Live submissions | Full accepted bodies and arbitrary fields, separate now-playing handling | 8 |
 
@@ -604,13 +703,22 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Start Phase 2 with anonymized fixtures representing the two Last.fm CSV layouts
-and the JSON/JSONL forms found locally. Define their field and timestamp handling,
-then implement preserved imports through the existing single-button flow.
+Finish Phase 2 in the order in section 2.4:
 
-Next, add the first saved matching rules and Filters controls. Use real Spotify/
-Last.fm examples to establish one-play matches, genuine repeats, missing albums,
-and ambiguous times before choosing automatic matching defaults.
+1. Review and verify the unfinished Last.fm readers, preserved import path,
+   timestamp handling, and saved-rule migration already in the working tree.
+2. Implement one matching calculation used by preview and rebuild. Establish
+   one-play matches, genuine repeats, missing albums, and ambiguous times with
+   anonymized fixtures and examples from the real Spotify/Last.fm overlap.
+3. Add atomic apply, undo, and persistent manual matches/splits. Resolve any
+   existing display-key constraint that prevents correct results.
+4. Add the Filters route, controls, and record inspection using those operations.
+5. Run the phase's complete acceptance checks locally, record the results, and
+   commit and push the finished work to the fork's working branch.
+
+Timezone assumptions, timing tolerance, and source preference remain explicit
+settings to validate. Partial implementation and successful reader tests are not
+evidence that matching or undo works end to end.
 
 The first Phase 2 demonstration should be simple: import the two overlapping
 histories, inspect the records behind a matched play, change or undo the match,
