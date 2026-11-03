@@ -23,7 +23,7 @@ the minimal matching policy links overlapping records into plays.
 
 ## First policy
 
-`spotify-v1` matches exact account, original timestamp and track identity (Spotify
+`spotify-v1` matches stored source, original timestamp and track identity (Spotify
 URI when present; otherwise title/artist/album). It makes no fuzzy or cross-service
 matches. It counts music records reporting `reason_end=trackdone`, following the
 old importer, but retains short, skipped, nonmusic, and invalid records with an
@@ -47,7 +47,7 @@ attempts leave no partial record set and can be retried. Projection failure must
 not discard successfully stored evidence. Bound both upload and expanded ZIP
 sizes; never extract arbitrary archive paths or execute supporting files.
 
-The Imports page must show receipt status, filenames, source/account, record and
+The Imports page must show receipt status, filenames, source, record and
 play counts, errors, record payloads and explanations, original-file download,
 and a rebuild action. No public endpoint exposes raw evidence.
 The upload form is generic: recognize supported content regardless of the outer
@@ -77,15 +77,16 @@ the user's dump are outside this development phase.
 - Real local Spotify file: 8,524 preserved records, 3,383 qualifying plays;
   re-upload added zero records, and repeated rebuilds returned identical counts.
 - `yarn typecheck` and `yarn build`: passed.
-- HTTP tests and desktop/mobile browser flow: passed using a temporary Go
-  overlay outside the repository that disables only image compression. The flow
-  covered login, upload, original-byte download, raw payload inspection, repeat
-  upload, rebuilding, and navigating to the resulting listening history.
+- HTTP tests and desktop/mobile browser checks pass. The page has one Import file
+  action, starts importing after selection, and requires no account field.
+- Final native browser acceptance used the real 8,524-record export. Original
+  bytes and record payloads matched; renamed re-upload and ZIP/standalone overlap
+  added no records; rebuilding preserved 3,383 plays; unsupported input was
+  rejected; the listening-history page displayed the resulting plays.
 - Native Windows setup is now available through `scripts/windows.ps1`. The full
   Go suite, including engine integration tests and real libvips image encoding,
   passes without the temporary overlay. See [Windows development](windows-development.md).
 
-The earlier overlay checks are superseded by native verification. Windows file
-handling fixes close startup-import files before moving them, create image-cache
+Windows file handling fixes close startup-import files before moving them, create image-cache
 directories with platform-aware paths, and stop the integration-test server before
 database cleanup. Linux deployment checks remain separate from local development.
