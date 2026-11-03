@@ -33,7 +33,8 @@ func (s *Store) ImportSpotify(ctx context.Context, input io.Reader, filename, ac
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	account = strings.TrimSpace(account)
-	if account == "" || len(account) > 200 {
+	automatic := account == ""
+	if len(account) > 200 {
 		return result, errors.New("an account name of 1–200 characters is required")
 	}
 	f, err := s.SaveFile(ctx, input)
@@ -41,6 +42,19 @@ func (s *Store) ImportSpotify(ctx context.Context, input io.Reader, filename, ac
 		return result, err
 	}
 	result.Hash = f.Hash
+	if automatic {
+		// Keep repeated uploads linked to any source previously selected for
+		// these bytes. New uploads use a stable identity for the single owner.
+		e := s.DB.QueryRowContext(ctx, `SELECT a.account FROM source_accounts a WHERE a.service='spotify' AND a.user_id=? AND (
+			EXISTS(SELECT 1 FROM source_extractions e WHERE e.source_id=a.id AND e.file_hash=?) OR
+			EXISTS(SELECT 1 FROM import_receipts r WHERE r.source_id=a.id AND r.file_hash=? AND r.status='stored')
+		) ORDER BY a.id LIMIT 1`, userID, f.Hash, f.Hash).Scan(&account)
+		if errors.Is(e, sql.ErrNoRows) {
+			account = fmt.Sprintf("user:%d", userID)
+		} else if e != nil {
+			return result, e
+		}
+	}
 	_, err = s.DB.ExecContext(ctx, `INSERT INTO source_accounts(service,account,user_id) VALUES('spotify',?,?) ON CONFLICT(service,account) DO NOTHING`, account, userID)
 	if err != nil {
 		return result, err

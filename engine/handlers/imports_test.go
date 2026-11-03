@@ -41,7 +41,6 @@ func TestImportsHTTP(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		var body bytes.Buffer
 		form := multipart.NewWriter(&body)
-		form.WriteField("account", "me")
 		part, e := form.CreateFormFile("file", "history.json")
 		if e != nil {
 			t.Fatal(e)

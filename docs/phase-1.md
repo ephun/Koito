@@ -39,7 +39,8 @@ collisions are reported rather than claimed to be independent displayed plays.
 
 ## Import lifecycle and acceptance
 
-Uploads require an authenticated administrator and explicit account. Preserve
+Uploads require an authenticated administrator and automatically use the single
+local owner. Existing source labels are retained internally. Preserve
 bytes before acknowledging successful ingestion. Each attempt has a receipt,
 including validation failures. Parsing/record insertion is transactional; failed
 attempts leave no partial record set and can be retried. Projection failure must

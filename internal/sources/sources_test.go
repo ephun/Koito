@@ -363,3 +363,31 @@ func TestImportDetectsContentAndRejectsUnsupportedFiles(t *testing.T) {
 		t.Fatal("unsupported upload created records")
 	}
 }
+
+func TestAutomaticSourceNeedsNoAccountSelection(t *testing.T) {
+	s := testStore(t)
+	data := []byte("[" + complete + "]")
+	first := mustImport(t, s, data, "history.json", "")
+	second := mustImport(t, s, data, "renamed.json", "")
+	if first.Added != 1 || second.Added != 0 || second.Reused != 1 {
+		t.Fatal("automatic source is not idempotent", first, second)
+	}
+	mustImport(t, s, []byte("["+complete+","+skipped+"]"), "overlap.json", "")
+	if count(t, s, "source_accounts") != 1 {
+		t.Fatal("uploads created additional sources for the same owner")
+	}
+	result, err := s.Rebuild(context.Background())
+	if err != nil || result.Plays != 1 {
+		t.Fatal("overlapping automatic imports multiplied plays", result, err)
+	}
+}
+
+func TestAutomaticSourceReusesPreviouslyLabeledFile(t *testing.T) {
+	s := testStore(t)
+	data := []byte("[" + complete + "]")
+	mustImport(t, s, data, "history.json", "previous-label")
+	result := mustImport(t, s, data, "history.json", "")
+	if result.Added != 0 || result.Reused != 1 || count(t, s, "source_accounts") != 1 {
+		t.Fatal("removing the account field duplicated an existing import", result)
+	}
+}
