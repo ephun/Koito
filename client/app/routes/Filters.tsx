@@ -94,20 +94,14 @@ export default function Filters() {
     (["source_id", "file_hash", "library_id", "track_id", "record_id", "artist"] as const).every(key => !rule.scope[key] || !timeRule.scope[key] || rule.scope[key] === timeRule.scope[key]));
   const dirty = !!saved && !!draft && JSON.stringify(saved.current.config) !== JSON.stringify(draft);
 
-  function override(file: FilterState["time_files"][number], update: Partial<RuleSettings> | { enabled: boolean }) {
+  function fileTimezone(file: FilterState["time_files"][number], zone: string) {
     if (!draft || !time) return;
-    const existing = draft.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
-    if (existing) { edit(existing.id, update); return; }
-    const rule: Rule = {
-      id: `time-${file.source_id}-${file.hash}`,
-      type: "inference",
-      subtype: "time",
-      enabled: true,
-      scope: { service: "lastfm", source_id: file.source_id, file_hash: file.hash },
-      settings: { ...time.settings, timezone: time.enabled ? time.settings.timezone : "" },
-    };
-    setDraft({ rules: [...draft.rules, rule] });
-    setMessage("");
+    const existing = draft.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
+    if (zone === "inherit") {
+      if (existing) upsert({ ...existing, enabled: false });
+      return;
+    }
+    upsert({ ...(existing || { id: `time-${file.source_id}-${file.hash}`, type: "inference", subtype: "time", scope: { service: "lastfm", source_id: file.source_id, file_hash: file.hash }, settings: { ...time.settings } }), enabled: true, settings: { ...(existing?.settings || time.settings), timezone: zone } });
   }
 
   if (recordID) return <Navigate replace to={`/imports?record=${encodeURIComponent(recordID)}`} />;
@@ -168,19 +162,18 @@ export default function Filters() {
             </select>
           </Option>
           {!!saved?.time_files.length && time && <div className="space-y-3 border-t border-(--color-bg-tertiary) pt-4">
-            <Option label="Last.fm timezone" id="lastfm-time-rule" help="Interpret timestamps that omit a timezone.">
-              <Switch id="lastfm-time-rule" label="Default Last.fm timezone" checked={time.enabled} disabled={saving} onChange={enabled => edit(time.id, { enabled })} />
+            <Option label="Last.fm timezone" id="lastfm-timezone" help="Choose the timezone used by Last.fm export dates.">
+              <TimezoneSelect id="lastfm-timezone" label="Last.fm timezone" disabled={saving} value={time.enabled ? time.settings.timezone : ""} onChange={timezone => upsert({ ...time, enabled: true, settings: { ...time.settings, timezone } })} />
             </Option>
-            <div className={`${time.enabled ? "" : "opacity-50"} flex justify-end`}>
-              <input className={input} aria-label="Last.fm timezone" list="filter-timezones" placeholder="Unknown" autoComplete="off" spellCheck={false} disabled={saving || !time.enabled} value={time.settings.timezone} onChange={event => edit(time.id, { timezone: event.target.value })} />
-            </div>
             <details>
-              <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">File overrides</summary>
+              <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Timezones by file</summary>
               <div className="mt-3 divide-y divide-(--color-bg-tertiary)">{saved.time_files.map(file => {
-                const rule = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
+                const rule = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
                 return <div key={`${file.source_id}-${file.hash}`} className="space-y-3 py-4">
-                  <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="break-all text-sm font-medium">{file.filename}</p><p className="text-sm text-(--color-fg-tertiary)">{file.records.toLocaleString()} {file.records === 1 ? "record" : "records"}</p></div><Switch label={`Override timezone for ${file.filename}`} checked={rule?.enabled || false} disabled={saving} onChange={enabled => override(file, { enabled })} /></div>
-                  <div className={`${rule?.enabled ? "" : "opacity-50"} flex justify-end`}><input className={input} aria-label={`Timezone for ${file.filename}`} list="filter-timezones" placeholder="Unknown" autoComplete="off" spellCheck={false} disabled={saving || !rule?.enabled} value={rule?.settings.timezone ?? time.settings.timezone} onChange={event => override(file, { timezone: event.target.value })} /></div>
+                  <p className="break-all text-sm font-medium">{file.filename}</p>
+                  <Option label="Timezone" help="Use a different timezone when this file needs one.">
+                    <TimezoneSelect label={`Timezone for ${file.filename}`} disabled={saving} inherit value={rule?.enabled ? rule.settings.timezone : "inherit"} onChange={zone => fileTimezone(file, zone)} />
+                  </Option>
                 </div>;
               })}</div>
             </details>
@@ -189,7 +182,6 @@ export default function Filters() {
             {libraryTimes.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} blocked={!countEnabled(rule)} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
             <AddScopedRule state={saved} type="inference" subtype="time" busy={saving} onAdd={upsert} />
           </div>}
-          <datalist id="filter-timezones">{["UTC", "America/Denver", "America/New_York", "America/Los_Angeles"].map(zone => <option key={zone} value={zone} />)}</datalist>
         </section>
       </div>
     </section>}
@@ -216,3 +208,13 @@ function RuleGroup({ title, label, rule, busy, onToggle, children }: { title: st
 }
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Could not save rules."; }
+
+function TimezoneSelect({ id, label, value, disabled, inherit = false, onChange }: { id?: string; label: string; value: string; disabled: boolean; inherit?: boolean; onChange: (value: string) => void }) {
+  const available = (Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") || ["America/Denver", "America/New_York", "America/Los_Angeles"];
+  const zones = [...new Set(["UTC", ...available, ...(value && value !== "inherit" ? [value] : [])])];
+  return <select id={id} aria-label={label} className={`${input} w-full sm:w-64`} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}>
+    {inherit && <option value="inherit">Use Last.fm timezone</option>}
+    <option value="">Unknown</option>
+    {zones.map(zone => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
+  </select>;
+}

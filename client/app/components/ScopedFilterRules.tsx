@@ -26,21 +26,22 @@ export function ScopedRule({ rule, state, busy, blocked = false, onChange, onRem
 
   return <section aria-label={toggleLabel} className="space-y-4 p-4 sm:p-5">
     <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><h4 className="break-words font-medium">{name}</h4>
-        {conditions.filter(condition => !["file_hash", "library_id", "record_id"].includes(condition.key) && rule.scope[condition.key]).map(condition => <p key={condition.key} className="break-words text-xs text-(--color-fg-secondary)">{condition.label}: {rule.scope[condition.key]}</p>)}
+      <div className="min-w-0"><div className="flex min-w-0 items-center gap-1"><h4 className="min-w-0 break-words font-medium">{name}</h4>
         {blocked && <FieldHelp label={`${name} timing`}>Enable Count to use library timing.</FieldHelp>}
+      </div>
+        {conditions.filter(condition => !["file_hash", "library_id", "record_id"].includes(condition.key) && rule.scope[condition.key]).map(condition => <p key={condition.key} className="break-words text-xs text-(--color-fg-secondary)">{condition.label}: {rule.scope[condition.key]}</p>)}
       </div>
       <Switch label={toggleLabel} checked={rule.enabled} disabled={busy || blocked} onChange={enabled => onChange({ ...rule, enabled })} />
     </div>
     <div className={`${disabled ? "opacity-50" : ""} space-y-4`}>
-      {rule.type === "inference" && rule.subtype === "count" && <Option label="Cumulative counts" id={`${id}-count`} help="Choose how snapshots contribute to the total.">
+      {rule.type === "inference" && rule.subtype === "count" && <Option label="Cumulative counts" id={`${id}-count`} help="Choose how iTunes library export records contribute to totals.">
         <select id={`${id}-count`} className={input} value={settings.count_mode || "maximum"} disabled={disabled} onChange={event => set({ count_mode: event.target.value })}>
-          <option value="maximum">Largest reported count</option><option value="latest">Latest reported count</option><option value="reset_total">Treat decreases as resets</option>
+          <option value="maximum">Largest reported count</option><option value="latest">Latest reported count</option><option value="reset_total">Assume decreases restart the counter</option>
         </select>
       </Option>}
       {rule.type === "inference" && rule.subtype === "time" && <>
-        <Option label="Last played" id={`${id}-last`} help="Use the reported endpoint when all listening is assigned to you."><Switch id={`${id}-last`} label={`Use last played for ${name}`} checked={!!settings.use_last_played} disabled={disabled} onChange={use_last_played => set({ use_last_played })} /></Option>
-        <Option label="Estimate remaining times" id={`${id}-estimate`} help="Distribute remaining plays within the dates supported by the library."><Switch id={`${id}-estimate`} label={`Estimate remaining times for ${name}`} checked={!!settings.estimate_times} disabled={disabled} onChange={estimate_times => set({ estimate_times })} /></Option>
+        <Option label="Include last known play" id={`${id}-last`} help="Use the last-played date recorded in the iTunes library export."><Switch id={`${id}-last`} label={`Use last played for ${name}`} checked={!!settings.use_last_played} disabled={disabled} onChange={use_last_played => set({ use_last_played })} /></Option>
+        <Option label="Estimate other play dates" id={`${id}-estimate`} help="Estimate missing play dates within the time range supported by the iTunes library export."><Switch id={`${id}-estimate`} label={`Estimate remaining times for ${name}`} checked={!!settings.estimate_times} disabled={disabled} onChange={estimate_times => set({ estimate_times })} /></Option>
       </>}
       {rule.type === "attribution" && rule.subtype === "direct" && <Option label="Listener" id={`${id}-listener`} help="Assign listening within this scope.">
         <select id={`${id}-listener`} className={input} value={settings.listener || "unknown"} disabled={disabled} onChange={event => set({ listener: event.target.value })}><option value="self">Me</option><option value="other">Someone else</option><option value="unknown">Unknown</option></select>

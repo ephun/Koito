@@ -42,6 +42,13 @@ Question marks provide hover and keyboard-focus help.
 Help text uses simple sentences with twenty words at most.
 Escape dismisses the tooltip.
 Tooltips stay within the viewport.
+Source headings keep their help icons on the same row.
+
+Last.fm timezone uses a dropdown with Unknown as the initial value.
+The timezone setting has no On/Off control.
+Timezones by file provides optional exceptions and defaults to using the Last.fm timezone.
+iTunes count help explicitly refers to iTunes library export records.
+Its time controls use last-played dates and estimated play dates as their visible language.
 
 Save changes publishes the rules and view together.
 Discard restores the currently loaded settings before saving.
