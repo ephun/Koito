@@ -17,6 +17,7 @@ import Sidebar from "./components/sidebar/Sidebar";
 import Footer from "./components/Footer";
 import { AppProvider } from "./providers/AppProvider";
 import { initTimezoneCookie } from "./tz";
+import Loading from "./components/Loading";
 
 initTimezoneCookie();
 
@@ -104,7 +105,7 @@ export default function App() {
 }
 
 export function HydrateFallback() {
-  return null;
+  return <Loading />;
 }
 
 export function ErrorBoundary() {
@@ -127,10 +128,8 @@ export function ErrorBoundary() {
   const title = `${message} - Koito`;
 
   return (
-    <AppProvider>
-      <ThemeProvider>
+    <div style={{ minHeight: "100vh", padding: "2rem", background: "#191310", color: "#f5ece3" }}>
         <title>{title}</title>
-        <Sidebar />
         <div className="flex">
           <div className="w-full flex flex-col">
             <main className="pt-16 p-4 w-4/5 min-w-[350px] mx-auto flex-grow">
@@ -147,10 +146,9 @@ export function ErrorBoundary() {
                 </pre>
               )}
             </main>
-            <Footer />
           </div>
         </div>
-      </ThemeProvider>
-    </AppProvider>
+      <button type="button" className="underline" onClick={() => window.location.reload()}>Reload</button>
+    </div>
   );
 }
