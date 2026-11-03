@@ -1,0 +1,454 @@
+package sources
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+	"unicode"
+)
+
+type matchingRecord struct {
+	ID       int64        `json:"id"`
+	SourceID int64        `json:"source_id"`
+	Service  string       `json:"service"`
+	FileHash string       `json:"file_hash"`
+	Ordinal  int          `json:"ordinal"`
+	Parser   string       `json:"parser"`
+	Payload  string       `json:"payload,omitempty"`
+	UserID   int32        `json:"-"`
+	Values   recordValues `json:"values"`
+	Start    time.Time    `json:"time"`
+	Basis    string       `json:"time_basis"`
+}
+
+type MatchDecision struct {
+	ID        int64  `json:"id"`
+	Left      int64  `json:"left"`
+	Right     int64  `json:"right"`
+	Action    string `json:"action"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type plannedPlay struct {
+	Key            string  `json:"key"`
+	Records        []int64 `json:"records"`
+	Representative int64   `json:"representative"`
+	Reason         string  `json:"reason"`
+}
+
+type matchPlan struct {
+	Records   []matchingRecord
+	Plays     []plannedPlay
+	Reasons   map[int64]string
+	Keys      map[int64]string
+	Ambiguous map[int64][]int64
+}
+
+func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig) ([]matchingRecord, error) {
+	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []matchingRecord{}
+	for rows.Next() {
+		var r matchingRecord
+		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID); err != nil {
+			return nil, err
+		}
+		interpretMatchingRecord(&r, config)
+		// Matching needs interpreted values; inspection reads the original payload
+		// separately. Avoid retaining a second full copy of large history exports.
+		r.Payload = ""
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
+	_, playRule := config.matchingRules()
+	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
+	r.Start = r.Values.Time
+	r.Basis = r.Values.TimeMeaning
+	if r.Service == "spotify" && playRule.Settings.SpotifyTime == "estimated_start" && r.Values.Reason == "counted" {
+		// Subtract actual played time, never an assumed recording duration. Guard
+		// duration conversion against overflow and implausible pre-epoch results.
+		if r.Values.PlayedMS > r.Start.UnixMilli() || r.Values.PlayedMS > int64((1<<63-1)/int64(time.Millisecond)) {
+			r.Values.Reason = "invalid played duration"
+		} else {
+			r.Start = r.Start.Add(-time.Duration(r.Values.PlayedMS) * time.Millisecond)
+			r.Basis = "estimated start"
+		}
+	}
+}
+
+func loadDecisions(ctx context.Context, reader sqlReader) ([]MatchDecision, error) {
+	rows, err := reader.QueryContext(ctx, `SELECT id,left_record,right_record,action,created_at FROM match_decisions ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []MatchDecision{}
+	for rows.Next() {
+		var d MatchDecision
+		if err = rows.Scan(&d.ID, &d.Left, &d.Right, &d.Action, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func pairKey(a, b int64) [2]int64 {
+	if a > b {
+		a, b = b, a
+	}
+	return [2]int64{a, b}
+}
+
+// Use the same Unicode equivalence as EqualFold when building candidate keys.
+// Lowercasing alone misses pairs such as Greek final and ordinary sigma.
+func foldedName(text string) string {
+	return strings.Map(func(r rune) rune {
+		minimum := r
+		for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
+			if next < minimum {
+				minimum = next
+			}
+		}
+		return minimum
+	}, text)
+}
+
+func musicCompatible(a, b recordValues, rule Rule) bool {
+	// Conflicting reliable IDs outweigh similar text. A common reliable ID can
+	// corroborate a recording while retaining differing source album fields.
+	if a.URI != "" && b.URI != "" {
+		if a.URI != b.URI {
+			return false
+		}
+	}
+	if a.RecordingID != "" && b.RecordingID != "" {
+		if a.RecordingID != b.RecordingID {
+			return false
+		}
+	}
+	if (a.URI != "" && b.URI != "") || (a.RecordingID != "" && b.RecordingID != "") {
+		return true
+	}
+	equal := func(a, b string) bool {
+		if rule.Enabled && !rule.Settings.CaseSensitive {
+			return strings.EqualFold(a, b)
+		}
+		return a == b
+	}
+	if !equal(a.Artist, b.Artist) || !equal(a.Title, b.Title) {
+		return false
+	}
+	if equal(a.Album, b.Album) {
+		return true
+	}
+	return rule.Enabled && rule.Settings.MatchMissingAlbum && (a.Album == "" || b.Album == "")
+}
+
+func timeCompatible(a, b matchingRecord, tolerance time.Duration) bool {
+	if (a.Basis == "end") != (b.Basis == "end") {
+		return false
+	}
+	ae := a.Start.Add(time.Duration(a.Values.Precision))
+	be := b.Start.Add(time.Duration(b.Values.Precision))
+	if a.Start.Before(be) && b.Start.Before(ae) {
+		return true
+	}
+	return tolerance > 0 && !a.Start.After(be.Add(tolerance)) && !b.Start.After(ae.Add(tolerance))
+}
+
+// calculateMatches does not write catalog, rules, decisions or display rows.
+// Exact source duplicates are linked first. Other automatic matches require
+// a unique partner on both sides; no repeated-pass or transitive time matching.
+func calculateMatches(ctx context.Context, records []matchingRecord, config RuleConfig, decisions []MatchDecision) (matchPlan, error) {
+	p := matchPlan{Records: records, Reasons: map[int64]string{}, Keys: map[int64]string{}, Ambiguous: map[int64][]int64{}}
+	musicRule, playRule := config.matchingRules()
+	byID := map[int64]int{}
+	parent := make([]int, len(records))
+	members := map[int][]int{}
+	for i, r := range records {
+		byID[r.ID] = i
+		parent[i] = i
+		members[i] = []int{i}
+		p.Reasons[r.ID] = r.Values.Reason
+	}
+	var root func(int) int
+	root = func(i int) int {
+		if parent[i] != i {
+			parent[i] = root(parent[i])
+		}
+		return parent[i]
+	}
+	latest := map[[2]int64]MatchDecision{}
+	for _, d := range decisions {
+		latest[pairKey(d.Left, d.Right)] = d
+	}
+	splits := map[[2]int64]bool{}
+	for k, d := range latest {
+		if d.Action == "split" {
+			splits[k] = true
+		}
+	}
+	canJoin := func(a, b int) bool {
+		for _, i := range members[a] {
+			for _, j := range members[b] {
+				if splits[pairKey(records[i].ID, records[j].ID)] {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	join := func(a, b int) bool {
+		a, b = root(a), root(b)
+		if a == b {
+			return true
+		}
+		if !canJoin(a, b) {
+			return false
+		}
+		if records[a].ID > records[b].ID {
+			a, b = b, a
+		}
+		parent[b] = a
+		members[a] = append(members[a], members[b]...)
+		delete(members, b)
+		return true
+	}
+	// Apply explicit decisions in stable order, independently of automatic rules.
+	active := []MatchDecision{}
+	for _, d := range latest {
+		if d.Action == "match" {
+			active = append(active, d)
+		}
+	}
+	sort.Slice(active, func(i, j int) bool { return active[i].ID < active[j].ID })
+	for _, d := range active {
+		a, aok := byID[d.Left]
+		b, bok := byID[d.Right]
+		if !aok || !bok {
+			return p, fmt.Errorf("Match refers to an unknown record.")
+		}
+		// Disabling time inference may temporarily exclude a manually linked record;
+		// retain the decision for when that evidence becomes usable again.
+		if records[a].Values.Reason != "counted" || records[b].Values.Reason != "counted" {
+			continue
+		}
+		if !join(a, b) {
+			return p, fmt.Errorf("Manual match conflicts with a saved split.")
+		}
+	}
+	if playRule.Enabled {
+		exact := map[string][]int{}
+		for i, r := range records {
+			if r.Values.Reason != "counted" {
+				continue
+			}
+			identity := []string{r.Values.Artist, r.Values.Title, r.Values.Album, r.Values.RecordingID}
+			if r.Values.URI != "" {
+				identity = []string{r.Values.URI, r.Values.RecordingID}
+			}
+			raw, _ := json.Marshal([]any{r.SourceID, r.Values.Time.UTC().Format(time.RFC3339Nano), r.Values.Precision, identity})
+			key := string(raw)
+			exact[key] = append(exact[key], i)
+		}
+		exactKeys := make([]string, 0, len(exact))
+		for key := range exact {
+			exactKeys = append(exactKeys, key)
+		}
+		sort.Strings(exactKeys)
+		for _, key := range exactKeys {
+			indices := exact[key]
+			first := records[indices[0]]
+			if first.Service == "lastfm" && first.Values.Precision > int64(time.Second) {
+				counts := map[string]int{}
+				uncertain := false
+				for _, i := range indices {
+					counts[records[i].FileHash]++
+					if counts[records[i].FileHash] > 1 {
+						uncertain = true
+					}
+				}
+				// A minute can contain genuine repeated short tracks. Multiplicity
+				// in any export makes this bucket ambiguous across all its copies.
+				if uncertain {
+					continue
+				}
+			}
+			representatives := []int{}
+			for _, i := range indices {
+				linked := false
+				for _, other := range representatives {
+					if join(i, other) {
+						linked = true
+						break
+					}
+				}
+				if !linked {
+					representatives = append(representatives, i)
+				}
+			}
+		}
+		// Candidate blocks cover exact names and explicit IDs. Sort by time so
+		// distant repeats never require a quadratic all-history comparison.
+		blocks := map[string][]int{}
+		for i, r := range records {
+			if r.Values.Reason != "counted" {
+				continue
+			}
+			name := []string{r.Values.Artist, r.Values.Title}
+			if musicRule.Enabled && !musicRule.Settings.CaseSensitive {
+				for j := range name {
+					name[j] = foldedName(name[j])
+				}
+			}
+			raw, _ := json.Marshal(name)
+			keys := []string{"name:" + string(raw)}
+			if r.Values.URI != "" {
+				keys = append(keys, "uri:"+r.Values.URI)
+			}
+			if r.Values.RecordingID != "" {
+				keys = append(keys, "recording:"+r.Values.RecordingID)
+			}
+			for _, key := range keys {
+				blocks[key] = append(blocks[key], i)
+			}
+		}
+		candidates := map[int]map[int]bool{}
+		blockedPairs := map[[2]int]bool{}
+		candidatePair := func(a, b int) [2]int {
+			if a > b {
+				a, b = b, a
+			}
+			return [2]int{a, b}
+		}
+		tolerance := time.Duration(playRule.Settings.ToleranceSeconds) * time.Second
+		for _, block := range blocks {
+			sort.Slice(block, func(i, j int) bool { return records[block[i]].Start.Before(records[block[j]].Start) })
+			for pos, i := range block {
+				if err := ctx.Err(); err != nil {
+					return p, err
+				}
+				a := records[i]
+				for _, j := range block[pos+1:] {
+					b := records[j]
+					if b.Start.After(a.Start.Add(time.Duration(a.Values.Precision)).Add(tolerance)) {
+						break
+					}
+					ra, rb := root(i), root(j)
+					if ra == rb || a.UserID != b.UserID || !canJoin(ra, rb) {
+						continue
+					}
+					if a.Service == b.Service && (a.SourceID != b.SourceID || (a.FileHash == b.FileHash && (a.Service != "lastfm" || a.Values.Precision <= int64(time.Second) || b.Values.Precision <= int64(time.Second)))) {
+						continue
+					}
+					if !musicCompatible(a.Values, b.Values, musicRule) || !timeCompatible(a, b, tolerance) {
+						continue
+					}
+					// Every member must remain compatible with the candidate. This avoids
+					// merging conflicting known albums through a third, sparse record.
+					compatible := true
+					sharedFile := false
+					for _, x := range members[ra] {
+						for _, y := range members[rb] {
+							if records[x].FileHash == records[y].FileHash && records[x].Service == records[y].Service {
+								sharedFile = true
+							}
+							if !musicCompatible(records[x].Values, records[y].Values, musicRule) || !timeCompatible(records[x], records[y], tolerance) {
+								compatible = false
+							}
+						}
+					}
+					if !compatible {
+						continue
+					}
+					if candidates[ra] == nil {
+						candidates[ra] = map[int]bool{}
+					}
+					if candidates[rb] == nil {
+						candidates[rb] = map[int]bool{}
+					}
+					candidates[ra][rb] = true
+					candidates[rb][ra] = true
+					if sharedFile {
+						blockedPairs[candidatePair(ra, rb)] = true
+					}
+				}
+			}
+		}
+		// Evaluate the graph before changing any groups, so a chain cannot become
+		// unambiguous merely because an earlier pair was removed.
+		pairs := [][2]int{}
+		for a, partners := range candidates {
+			if len(partners) == 1 {
+				for b := range partners {
+					if len(candidates[b]) == 1 && a < b && !blockedPairs[candidatePair(a, b)] {
+						pairs = append(pairs, [2]int{a, b})
+					}
+				}
+			}
+		}
+		for _, pair := range pairs {
+			join(pair[0], pair[1])
+		}
+		for a, partners := range candidates {
+			for b := range partners {
+				if root(a) == root(b) {
+					continue
+				}
+				for _, i := range members[root(a)] {
+					for _, j := range members[root(b)] {
+						p.Ambiguous[records[i].ID] = append(p.Ambiguous[records[i].ID], records[j].ID)
+					}
+				}
+			}
+		}
+	}
+	for _, indices := range members {
+		if records[indices[0]].Values.Reason != "counted" {
+			continue
+		}
+		sort.Slice(indices, func(i, j int) bool { return records[indices[i]].ID < records[indices[j]].ID })
+		play := plannedPlay{Key: digest([]byte(fmt.Sprintf("play:%d", records[indices[0]].ID))), Records: []int64{}, Reason: "counted"}
+		representative := indices[0]
+		for _, i := range indices {
+			play.Records = append(play.Records, records[i].ID)
+			if records[i].Service == playRule.Settings.PreferredSource && records[representative].Service != playRule.Settings.PreferredSource {
+				representative = i
+			}
+		}
+		play.Representative = records[representative].ID
+		if len(indices) > 1 {
+			play.Reason = "matched records"
+		}
+		for _, i := range indices {
+			p.Keys[records[i].ID] = play.Key
+			p.Reasons[records[i].ID] = play.Reason
+			if len(p.Ambiguous[records[i].ID]) > 0 {
+				p.Reasons[records[i].ID] = "ambiguous match; counted separately"
+			}
+		}
+		p.Plays = append(p.Plays, play)
+	}
+	sort.Slice(p.Plays, func(i, j int) bool { return p.Plays[i].Records[0] < p.Plays[j].Records[0] })
+	for id, partners := range p.Ambiguous {
+		sort.Slice(partners, func(i, j int) bool { return partners[i] < partners[j] })
+		unique := partners[:0]
+		for _, partner := range partners {
+			if len(unique) == 0 || unique[len(unique)-1] != partner {
+				unique = append(unique, partner)
+			}
+		}
+		p.Ambiguous[id] = unique
+	}
+	return p, nil
+}

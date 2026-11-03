@@ -199,14 +199,20 @@ func (s *Sqlite) artistsWithAliasesForTrack(ctx context.Context, trackID int32) 
 		}
 		a.MbzID = parseNullableUUID(mbzID)
 		a.Image = parseNullableUUID(image)
-		aliases, err := s.getAliasesForEntity(ctx, "artist_aliases", "artist_id", a.ID)
+		artists = append(artists, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range artists {
+		aliases, err := s.getAliasesForEntity(ctx, "artist_aliases", "artist_id", artists[i].ID)
 		if err != nil {
 			return nil, err
 		}
-		a.Aliases = aliases
-		artists = append(artists, a)
+		artists[i].Aliases = aliases
 	}
-	return artists, rows.Err()
+	return artists, nil
 }
 
 // getAliasesForEntity fetches all aliases for an entity from the given alias table.

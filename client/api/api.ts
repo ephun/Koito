@@ -372,6 +372,8 @@ type Alias = {
   is_primary: boolean;
 };
 type Listen = {
+  play_key?: string;
+  record_id?: number;
   time: string;
   track: SimpleTrack;
 };

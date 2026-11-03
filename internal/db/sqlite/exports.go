@@ -11,7 +11,7 @@ import (
 
 func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) ([]*db.ExportItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT l.listened_at, l.user_id, l.client,
+		SELECT l.listened_at, l.user_id, l.client, l.play_key,
 		       t.id AS track_id, t.musicbrainz_id AS track_mbid, t.duration,
 		       t.release_id,
 		       r.musicbrainz_id AS release_mbid, r.image, r.image_source, r.various_artists
@@ -19,11 +19,11 @@ func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) (
 		JOIN tracks t ON l.track_id = t.id
 		JOIN releases r ON t.release_id = r.id
 		WHERE l.user_id = ?
-		  AND (l.listened_at > ? OR (l.listened_at = ? AND l.track_id > ?))
-		ORDER BY l.listened_at, l.track_id
+		  AND (l.listened_at > ? OR (l.listened_at = ? AND (l.track_id > ? OR (l.track_id = ? AND l.play_key > ?))))
+		ORDER BY l.listened_at, l.track_id, l.play_key
 		LIMIT ?`,
 		opts.UserID,
-		opts.ListenedAt.Unix(), opts.ListenedAt.Unix(), opts.TrackID,
+		opts.ListenedAt.Unix(), opts.ListenedAt.Unix(), opts.TrackID, opts.TrackID, opts.PlayKey,
 		opts.Limit,
 	)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) (
 		var variousArtists int
 
 		if err := rows.Scan(
-			&listenedAt, &item.UserID, &client,
+			&listenedAt, &item.UserID, &client, &item.PlayKey,
 			&item.TrackID, &trackMbid, &item.TrackDuration,
 			&item.ReleaseID,
 			&releaseMbid, &releaseImage, &releaseImageSrc, &variousArtists,
@@ -58,6 +58,13 @@ func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) (
 		item.ReleaseImageSource = releaseImageSrc.String
 		item.VariousArtists = variousArtists == 1
 
+		items = append(items, &item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for _, item := range items {
 		trackAliases, err := s.getAliasesForEntity(ctx, "track_aliases", "track_id", item.TrackID)
 		if err != nil {
 			return nil, fmt.Errorf("GetExportPage: track aliases: %w", err)
@@ -76,11 +83,7 @@ func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) (
 		}
 		item.Artists = artists
 
-		items = append(items, &item)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
-

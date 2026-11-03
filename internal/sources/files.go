@@ -18,7 +18,7 @@ import (
 
 const MaxFileSize int64 = 512 << 20
 const Parser = "spotify-extended-v1"
-const Policy = "spotify-v1"
+const Policy = "filters-v1"
 
 // A process-wide lock serializes import publication and projection changes even
 // when handlers construct different Store values for the same database.

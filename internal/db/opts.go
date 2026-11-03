@@ -158,6 +158,7 @@ type GetExportPageOpts struct {
 	UserID     int32
 	ListenedAt time.Time
 	TrackID    int32
+	PlayKey    string
 	Limit      int32
 }
 

@@ -6,9 +6,8 @@ This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phase 1 is complete. Phase 2 has partial implementation in the working tree;
-it is not complete. Later phases below are proposed work, not features that
-already exist. Specific matching thresholds, attribution
+Phases 1 and 2 are complete. Phase 3 is next. Later phases below are proposed
+work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
 defaults. There are no calendar estimates in this plan.
@@ -181,8 +180,8 @@ must remain attached to stable records or music identities across rebuilds.
 | Phase | Deliverable | Status / dependency |
 |---|---|---|
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
-| 2 | Last.fm imports and the first matching rules in Filters | In progress; builds on 1 |
-| 3 | iTunes counts, inference, and shared-history attribution | After 2 |
+| 2 | Last.fm imports and the first matching rules in Filters | Complete |
+| 3 | iTunes counts, inference, and shared-history attribution | Next; builds on 2 |
 | 4 | Music identity, album distinctions, bulk cleanup, and genre tags | After 2; uses 3 examples |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
@@ -213,7 +212,7 @@ Acceptance evidence includes 100 repeat uploads in tests and a native browser
 check using a real file: 8,524 records, 3,383 plays, unchanged after repeated
 uploads, ZIP overlap, and rebuilding. Original downloads matched the input bytes.
 
-Limits carried into the next phases:
+Limits at Phase 1 completion (Phase 2 resolves the first two):
 
 - The new upload path supports Spotify extended history only. The existing
   startup importers are not equivalent to the new preserved-record path.
@@ -229,10 +228,12 @@ Limits carried into the next phases:
 **Outcome:** Spotify and Last.fm histories can overlap without counting an
 established play twice, and the matching is visible and reversible in Filters.
 
-**Status:** Last.fm readers, timestamp handling, fixtures, and initial saved-rule
-storage have been started locally. The active rebuild still uses the fixed
-Spotify rules, and there is no Filters route. Importing Last.fm records alone
-does not complete this phase or prove that those records affect the view.
+**Status: complete.** Implementation details, decisions and acceptance evidence:
+[Phase 2](phase-2.md). The local six-file acceptance preserved 477,574 records,
+produced 189,831 plays with its explicit UTC test setting, and linked 5,648 plays
+across services. Rebuilding and restoring rules reproduced exact contributor
+links without changing raw records. These are acceptance-input totals, not a
+final lifetime-listening count.
 
 ### 2.1 Import Last.fm records
 
@@ -307,9 +308,11 @@ the rules used here, not placeholder controls for every later type.
 7. A preview cannot overwrite newer imports or manual changes; a failed apply
    leaves the previous view intact.
 
-**Decisions to settle in this phase:** timestamp interpretation for each export,
-the first supported matching settings, how ambiguous matches are presented, and
-how source preference selects displayed fields without deciding what counts.
+**Decisions recorded:** timezone-less CSV stays unknown until configured;
+start/end semantics and precision intervals are preserved; the initial extra
+tolerance is zero; ambiguous matches remain separate and inspectable; source
+preference changes displayed fields while retaining unmatched plays. See the
+Phase 2 notes for the rule order and settings.
 
 ## Phase 3: iTunes, inference, and attribution
 
@@ -703,23 +706,15 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Finish Phase 2 in the order in section 2.4:
+Begin Phase 3 with the original family iTunes library and its existing JSON
+conversion. Preserve count snapshots and playlist/library metadata through the
+same import path before generating any additional plays.
 
-1. Review and verify the unfinished Last.fm readers, preserved import path,
-   timestamp handling, and saved-rule migration already in the working tree.
-2. Implement one matching calculation used by preview and rebuild. Establish
-   one-play matches, genuine repeats, missing albums, and ambiguous times with
-   anonymized fixtures and examples from the real Spotify/Last.fm overlap.
-3. Add atomic apply, undo, and persistent manual matches/splits. Resolve any
-   existing display-key constraint that prevents correct results.
-4. Add the Filters route, controls, and record inspection using those operations.
-5. Run the phase's complete acceptance checks locally, record the results, and
-   commit and push the finished work to the fork's working branch.
+First establish library/track identity, count changes between snapshots, invalid
+or unknown dates, and the relation to observed Spotify/Last.fm history. Then
+preview separate count, time and attribution rules against those examples.
+Historical expansion scripts remain examples to evaluate rather than defaults.
 
-Timezone assumptions, timing tolerance, and source preference remain explicit
-settings to validate. Partial implementation and successful reader tests are not
-evidence that matching or undo works end to end.
-
-The first Phase 2 demonstration should be simple: import the two overlapping
-histories, inspect the records behind a matched play, change or undo the match,
-and re-import both files without inflating the view.
+Phase 2 is the foundation: Imports preserves files and records, while Filters
+saves reversible interpretations. Phase 3 should extend those mechanisms for
+aggregate evidence and attribution, retaining the existing matching behavior.

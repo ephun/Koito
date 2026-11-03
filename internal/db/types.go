@@ -34,6 +34,7 @@ type RankedItem[T any] struct {
 }
 
 type ExportItem struct {
+	PlayKey            string
 	ListenedAt         time.Time
 	UserID             int32
 	Client             *string

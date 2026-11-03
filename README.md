@@ -73,6 +73,8 @@ PowerShell setup, local server, frontend hot reload, and tests.
 
 See the [development phases](docs/development-plan.md) for the agreed vocabulary,
 source coverage, remaining work, and acceptance criteria.
+See [Phase 2](docs/phase-2.md) for Last.fm imports, reversible matching, and
+local verification results.
 
 ## Contributing
 

@@ -1,0 +1,7 @@
+[
+  {"track":[
+    {"artist":{"#text":"Example Artist","mbid":""},"album":{"#text":"Example Album"},"name":"Morning Light","date":{"uts":"1577934240","#text":"02 Jan 2020, 03:04"},"extra":{"keep":true}},
+    {"artist":{"#text":"Example Artist"},"album":{"#text":""},"name":"Evening Song","date":{"uts":"1577934480","#text":"02 Jan 2020, 03:08"}},
+    {"artist":{"#text":"Example Artist"},"album":{"#text":"Example Album"},"name":"Playing Now","@attr":{"nowplaying":"true"}}
+  ],"@attr":{"page":"1","totalPages":"1"}}
+]

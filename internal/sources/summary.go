@@ -13,7 +13,16 @@ type SourceSummary struct {
 }
 
 func (s *Store) Summary(ctx context.Context) ([]SourceSummary, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT a.id,a.account,a.service,(SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id),(SELECT COUNT(*) FROM source_plays p WHERE p.source_id=a.id AND p.policy=?),COALESCE((SELECT datetime(MIN(p.listened_at),'unixepoch') FROM source_plays p WHERE p.source_id=a.id AND p.policy=?),''),COALESCE((SELECT datetime(MAX(p.listened_at),'unixepoch') FROM source_plays p WHERE p.source_id=a.id AND p.policy=?),'') FROM source_accounts a ORDER BY a.id`, Policy, Policy, Policy)
+	rows, err := s.DB.QueryContext(ctx, `WITH contributions AS (
+ SELECT DISTINCT r.source_id,p.play_key,p.listened_at FROM source_records r
+ JOIN source_interpretations i ON i.record_id=r.id AND i.policy=? AND i.play_key<>''
+ JOIN source_plays p ON p.play_key=i.play_key AND p.policy=i.policy
+ ) SELECT a.id,a.account,a.service,
+ (SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id),
+ (SELECT COUNT(*) FROM contributions c WHERE c.source_id=a.id),
+ COALESCE((SELECT datetime(MIN(c.listened_at),'unixepoch') FROM contributions c WHERE c.source_id=a.id),''),
+ COALESCE((SELECT datetime(MAX(c.listened_at),'unixepoch') FROM contributions c WHERE c.source_id=a.id),'')
+ FROM source_accounts a ORDER BY a.id`, Policy)
 	if err != nil {
 		return nil, err
 	}

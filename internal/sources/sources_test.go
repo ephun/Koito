@@ -145,8 +145,8 @@ func TestZipStandaloneAndOverlappingExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Plays != 2 || p.Collisions != 1 {
-		t.Fatal("separate accounts must not match; legacy key collision must be explicit", p)
+	if p.Plays != 2 || p.Collisions != 0 || count(t, s, "listens") != 2 {
+		t.Fatal("distinct source plays must survive the same track/second", p)
 	}
 }
 
@@ -389,5 +389,20 @@ func TestAutomaticSourceReusesPreviouslyLabeledFile(t *testing.T) {
 	result := mustImport(t, s, data, "history.json", "")
 	if result.Added != 0 || result.Reused != 1 || count(t, s, "source_accounts") != 1 {
 		t.Fatal("removing the account field duplicated an existing import", result)
+	}
+}
+
+func TestMigrationRollbackDoesNotCollapsePlays(t *testing.T) {
+	s := testStore(t)
+	mustImport(t, s, []byte("["+complete+"]"), "history", "")
+	if _, err := s.Rebuild(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	err := goose.Down(s.DB, ".")
+	if err == nil || !strings.Contains(err.Error(), "Restore a pre-migration backup") {
+		t.Fatal("unsafe rollback was not rejected", err)
+	}
+	if count(t, s, "source_records") != 1 || count(t, s, "listens") != 1 {
+		t.Fatal("rollback refusal changed evidence or view")
 	}
 }

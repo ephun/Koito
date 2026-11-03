@@ -104,7 +104,7 @@ export default function Imports() {
     </section>}
     {source && <section className={panel}>
       <h2>Records · {sourceName(source)}</h2>
-      <div className="space-y-2">{records.map(r => <details key={r.id} className="rounded border border-(--color-bg-tertiary) p-3"><summary className="cursor-pointer">#{r.id} · {r.kind} · {r.reason} · row {r.ordinal}</summary><p className="text-sm break-all">File: {r.file_hash}{r.play_key && ` · Play: ${r.play_key}`}</p><pre className="overflow-auto max-h-80 p-3 text-sm">{formatPayload(r.payload)}</pre><a className="underline" href={`${base}/file?hash=${r.file_hash}`}>Download original source file</a></details>)}</div>
+      <div className="space-y-2">{records.map(r => <details key={r.id} className="rounded border border-(--color-bg-tertiary) p-3"><summary className="cursor-pointer">#{r.id} · {r.kind} · {r.reason} · row {r.ordinal}</summary><p className="text-sm break-all">File: {r.file_hash}{r.play_key && ` · Play: ${r.play_key}`}</p><a className="underline" href={`/filters?record=${r.id}`}>Inspect matching</a><pre className="overflow-auto max-h-80 p-3 text-sm">{formatPayload(r.payload)}</pre><a className="underline" href={`${base}/file?hash=${r.file_hash}`}>Download original source file</a></details>)}</div>
       {hasMore && <button className={`${button} mt-4`} disabled={busy || loadingRecords} onClick={() => loadRecords(source, records.at(-1)?.id)}>Load more</button>}
     </section>}
     {!!overview?.receipts.length && <section className={panel}>
@@ -116,4 +116,4 @@ export default function Imports() {
 
 function formatPayload(payload: string) { try { return JSON.stringify(JSON.parse(payload), null, 2); } catch { return payload; } }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service; }
+function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service; }

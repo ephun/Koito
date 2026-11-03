@@ -101,6 +101,12 @@ func bindRoutes(
 				r.Get("/imports/records", imports)
 				r.Get("/imports/file", imports)
 				r.Post("/imports/rebuild", imports)
+				filters := handlers.FiltersHandler(&sources.Store{DB: provider.SourceDatabase(), Root: filepath.Join(cfg.ConfigDir(), "sources")})
+				r.Get("/filters", filters)
+				r.Get("/filters/plays", filters)
+				r.Get("/filters/record", filters)
+				r.Post("/filters/preview", filters)
+				r.Post("/filters/apply", filters)
 			}
 
 			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))

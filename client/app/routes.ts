@@ -11,5 +11,6 @@ export default [
   route("/listens", "routes/Charts/Listens.tsx"),
   route("/rewind", "routes/RewindPage.tsx"),
   route("/imports", "routes/Imports.tsx"),
+  route("/filters", "routes/Filters.tsx"),
   route("/theme-helper", "routes/ThemeHelper.tsx"),
 ] satisfies RouteConfig;

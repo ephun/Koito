@@ -36,7 +36,7 @@ func (s *Sqlite) DeleteListen(ctx context.Context, trackId int32, listenedAt tim
 		return errors.New("DeleteListen: required parameter 'trackId' missing")
 	}
 	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM listens WHERE track_id = ? AND listened_at = ?`,
+		`DELETE FROM listens WHERE track_id = ? AND listened_at = ? AND play_key=''`,
 		trackId, listenedAt.Unix(),
 	)
 	return err
@@ -47,6 +47,8 @@ func (s *Sqlite) DeleteListen(ctx context.Context, trackId int32, listenedAt tim
 // both the count query and the artistsForTrack call would deadlock if
 // executed while the outer *sql.Rows is still holding the only connection.
 type listenRow struct {
+	playKey    string
+	recordID   int64
 	listenedAt int64
 	trackID    int32
 	title      string
@@ -90,39 +92,39 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	switch {
 	case opts.TrackID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND t.id = ?
-			ORDER BY l.listened_at DESC LIMIT ? OFFSET ?`,
+			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.TrackID, opts.Limit, offset,
 		)
 	case opts.AlbumID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?
-			ORDER BY l.listened_at DESC LIMIT ? OFFSET ?`,
+			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.AlbumID, opts.Limit, offset,
 		)
 	case opts.ArtistID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			JOIN artist_tracks at2 ON t.id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?
-			ORDER BY l.listened_at DESC LIMIT ? OFFSET ?`,
+			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.ArtistID, opts.Limit, offset,
 		)
 	default:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title
+			SELECT l.listened_at, l.track_id, t.title, l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0)
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ?
-			ORDER BY l.listened_at DESC LIMIT ? OFFSET ?`,
+			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.Limit, offset,
 		)
 	}
@@ -133,7 +135,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	var raw []listenRow
 	for rows.Next() {
 		var r listenRow
-		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title); err != nil {
+		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title, &r.playKey, &r.recordID); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -150,7 +152,9 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	listens := make([]*models.Listen, 0, len(raw))
 	for _, r := range raw {
 		l := &models.Listen{
-			Time: time.Unix(r.listenedAt, 0).UTC(),
+			PlayKey:  r.playKey,
+			RecordID: r.recordID,
+			Time:     time.Unix(r.listenedAt, 0).UTC(),
 			Track: models.SimpleTrack{
 				ID:    r.trackID,
 				Title: r.title,

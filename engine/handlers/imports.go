@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"github.com/gabehf/koito/engine/middleware"
@@ -72,7 +71,7 @@ func ImportsHandler(store *sources.Store) http.HandlerFunc {
 				return
 			}
 			defer file.Close()
-			value, err = store.ImportSpotify(r.Context(), file, filepath.Base(header.Filename), r.FormValue("account"), user.ID)
+			value, err = store.Import(r.Context(), file, header.Filename, user.ID)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnprocessableEntity)

@@ -67,7 +67,7 @@ export default function ListensTable({
         )}
         {listens.map((item) => (
           <tr
-            key={`last_listen_${item.time}`}
+            key={`last_listen_${item.track.id}_${item.time}_${item.play_key || ""}`}
             className="group border-b border-(--color-bg-tertiary) relative last:border-b-0"
           >
             <td className={imgColSizeClasses}>
@@ -102,11 +102,12 @@ export default function ListensTable({
               {timeSince(new Date(item.time))}
             </td>
             <td className="hidden sm:table">
+              {user?.role === "admin" && !!item.record_id && <Link className="text-sm underline" to={`/filters?record=${item.record_id}`}>Records</Link>}
               <button
                 onClick={() => onDelete(item)}
                 className="absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-(--color-fg-tertiary) hover:text-(--color-error)"
                 aria-label="Delete"
-                hidden={!user}
+                hidden={!user || !!item.play_key}
               >
                 ×
               </button>

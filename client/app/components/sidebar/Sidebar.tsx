@@ -1,4 +1,4 @@
-import { ExternalLink, History, Home, Info, Upload } from "lucide-react";
+import { ExternalLink, History, Home, Info, Upload, SlidersHorizontal } from "lucide-react";
 import { useAppContext } from "../../providers/AppProvider";
 import SidebarSearch from "./SidebarSearch";
 import SidebarItem from "./SidebarItem";
@@ -56,6 +56,7 @@ export default function Sidebar() {
           <History size={iconSize} />
         </SidebarItem>
         {user?.role === "admin" && <SidebarItem space={10} to="/imports" name="Imports" onClick={() => {}} modal={<></>}><Upload size={iconSize} /></SidebarItem>}
+        {user?.role === "admin" && <SidebarItem space={10} to="/filters" name="Filters" onClick={() => {}} modal={<></>}><SlidersHorizontal size={iconSize} /></SidebarItem>}
       </div>
       <div className="flex gap-4 sm:flex-col">
         <SidebarItem
