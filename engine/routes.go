@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"database/sql"
 	"mime"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/gabehf/koito/internal/cfg"
 	"github.com/gabehf/koito/internal/db"
 	mbz "github.com/gabehf/koito/internal/mbz"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -91,6 +93,15 @@ func bindRoutes(
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Authenticate(db, middleware.AuthModeSessionOrAPIKey))
+
+			if provider, ok := db.(interface{ SourceDatabase() *sql.DB }); ok {
+				imports := handlers.ImportsHandler(&sources.Store{DB: provider.SourceDatabase(), Root: filepath.Join(cfg.ConfigDir(), "sources")})
+				r.Get("/imports", imports)
+				r.Post("/imports", imports)
+				r.Get("/imports/records", imports)
+				r.Get("/imports/file", imports)
+				r.Post("/imports/rebuild", imports)
+			}
 
 			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))
 			r.Delete("/artist/{id}/aliases", handlers.DeleteArtistAliasHandler(db))

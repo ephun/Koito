@@ -23,6 +23,10 @@ type Sqlite struct {
 	db *sql.DB
 }
 
+// SourceDatabase shares the catalog connection with the evidence store so a
+// projection can be published atomically with its provenance.
+func (s *Sqlite) SourceDatabase() *sql.DB { return s.db }
+
 func New() (*Sqlite, error) {
 	dsn := path.Join(cfg.ConfigDir(), "koito.db") + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
@@ -40,6 +44,12 @@ func New() (*Sqlite, error) {
 	if err := goose.Up(db, "."); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("sqlite.New: goose: %w", err)
+	}
+	// No request from the previous server process can still be extracting.
+	// Interrupted attempts remain visible and can safely be retried.
+	if _, err := db.Exec(`UPDATE import_receipts SET status='failed', error='Server stopped during import; retry this file. Any committed records are preserved.' WHERE status='processing'`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite.New: recover imports: %w", err)
 	}
 
 	return &Sqlite{db: db}, nil
