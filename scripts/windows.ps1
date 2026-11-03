@@ -144,6 +144,7 @@ try {
             $env:KOITO_DISABLE_DEEZER = 'true'
             $env:KOITO_DISABLE_COVER_ART_ARCHIVE = 'true'
             $env:KOITO_LOG_LEVEL = 'warn'
+            $env:KOITO_DISABLE_RATE_LIMIT = 'true'
             Write-Host "Local Koito: http://127.0.0.1:$Port/imports"
             Write-Host "Local login credentials: $loginFile"
             Write-Host 'Press Ctrl+C to stop. State is preserved under .local/state.'

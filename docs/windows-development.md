@@ -17,6 +17,8 @@ local database are excluded from Git. The server binds to localhost, uses
 `.local/state` for its database/source files, and skips automatic startup imports.
 It never connects to or changes the production server. Existing `data_dump` files
 are not automatically imported. Stop with Ctrl+C; local state persists.
+The local Run command disables the login rate limit so repeated development
+checks do not block sign-in.
 
 For frontend hot reload, keep the backend running and use another PowerShell:
 

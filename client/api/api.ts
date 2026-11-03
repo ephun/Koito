@@ -119,9 +119,12 @@ function login(
   username: string,
   password: string,
   remember: boolean,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`/apis/web/v1/login`, {
     method: "POST",
+    signal,
+    credentials: "same-origin",
     body: JSON.stringify({
       username: username,
       password: password,
