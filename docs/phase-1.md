@@ -63,3 +63,25 @@ and Koito until their adapters are migrated. Their outputs have legacy provenanc
 they must not be presented as lossless imports. The new upload workflow preserves
 Spotify evidence. Production database replacement and automatic ingestion of
 the user's dump are outside this development phase.
+
+## Verification during development
+
+- `go test ./internal/sources` and `go vet ./internal/sources`: passed on Windows.
+  Includes 100 repeat uploads, ZIP/member overlap, cross-export matching,
+  separate accounts, immutable raw records, malformed imports, legacy migration,
+  and projection failure recovery.
+- Real local Spotify file: 8,524 preserved records, 3,383 qualifying plays;
+  re-upload added zero records, and repeated rebuilds returned identical counts.
+- `yarn typecheck` and `yarn build`: passed.
+- HTTP tests and desktop/mobile browser flow: passed using a temporary Go
+  overlay outside the repository that disables only image compression. The flow
+  covered login, upload, original-byte download, raw payload inspection, repeat
+  upload, rebuilding, and navigating to the resulting listening history.
+- Full unmodified server verification on Linux is still outstanding. The Windows
+  environment lacks the existing libvips/CGO dependency. Branch CI is configured,
+  but GitHub has not registered or started the fork's workflows yet.
+
+The temporary image overlay is not a product change and is not proof that the
+unmodified application builds. Existing engine test cleanup also fails on Windows
+because its running server keeps the temporary database open; its Spotify test
+body passed. Do not treat that command as a passing full-suite run.

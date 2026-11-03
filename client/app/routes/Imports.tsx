@@ -93,11 +93,12 @@ export default function Imports() {
       <h2 id="upload-heading">Spotify extended history</h2>
       <p className="mb-4 text-(--color-fg-secondary)">Upload history JSON files or the original ZIP. Every record is kept, including skips and nonmusic entries. Uploading the same file again reuses its records.</p>
       <form onSubmit={upload} className="space-y-4">
-        <label className="block">Spotify account
-          <input className="block mt-1 w-full max-w-md rounded border border-(--color-bg-tertiary) p-2" required maxLength={200} value={account} onChange={e => setAccount(e.target.value)} placeholder="e.g. ethanjkendrick" disabled={busy} list="source-accounts" />
+        <div>
+          <label htmlFor="spotify-account" className="block">Spotify account</label>
+          <input id="spotify-account" aria-describedby="account-help" className="block mt-1 w-full max-w-md rounded border border-(--color-bg-tertiary) p-2" required maxLength={200} value={account} onChange={e => setAccount(e.target.value)} placeholder="e.g. ethanjkendrick" disabled={busy} list="source-accounts" />
           <datalist id="source-accounts">{overview?.sources.map(s => <option key={s.id} value={s.account} />)}</datalist>
-          <span className="text-sm text-(--color-fg-secondary)">Use the same account name for overlapping exports. Shared accounts should have their own names.</span>
-        </label>
+          <p id="account-help" className="text-sm text-(--color-fg-secondary)">Use the same account name for overlapping exports. Shared accounts should have their own names.</p>
+        </div>
         <label className="block">Source files
           <input className="block mt-2 w-full" type="file" accept=".json,.zip" multiple required disabled={busy} onChange={e => setFiles(Array.from(e.target.files || []))} />
         </label>
@@ -115,7 +116,7 @@ export default function Imports() {
     </section>
     <section className={panel}>
       <h2>Sources</h2>
-      {!overview ? <p>Loading…</p> : !overview.sources.length ? <p>Your sources will appear after the first upload.</p> : <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><th>Account</th><th>Records</th><th>Plays</th><th>Play coverage (UTC)</th><th>Inspect</th></tr></thead><tbody>
+      {!overview ? <p>Loading…</p> : !overview.sources.length ? <p>Your sources will appear after the first upload.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left [&_th]:pr-4 [&_td]:pr-4"><thead><tr><th>Account</th><th>Records</th><th>Plays</th><th>Play coverage (UTC)</th><th>Inspect</th></tr></thead><tbody>
         {overview.sources.map(s => <tr key={s.id} className="border-t border-(--color-bg-tertiary)"><td className="py-3">Spotify / {s.account}</td><td>{s.records.toLocaleString()}</td><td>{s.plays.toLocaleString()}</td><td>{s.first ? `${s.first} – ${s.last}` : "No qualifying plays"}</td><td><button className={button} disabled={busy || loadingRecords} onClick={() => loadRecords(s)}>Records</button></td></tr>)}
       </tbody></table></div>}
     </section>

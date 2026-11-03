@@ -241,3 +241,94 @@ func TestLocalSpotifyArchive(t *testing.T) {
 	}
 	t.Logf("records=%d plays=%d collisions=%d", before.Records, before.Plays, before.Collisions)
 }
+
+func TestAdditiveMigrationPreservesExistingCatalog(t *testing.T) {
+	conn, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	goose.SetBaseFS(migrations.Files)
+	if err = goose.SetDialect("sqlite3"); err != nil {
+		t.Fatal(err)
+	}
+	if err = goose.UpTo(conn, ".", 2); err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Exec(`INSERT INTO users VALUES(1,'legacy','admin',x'00');
+ INSERT INTO artists(id) VALUES(1);
+ INSERT INTO artist_aliases VALUES(1,'My artist','user',1);
+ INSERT INTO releases(id) VALUES(1);
+ INSERT INTO release_aliases VALUES(1,'My album','user',1);
+ INSERT INTO artist_releases VALUES(1,1,1);
+ INSERT INTO tracks(id,release_id,duration) VALUES(1,1,123);
+ INSERT INTO track_aliases VALUES(1,'My title','user',1);
+ INSERT INTO artist_tracks VALUES(1,1,1);
+ INSERT INTO listens VALUES(1,1234567890,1,'legacy');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = goose.Up(conn, "."); err != nil {
+		t.Fatal(err)
+	}
+	var title, client string
+	var duration int
+	err = conn.QueryRow(`SELECT t.title,t.duration,l.client FROM tracks_with_title t JOIN listens l ON l.track_id=t.id`).Scan(&title, &duration, &client)
+	if err != nil || title != "My title" || duration != 123 || client != "legacy" {
+		t.Fatal("migration changed legacy data", title, duration, client, err)
+	}
+}
+
+func TestZipValidationIsAtomic(t *testing.T) {
+	s := testStore(t)
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	for name, data := range map[string]string{"Streaming_History_Audio_good.json": "[" + complete + "]", "Streaming_History_Audio_bad.json": "not JSON"} {
+		w, err := z.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(data))
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.ImportSpotify(context.Background(), bytes.NewReader(buf.Bytes()), "broken.zip", "me", 1)
+	if err == nil {
+		t.Fatal("malformed ZIP member was accepted")
+	}
+	if count(t, s, "source_records") != 0 || count(t, s, "source_extractions") != 0 {
+		t.Fatal("failed ZIP partially committed records")
+	}
+}
+
+func TestFailedProjectionPreservesPreviousView(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	mustImport(t, s, []byte("["+complete+"]"), "history.json", "me")
+	before, err := s.Rebuild(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustImport(t, s, []byte("["+skipped+"]"), "more.json", "me")
+	_, err = s.DB.Exec(`CREATE TRIGGER reject_projection BEFORE INSERT ON listens BEGIN SELECT RAISE(ABORT,'simulated failure'); END`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Rebuild(ctx); err == nil {
+		t.Fatal("expected projection failure")
+	}
+	if count(t, s, "listens") != 1 || count(t, s, "source_interpretations") != 1 || count(t, s, "source_records") != 2 {
+		t.Fatal("failure damaged view or evidence")
+	}
+	if _, err = s.DB.Exec("DROP TRIGGER reject_projection"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.Rebuild(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Plays != before.Plays || after.Records != 2 {
+		t.Fatal("rebuild could not recover", after)
+	}
+}
