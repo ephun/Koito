@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -83,7 +84,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not load cfg: %s", err)
 	}
 
-	go engine.Run(getenv, os.Stdout, "vTest")
+	serverContext, stopServer := context.WithCancel(context.Background())
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- engine.RunWithContext(serverContext, getenv, os.Stdout, "vTest") }()
 
 	// Wait until the web server is reachable
 	for i := range 20 {
@@ -118,6 +121,12 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
+	stopServer()
+	if err := <-serverDone; err != nil {
+		log.Printf("Could not stop test server: %v", err)
+		code = 1
+	}
+	store.Close(context.Background())
 
 	// You can't defer this because os.Exit doesn't care for defer
 	// if err := pool.Purge(resource); err != nil {

@@ -168,6 +168,9 @@ func ImportKoitoFile(ctx context.Context, store importStore, filename string) er
 		count++
 	}
 
+	if err := f.Close(); err != nil {
+		return err
+	}
 	return finishImport(ctx, filename, count)
 }
 func getPrimaryAliasFromAliasSlice(aliases []models.Alias) string {

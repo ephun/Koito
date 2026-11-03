@@ -53,6 +53,9 @@ func ImportListenBrainzExport(ctx context.Context, store importStore, mbzc mbz.M
 			rc.Close()
 		}
 	}
+	if err := r.Close(); err != nil {
+		return err
+	}
 	return finishImport(ctx, filename, 0)
 }
 

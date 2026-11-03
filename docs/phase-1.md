@@ -77,11 +77,11 @@ the user's dump are outside this development phase.
   overlay outside the repository that disables only image compression. The flow
   covered login, upload, original-byte download, raw payload inspection, repeat
   upload, rebuilding, and navigating to the resulting listening history.
-- Full unmodified server verification on Linux is still outstanding. The Windows
-  environment lacks the existing libvips/CGO dependency. Branch CI is configured,
-  but GitHub has not registered or started the fork's workflows yet.
+- Native Windows setup is now available through `scripts/windows.ps1`. The full
+  Go suite, including engine integration tests and real libvips image encoding,
+  passes without the temporary overlay. See [Windows development](windows-development.md).
 
-The temporary image overlay is not a product change and is not proof that the
-unmodified application builds. Existing engine test cleanup also fails on Windows
-because its running server keeps the temporary database open; its Spotify test
-body passed. Do not treat that command as a passing full-suite run.
+The earlier overlay checks are superseded by native verification. Windows file
+handling fixes close startup-import files before moving them, create image-cache
+directories with platform-aware paths, and stop the integration-test server before
+database cleanup. Linux deployment checks remain separate from local development.
