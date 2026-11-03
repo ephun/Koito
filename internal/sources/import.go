@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -128,7 +129,14 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 		}
 		for ordinal, raw := range part.records {
 			kind := "play"
-			if part.service == "spotify" {
+			if part.service == "itunes" {
+				var row itunesRecord
+				if e = json.Unmarshal(raw, &row); e != nil {
+					stmt.Close()
+					return result, e
+				}
+				kind = row.Kind
+			} else if part.service == "spotify" {
 				kind = spotifyKind(raw)
 			} else if normalizeRecord(raw, part.parser, "").NowPlaying {
 				kind = "now_playing"

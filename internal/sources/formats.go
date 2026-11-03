@@ -42,6 +42,12 @@ func (s *Store) parseFile(f File) (parsedFile, error) {
 	if len(clean) == 0 {
 		return parsedFile{}, ErrUnsupportedFile
 	}
+	if clean[0] == '<' || ((clean[0] == '[' || clean[0] == '{') && (bytes.Contains(clean, []byte(`"Tracks"`)) || bytes.Contains(clean, []byte(`"Track ID"`)))) {
+		records, parser, e := parseITunes(clean)
+		if e == nil || clean[0] == '<' || !errors.Is(e, ErrUnsupportedFile) {
+			return parsedFile{f, records, "itunes", parser}, e
+		}
+	}
 	if clean[0] == '[' {
 		if records, e := s.parseSpotify(f); e == nil {
 			return parsedFile{f, records, "spotify", Parser}, nil

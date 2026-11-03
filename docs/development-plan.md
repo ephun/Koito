@@ -6,7 +6,7 @@ This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 and 2 are complete. Phase 3 is next. Later phases below are proposed
+Phases 1 and 2 are complete. Phase 3 is in progress. Later phases below are proposed
 work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved

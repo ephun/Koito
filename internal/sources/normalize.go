@@ -52,6 +52,9 @@ func itemText(raw json.RawMessage) string {
 }
 
 func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
+	if parser == ITunesXML || parser == ITunesJSON || parser == ITunesExpanded {
+		return normalizeITunes(raw)
+	}
 	v := recordValues{Reason: "counted", Origin: "original", TimeMeaning: "start", Precision: int64(time.Second)}
 	if parser == Parser {
 		var item spotifyItem
