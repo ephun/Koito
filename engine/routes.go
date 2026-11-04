@@ -48,6 +48,8 @@ func bindRoutes(
 			r.Get("/artist/{id}/aliases", handlers.GetArtistAliasesHandler(db))   // done
 			r.Get("/artist/{id}/interest", handlers.GetArtistInterestHandler(db)) // done
 
+			r.Get("/album-group/{id}", handlers.GetAlbumGroupHandler(db))
+			r.Get("/album-group/{id}/interest", handlers.GetAlbumGroupInterestHandler(db))
 			r.Get("/album/{id}", handlers.GetAlbumHandler(db))                   // done
 			r.Get("/album/{id}/artists", handlers.GetArtistsForAlbumHandler(db)) // done
 			r.Get("/album/{id}/aliases", handlers.GetAlbumAliasesHandler(db))    // done

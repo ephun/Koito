@@ -11,6 +11,7 @@ import (
 	"github.com/gabehf/koito/internal/catalog"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/music"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -202,6 +203,9 @@ func (s *Sqlite) SaveAlbum(ctx context.Context, opts db.SaveAlbumOpts) (*models.
 		return nil, fmt.Errorf("SaveAlbum: canonical alias: %w", err)
 	}
 
+	if err := music.AssignAlbumGroup(ctx, tx, id64); err != nil {
+		return nil, fmt.Errorf("SaveAlbum: grouping: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("SaveAlbum: commit: %w", err)
 	}
@@ -401,111 +405,7 @@ func (s *Sqlite) AddArtistsToAlbum(ctx context.Context, opts db.AddArtistsToAlbu
 }
 
 func (s *Sqlite) GetTopAlbumsPaginated(ctx context.Context, opts db.GetItemsOpts) (*db.PaginatedResponse[db.RankedItem[*models.Album]], error) {
-	if opts.Limit == 0 {
-		opts.Limit = defaultItemsPerPage
-	}
-	offset := (opts.Page - 1) * opts.Limit
-	t1, t2 := db.TimeframeToTimeRange(opts.Timeframe)
-
-	var rows *sql.Rows
-	var err error
-
-	if opts.ArtistID != 0 {
-		query := `
-			WITH AlbumCounts AS (
-				SELECT t.release_id, COUNT(*) AS listen_count
-				FROM listens l
-				JOIN tracks t ON l.track_id = t.id
-				JOIN artist_releases ar ON t.release_id = ar.release_id
-				WHERE ar.artist_id = ? AND l.listened_at BETWEEN ? AND ?
-				GROUP BY t.release_id
-			),
-			RankedAlbums AS (
-				SELECT release_id, listen_count,
-					   RANK() OVER (ORDER BY listen_count DESC) AS rank,
-					   COUNT(*) OVER () AS total_count
-				FROM AlbumCounts
-				ORDER BY listen_count DESC, release_id
-				LIMIT ? OFFSET ?
-			)
-			SELECT r.release_id, rwt.title, rwt.musicbrainz_id, rwt.image, rwt.various_artists, r.listen_count, r.rank, r.total_count
-			FROM RankedAlbums r
-			JOIN releases_with_title rwt ON rwt.id = r.release_id
-			ORDER BY r.rank, r.release_id`
-
-		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), opts.ArtistID, t1.Unix(), t2.Unix(), opts.Limit, offset)
-	} else {
-		query := `
-			WITH AlbumCounts AS (
-				SELECT t.release_id, COUNT(*) AS listen_count
-				FROM listens l
-				JOIN tracks t ON l.track_id = t.id
-				WHERE l.listened_at BETWEEN ? AND ?
-				GROUP BY t.release_id
-			),
-			RankedAlbums AS (
-				SELECT release_id, listen_count,
-					   RANK() OVER (ORDER BY listen_count DESC) AS rank,
-					   COUNT(*) OVER () AS total_count
-				FROM AlbumCounts
-				ORDER BY listen_count DESC, release_id
-				LIMIT ? OFFSET ?
-			)
-			SELECT r.release_id, rwt.title, rwt.musicbrainz_id, rwt.image, rwt.various_artists, r.listen_count, r.rank, r.total_count
-			FROM RankedAlbums r
-			JOIN releases_with_title rwt ON rwt.id = r.release_id
-			ORDER BY r.rank, r.release_id`
-
-		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.Limit, offset)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("GetTopAlbumsPaginated: %w", err)
-	}
-	defer rows.Close()
-
-	// Pre-allocate slice
-	albums := make([]db.RankedItem[*models.Album], 0, opts.Limit)
-	var totalCount int64
-
-	for rows.Next() {
-		var a models.Album
-		var mbzID, image sql.NullString
-		var variousArtists int
-		var item db.RankedItem[*models.Album]
-
-		if err := rows.Scan(&a.ID, &a.Title, &mbzID, &image, &variousArtists, &a.ListenCount, &item.Rank, &totalCount); err != nil {
-			return nil, err
-		}
-
-		a.MbzID = parseNullableUUID(mbzID)
-		a.Image = catalog.BuildImageList(parseNullableUUID(image))
-		a.VariousArtists = variousArtists == 1
-
-		item.Item = &a
-		albums = append(albums, item)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	for i := range albums {
-		albums[i].Item.Artists, err = s.artistsForRelease(ctx, albums[i].Item.ID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &db.PaginatedResponse[db.RankedItem[*models.Album]]{
-		Items:        albums,
-		TotalCount:   totalCount,
-		ItemsPerPage: int32(opts.Limit),
-		HasNextPage:  int64(offset+len(albums)) < totalCount,
-		CurrentPage:  int32(opts.Page),
-	}, nil
+	return s.topAlbumReports(ctx, opts)
 }
 
 func (s *Sqlite) AlbumsWithoutImages(ctx context.Context, from int32) ([]*models.Album, error) {
@@ -555,24 +455,17 @@ func (s *Sqlite) AlbumsWithoutImages(ctx context.Context, from int32) ([]*models
 
 func (s *Sqlite) CountAlbums(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
+	dates := `l.listened_at BETWEEN ? AND ?`
+	if includesUndated(timeframe) {
+		dates = `(l.listened_at IS NULL OR l.listened_at BETWEEN ? AND ?)`
+	}
 	var count int64
-	err := s.db.QueryRowContext(ctx, countedListeningQuery(`
-		SELECT COUNT(DISTINCT t.release_id)
-		FROM listens l JOIN tracks t ON l.track_id = t.id
-		WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
-		t1.Unix(), t2.Unix()).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT `+albumReportKey+`) FROM album_report_counts l WHERE `+dates, t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }
-
 func (s *Sqlite) CountNewAlbums(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64
-	err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM (
-			SELECT t.release_id FROM listens l JOIN tracks t ON l.track_id = t.id
-			GROUP BY t.release_id
-			HAVING MIN(l.listened_at) BETWEEN ? AND ?
-		)`,
-		t1.Unix(), t2.Unix()).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (SELECT `+albumReportKey+` FROM album_report_events l GROUP BY `+albumReportKey+` HAVING MIN(l.listened_at) BETWEEN ? AND ?)`, t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }

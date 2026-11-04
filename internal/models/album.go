@@ -2,7 +2,15 @@ package models
 
 import "github.com/google/uuid"
 
+type AlbumEdition struct {
+	ID          int32  `json:"id"`
+	Title       string `json:"title"`
+	ListenCount int64  `json:"listen_count"`
+}
+
 type Album struct {
+	AlbumGroupID   int32          `json:"album_group_id,omitempty"`
+	Editions       []AlbumEdition `json:"editions,omitempty"`
 	ID             int32          `json:"id"`
 	MbzID          *uuid.UUID     `json:"musicbrainz_id"`
 	Title          string         `json:"title"`

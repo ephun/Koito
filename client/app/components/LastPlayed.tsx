@@ -15,6 +15,7 @@ interface Props {
   limit: number;
   artistId?: Number;
   albumId?: Number;
+  albumGroupId?: number;
   trackId?: number;
   musicTrackId?: number;
   showAlbums?: boolean;
@@ -28,6 +29,7 @@ const getLastListens = (args: {
   period: string;
   artist_id?: number;
   album_id?: number;
+  album_group_id?: number;
   track_id?: number;
   page: number;
 }) => apiFetch<PaginatedResponse<Listen>>("/apis/web/v1/listens", args);
@@ -42,6 +44,7 @@ export default function LastPlays(props: Props) {
     period: "all_time",
     artist_id: props.artistId as number | undefined,
     album_id: props.albumId as number | undefined,
+    album_group_id: props.albumGroupId,
     track_id: props.trackId,
     page: 0,
   };
@@ -91,6 +94,7 @@ export default function LastPlays(props: Props) {
 
   let params = "";
   params += props.artistId ? `&artist_id=${props.artistId}` : "";
+  params += props.albumGroupId ? `&album_group_id=${props.albumGroupId}` : "";
   params += props.albumId ? `&album_id=${props.albumId}` : "";
   params += props.trackId ? `&track_id=${props.trackId}` : "";
 

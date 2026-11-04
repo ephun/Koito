@@ -330,7 +330,13 @@ type Artist = {
   is_primary: boolean;
   all_time_rank: number;
 };
+export function albumPath(album: Pick<Album, "id" | "album_group_id">) {
+ return album.album_group_id ? `/album-group/${album.album_group_id}` : `/album/${album.id}`;
+}
+
 type Album = {
+ album_group_id?: number;
+ editions?: { id: number; title: string; listen_count: number }[];
   id: number;
   title: string;
   image: ImageList;

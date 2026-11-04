@@ -1,3 +1,4 @@
+import { albumPath } from "api/api";
 import { Link } from "react-router";
 import ArtistLinks from "./ArtistLinks";
 import MediaItem, { MediaItemSkeleton } from "./primitives/MediaItem";
@@ -36,7 +37,7 @@ export default function TopItemList<T extends Ranked<Item>>({
     <div className={`flex flex-col gap-1 ${className} min-w-[200px]`}>
       {data.items.map((item, index) => (
         <div
-          key={`${type}-${item.item.id}`}
+          key={`${type}-${item.item.id}-${"album_group_id" in item.item ? item.item.album_group_id || 0 : 0}`}
           style={{ fontSize: 12 }}
           className="mb-0.5"
         >
@@ -107,7 +108,7 @@ function ItemCard({
             <MediaItem
               className="gap-2"
               image={typedItem.image}
-              link={`/${type}/${typedItem.id}`}
+              link={isAlbum ? albumPath(typedItem) : `/${type}/${typedItem.id}`}
               size="sm"
               title={isArtist ? typedItem.name : typedItem.title}
               alt={isArtist ? typedItem.name : typedItem.title}

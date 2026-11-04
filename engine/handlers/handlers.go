@@ -41,6 +41,7 @@ func OptsFromRequest(r *http.Request) db.GetItemsOpts {
 
 	artistIdStr := r.URL.Query().Get("artist_id")
 	artistId, _ := strconv.Atoi(artistIdStr)
+	albumGroupID, _ := strconv.Atoi(r.URL.Query().Get("album_group_id"))
 	albumIdStr := r.URL.Query().Get("album_id")
 	albumId, _ := strconv.Atoi(albumIdStr)
 	trackIdStr := r.URL.Query().Get("track_id")
@@ -66,12 +67,13 @@ func OptsFromRequest(r *http.Request) db.GetItemsOpts {
 		limit, page, tf.Week, tf.Month, tf.Year, tf.FromUnix, tf.ToUnix, artistId, albumId, trackId, period)
 
 	return db.GetItemsOpts{
-		Limit:     limit,
-		Page:      page,
-		Timeframe: tf,
-		ArtistID:  artistId,
-		AlbumID:   albumId,
-		TrackID:   trackId,
+		AlbumGroupID: albumGroupID,
+		Limit:        limit,
+		Page:         page,
+		Timeframe:    tf,
+		ArtistID:     artistId,
+		AlbumID:      albumId,
+		TrackID:      trackId,
 	}
 }
 

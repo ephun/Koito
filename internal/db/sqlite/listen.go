@@ -69,6 +69,11 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	// they never compete with an open *sql.Rows for the single connection.
 	var count int64
 	switch {
+	case opts.AlbumGroupID > 0:
+		err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM album_report_events WHERE listened_at BETWEEN ? AND ? AND album_group_id=?`, t1.Unix(), t2.Unix(), opts.AlbumGroupID).Scan(&count)
+		if err != nil {
+			return nil, err
+		}
 	case opts.TrackID > 0:
 		s.db.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM listens WHERE listened_at BETWEEN ? AND ? AND `+historyPredicate("track_id"),
@@ -102,6 +107,15 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 			WHERE l.listened_at BETWEEN ? AND ? AND `+historyPredicate("t.id")+`
 			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.TrackID, opts.Limit, offset,
+		)
+	case opts.AlbumGroupID > 0:
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			FROM album_report_events l
+			JOIN tracks_with_title t ON l.track_id = t.id
+			WHERE l.listened_at BETWEEN ? AND ? AND l.album_group_id = ?
+			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
+			t1.Unix(), t2.Unix(), opts.AlbumGroupID, opts.Limit, offset,
 		)
 	case opts.AlbumID > 0:
 		rows, err = s.db.QueryContext(ctx, `

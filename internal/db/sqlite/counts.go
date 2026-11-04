@@ -27,6 +27,12 @@ func (s *Sqlite) CountListensToItem(ctx context.Context, opts db.TimeListenedOpt
 			JOIN artist_tracks at2 ON l.track_id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?`, opts.Timeframe),
 			t1.Unix(), t2.Unix(), opts.ArtistID).Scan(&count)
+	case opts.AlbumGroupID > 0:
+		err = s.db.QueryRowContext(ctx, albumReportQuery(`
+			SELECT COUNT(*) FROM listens l
+			JOIN tracks t ON l.track_id = t.id
+			WHERE l.listened_at BETWEEN ? AND ? AND l.album_group_id = ?`, opts.Timeframe),
+			t1.Unix(), t2.Unix(), opts.AlbumGroupID).Scan(&count)
 	case opts.AlbumID > 0:
 		err = s.db.QueryRowContext(ctx, countedListeningQuery(`
 			SELECT COUNT(*) FROM listens l
@@ -70,6 +76,12 @@ func (s *Sqlite) CountTimeListenedToItem(ctx context.Context, opts db.TimeListen
 			JOIN artist_tracks at2 ON t.id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?`,
 			t1.Unix(), t2.Unix(), opts.ArtistID).Scan(&seconds)
+	case opts.AlbumGroupID > 0:
+		err = s.db.QueryRowContext(ctx, `
+			SELECT COALESCE(SUM(t.duration), 0)
+			FROM album_report_events l JOIN tracks t ON l.track_id = t.id
+			WHERE l.listened_at BETWEEN ? AND ? AND l.album_group_id = ?`,
+			t1.Unix(), t2.Unix(), opts.AlbumGroupID).Scan(&seconds)
 	case opts.AlbumID > 0:
 		err = s.db.QueryRowContext(ctx, `
 			SELECT COALESCE(SUM(t.duration), 0)

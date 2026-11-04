@@ -14,6 +14,7 @@ import { Link } from "react-router";
 import useWindowWidth from "~/hooks/useWindowWidth";
 
 interface Props {
+  grouped?: boolean;
   type: "Track" | "Album" | "Artist";
   title: string;
   img: ImageList;
@@ -68,10 +69,10 @@ export default function MediaLayout(props: Props) {
         background: `linear-gradient(to bottom, ${bgColor}, transparent 800px)`,
       }}
     >
-      <ImageDropHandler
+      {!props.grouped && <ImageDropHandler
         itemType={props.type.toLowerCase() === "artist" ? "artist" : "album"}
         onComplete={replaceImageCallback}
-      />
+      />}
       <title>{title}</title>
       <meta property="og:title" content={title} />
       <meta name="description" content={title} />
@@ -134,7 +135,7 @@ export default function MediaLayout(props: Props) {
                 <MbzIcon size={iconSize} hover />
               </Link>
             )}
-            {user && (
+            {user && !props.grouped && (
               <>
                 {props.type === "Track" && (
                   <>

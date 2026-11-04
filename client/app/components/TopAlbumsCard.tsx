@@ -1,4 +1,5 @@
 import {
+  albumPath,
   apiFetch,
   type PaginatedResponse,
   type Ranked,
@@ -93,7 +94,7 @@ export default function TopAlbumsCard({ period }: Props) {
             }}
           />
           <div className="absolute bottom-8 left-5">
-            <Link to={`/album/${data.items[0].item.id}`} className="">
+            <Link to={albumPath(data.items[0].item)} className="">
               <h5 className="text-3xl font-semibold line-clamp-3 wrap-anywhere text-shadow-lg">
                 {data.items[0]?.item.title}
               </h5>
@@ -116,12 +117,12 @@ export default function TopAlbumsCard({ period }: Props) {
           {data.items.slice(1).map((i) => (
             <div
               className="px-6 pb-6"
-              key={`top_albums_card_${i.rank}_${i.item.title}`}
+              key={albumPath(i.item)}
             >
               <MediaItem
                 image={i.item.image}
                 size="md"
-                link={`/album/${i.item.id}`}
+                link={albumPath(i.item)}
                 title={i.item.title}
                 alt={i.item.title}
                 subtitle={<ArtistLinks artists={[i.item.artists[0]]} />}

@@ -99,12 +99,11 @@ They are excluded from Git.
 
 ## Remaining Phase 4 work
 
-1. Add edition grouping while retaining individual release identities and album associations.
-2. Add source and manual genres with artist genre assignment and chart filtering.
-3. Add optional source and metadata tags to listening rows.
-4. Integrate contextual corrections with native search and replace the remaining destructive cleanup operations.
-5. Extend previews, exceptions, and undo checks to those remaining actions.
-6. Verify every Phase 4 acceptance criterion against the completed implementation.
+1. Add source and manual genres with artist genre assignment and chart filtering.
+2. Add optional source and metadata tags to listening rows.
+3. Integrate contextual corrections with native search and replace the remaining destructive cleanup operations.
+4. Extend previews, exceptions, and undo checks to those remaining actions.
+5. Verify every Phase 4 acceptance criterion against the completed implementation.
 
 ## Atomic engine and first integration
 
@@ -462,4 +461,48 @@ Converting the saved configuration alone preserved play, record, and contributor
 Restoring its original representation reproduced those fingerprints again.
 The main application rebuilt in 61.375 seconds and retained all three original-file hashes.
 
-Edition grouping, genres, optional tags, and contextual corrections remain outstanding.
+Genres, optional tags, and contextual corrections remain outstanding.
+
+## Reversible edition grouping
+
+Presentation, Grouping now uses the shared IF/THEN/ELSE editor.
+SET Album group chooses a reporting name using original names, displayed names, supplied fields, or an expression.
+The starting filter recognizes selected deluxe, expanded, and remastered suffixes and starts disabled.
+Empty text creates an explicit exception. Later filters can override earlier assignments.
+Naming and Grouping editors support moving a filter up or down within their subtype.
+Naming resolves before Grouping. Original release titles and identifiers remain independent.
+
+Groups retain their complete artist-credit identities and stable identifiers across disabling and re-enabling.
+Each play retains its physical release association.
+Separate grouping links for plays and cumulative contributions support source, file, record, library, and metadata conditions.
+Two contributions on the same appearance can therefore remain in different reporting groups.
+Native release defaults apply to available catalog metadata and newly captured releases.
+An incoming edition can join a previously captured base release immediately.
+Complete live-record fields still depend on the preservation work in Phase 8.
+
+Album charts, album counts, and new-album counts use the reporting groups.
+Grouped pages show individual editions with their group-specific contributions.
+Their track charts, listening history, interest, and activity follow the same membership.
+Listening rows link the album associated with each play.
+Original edition pages and native search remain available.
+Calendar ranges exclude undated amounts. All-time reporting includes those supported contributions separately.
+
+Regression tests cover native and imported grouping, source and library exceptions, complete artist credits,
+missing-field explanations, atomic failure, empty exceptions, previews, disabling, repeat rebuilding, and stable group identifiers.
+They also exercise incoming editions, existing base releases, charts, date bounds, histories, activity, interest, and undated counts.
+The full Go suite, frontend type checking, and production build pass.
+
+Actual-import browser acceptance checked twelve grouping examples and published the editable suffix filter on an isolated database copy.
+The Family Tree: The Roots reported 1,743 plays across two editions with listening contributions.
+A third known edition remained listed with zero contributions.
+All 191,473 records and 168,424 plays remained present.
+Record, play, catalog-title, release, and contributor fingerprints stayed unchanged.
+Desktop, 390-pixel, and 320-pixel checks passed without page errors.
+The original configuration was restored after acceptance.
+
+The activated local application rebuilt in 60.188 seconds and retained the same record and play totals.
+All three original files retained their SHA-256 hashes.
+
+The measured preview took approximately 21 seconds and publication took approximately 73 seconds on the imported history.
+Performance targets and broader measurements remain in Phase 9.
+Phase 4 remains in progress for genres, optional listening tags, and contextual corrections replacing destructive edits.

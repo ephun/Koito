@@ -15,6 +15,7 @@ interface Props {
   year?: number;
   artistId?: number;
   albumId?: number;
+  albumGroupId?: number;
   trackId?: number;
   configurable?: boolean;
   autoAdjust?: boolean;
@@ -27,6 +28,7 @@ const getActivity = (args: {
   year: number;
   artist_id: number;
   album_id: number;
+  album_group_id?: number;
   track_id: number;
 }) => apiFetch<ListenActivityResponse>("/apis/web/v1/listen-activity", args);
 
@@ -43,6 +45,7 @@ export default function ActivityGrid({
   year = 0,
   artistId = 0,
   albumId = 0,
+  albumGroupId = 0,
   trackId = 0,
 }: Props) {
   const args = {
@@ -52,6 +55,7 @@ export default function ActivityGrid({
     year,
     artist_id: artistId,
     album_id: albumId,
+    album_group_id: albumGroupId || undefined,
     track_id: trackId,
   };
   const { isPending, isError, data, error } = useQuery({
@@ -75,7 +79,7 @@ export default function ActivityGrid({
   let target = 100;
   if (trackId !== 0) {
     target = 5;
-  } else if (albumId !== 0) {
+  } else if (albumId !== 0 || albumGroupId !== 0) {
     target = 10;
   } else if (artistId !== 0) {
     target = 20;

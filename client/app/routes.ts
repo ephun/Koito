@@ -4,6 +4,7 @@ export default [
   index("routes/Home.tsx"),
   route("/artist/:id", "routes/MediaItems/Artist.tsx"),
   route("/album/:id", "routes/MediaItems/Album.tsx"),
+  route("/album-group/:id", "routes/MediaItems/AlbumGroup.tsx"),
   route("/track/:id", "routes/MediaItems/Track.tsx"),
   route("/chart/top/albums", "routes/Charts/AlbumChart.tsx"),
   route("/chart/top/artists", "routes/Charts/ArtistChart.tsx"),

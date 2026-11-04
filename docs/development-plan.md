@@ -387,8 +387,8 @@ options, and the default treatment of uncertain shared listening.
 original spelling, identifiers, or album association.
 
 **Status: in progress.** Track histories across albums are implemented and verified.
-The shared evaluator and builder now cover Matching, Naming, attribution, Count, Time, and imported fields.
-Remaining filter migrations, metadata cleanup, genres, and optional tags remain in this phase.
+The shared evaluator and builder cover Matching, Naming, Grouping, attribution, Count, Time, and imported fields.
+Contextual metadata corrections, genres, and optional tags remain in this phase.
 Implementation and acceptance evidence: [Phase 4](phase-4.md).
 
 ### First milestone: track history across albums
@@ -753,9 +753,8 @@ has implemented them. Summaries were checked while writing this plan.
 Phase 4 is in progress. See [the Phase 4 notes](phase-4.md) for completed
 milestones, actual-import checks, and remaining requirements.
 
-Continue migrating existing filter controls to the shared conditional editor.
-Complete reversible music aliases, edition grouping, genres, contextual corrections,
-and optional metadata tags. Audit the remaining destructive catalog endpoints.
+Complete genres, contextual corrections, and optional metadata tags.
+Replace the remaining destructive catalog endpoints with reversible corrections.
 
 Field-specific source preference also needs concrete examples before controls
 return to Filters. Keep original music identities and source album associations

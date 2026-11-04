@@ -458,7 +458,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 	var err error
 
 	switch {
-	case opts.AlbumID > 0:
+	case opts.AlbumID > 0 || opts.AlbumGroupID > 0:
 		query := `
 			WITH TrackCounts AS (
 				SELECT h.canonical_track_id AS track_id,MIN(t.release_id) AS album_id, COUNT(*) AS listen_count
@@ -482,7 +482,15 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 			JOIN releases rls ON r.album_id = rls.id
 			ORDER BY r.rank, r.track_id`
 
-		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.AlbumID, opts.Limit, offset)
+		albumID := opts.AlbumID
+		if opts.AlbumGroupID > 0 {
+			albumID = opts.AlbumGroupID
+			query = albumReportQuery(query, opts.Timeframe)
+			query = strings.ReplaceAll(query, "t.release_id = ?", "l.album_group_id = ?")
+		} else {
+			query = countedListeningQuery(query, opts.Timeframe)
+		}
+		rows, err = s.db.QueryContext(ctx, query, t1.Unix(), t2.Unix(), albumID, opts.Limit, offset)
 
 	case opts.ArtistID > 0:
 		query := `

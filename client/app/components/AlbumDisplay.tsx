@@ -1,3 +1,4 @@
+import { albumPath } from "api/api";
 import { type Album } from "api/api";
 import { Link } from "react-router";
 
@@ -8,9 +9,9 @@ interface Props {
 
 export default function AlbumDisplay({ album, size }: Props) {
   return (
-    <div className="flex gap-3" key={album.id}>
+    <div className="flex gap-3" key={albumPath(album)}>
       <div>
-        <Link to={`/album/${album.id}`}>
+        <Link to={albumPath(album)}>
           <img
             src={album.image.large}
             alt={album.title}
@@ -20,7 +21,7 @@ export default function AlbumDisplay({ album, size }: Props) {
       </div>
       <div className="flex flex-col items-start" style={{ width: size }}>
         <Link
-          to={`/album/${album.id}`}
+          to={albumPath(album)}
           className="hover:text-(--color-fg-secondary)"
         >
           <h4>{album.title}</h4>

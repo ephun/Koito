@@ -28,6 +28,13 @@ func (s *Sqlite) GetInterest(ctx context.Context, opts db.GetInterestOpts) ([]db
 			WHERE at2.artist_id = ?
 			ORDER BY l.listened_at`
 		arg = opts.ArtistID
+	case opts.AlbumGroupID != 0:
+		query = `
+			SELECT l.listened_at FROM album_report_events l
+			JOIN tracks t ON t.id = l.track_id
+			WHERE l.album_group_id = ?
+			ORDER BY l.listened_at`
+		arg = opts.AlbumGroupID
 	case opts.AlbumID != 0:
 		query = `
 			SELECT l.listened_at FROM listens l

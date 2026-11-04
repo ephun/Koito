@@ -247,6 +247,7 @@ Every implemented subtype uses the shared filter manager and conditional editor.
 | Attribution | Heuristic | Assign listening using explicit personal-play collections |
 | Attribution | Aggregate | Assign a percentage of cumulative counts |
 | Presentation | Naming | Assign displayed artist, album, and track names |
+| Presentation | Grouping | Report album editions together while retaining release identities |
 
 Each filter has a name, an enabled state, IF/THEN summaries, and an expandable editor.
 Nested IF, THEN, ELSE IF, ELSE, and SET blocks compose the filter.
@@ -258,6 +259,8 @@ Starting filters supply editable examples. Their parameters remain part of the s
 Disabled filters keep their settings and remain editable with a muted appearance.
 Priority is available for matching, attribution, and inference.
 Music comparison corrections run in ascending priority and saved order.
+Naming and Grouping each run in saved order. Their expanded editors support Move up and Move down.
+Naming runs before Grouping, independently of the filters' positions across subtype sections.
 
 Question marks provide hover and keyboard-focus help.
 Help sentences contain twenty words at most.
@@ -265,7 +268,7 @@ Last.fm timezone values use a dropdown. New timezone filters start with UTC.
 Saved unknown timezones retain their original meaning.
 File exceptions use ordinary IF conditions.
 
-Check changes shows actual before-and-after Music matching or Naming examples.
+Check changes shows actual before-and-after Music matching, Naming, or Grouping examples.
 Save changes publishes the filters and view together using the current version check.
 Discard restores the loaded configuration. Removing every filter leaves an explicit empty configuration.
 Saved history stays available for restoring earlier versions.
@@ -274,7 +277,17 @@ Imports and listening history provide record inspection and source downloads.
 Inspection shows unresolved conditions, count contributions, attribution, and record-pair comparisons.
 Manual matching decisions remain separate from automatic comparisons.
 Koito's native search remains the music lookup interface.
-Contextual catalog corrections and the remaining Grouping actions are still being implemented.
+Contextual catalog corrections, genres, and optional listening metadata remain in Phase 4.
+
+Grouping uses SET Album group with ordinary conditions, expressions, and branches.
+Its starting filter recognizes selected deluxe, expanded, and remastered suffixes.
+New grouping filters start disabled. Version labels remain part of original release titles.
+Empty text creates an explicit exception. Removing or disabling the filter restores separate reporting.
+Each group requires matching complete artist credits and the chosen reporting name.
+Per-play and per-count links preserve source and file exceptions within the same release.
+Group pages list individual editions and retain original album links in listening rows.
+Native release capture applies grouping to its available release metadata.
+Complete live-record conditions depend on the preservation work in Phase 8.
 
 ## Source preference
 

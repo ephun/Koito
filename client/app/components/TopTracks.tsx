@@ -16,6 +16,7 @@ interface Props {
   showSeeMore?: boolean;
   artistId?: Number;
   albumId?: Number;
+  albumGroupId?: number;
 }
 
 const getTopTracks = (args: {
@@ -23,6 +24,7 @@ const getTopTracks = (args: {
   period: string;
   artist_id?: number;
   album_id?: number;
+  album_group_id?: number;
   page: number;
 }) =>
   apiFetch<PaginatedResponse<Ranked<Track>>>("/apis/web/v1/top/tracks", args);
@@ -33,6 +35,7 @@ const TopTracks = (props: Props) => {
     period: props.period,
     artist_id: props.artistId as number | undefined,
     album_id: props.albumId as number | undefined,
+    album_group_id: props.albumGroupId,
     page: 0,
   };
   const { isPending, isError, data, error } = useQuery({
@@ -63,6 +66,7 @@ const TopTracks = (props: Props) => {
 
   let params = "";
   params += props.artistId ? `&artist_id=${props.artistId}` : "";
+  params += props.albumGroupId ? `&album_group_id=${props.albumGroupId}` : "";
   params += props.albumId ? `&album_id=${props.albumId}` : "";
 
   const slug = `/chart/top/tracks?period=${props.period}&limit=100${params}`;

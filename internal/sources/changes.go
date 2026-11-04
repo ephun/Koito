@@ -32,17 +32,18 @@ type PreviewExample struct {
 	Artist string    `json:"artist"`
 }
 type FilterPreview struct {
-	MusicExamples  []NamingExample  `json:"music_examples"`
-	NamingExamples []NamingExample  `json:"naming_examples"`
-	Token          string           `json:"token"`
-	BaseVersion    int64            `json:"base_version"`
-	Before         int              `json:"before"`
-	After          int              `json:"after"`
-	Records        int              `json:"records"`
-	Unresolved     int              `json:"unresolved"`
-	Ambiguous      int              `json:"ambiguous"`
-	Changed        int              `json:"changed"`
-	Examples       []PreviewExample `json:"examples"`
+	GroupingExamples []NamingExample  `json:"grouping_examples"`
+	MusicExamples    []NamingExample  `json:"music_examples"`
+	NamingExamples   []NamingExample  `json:"naming_examples"`
+	Token            string           `json:"token"`
+	BaseVersion      int64            `json:"base_version"`
+	Before           int              `json:"before"`
+	After            int              `json:"after"`
+	Records          int              `json:"records"`
+	Unresolved       int              `json:"unresolved"`
+	Ambiguous        int              `json:"ambiguous"`
+	Changed          int              `json:"changed"`
+	Examples         []PreviewExample `json:"examples"`
 }
 
 func resolveChange(ctx context.Context, tx *sql.Tx, change FilterChange) (RuleVersion, RuleConfig, []MatchDecision, *MatchDecision, error) {
@@ -163,6 +164,10 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.MusicExamples, err = previewMusic(ctx, tx, plan, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.GroupingExamples, err = previewGrouping(ctx, tx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err
 	}

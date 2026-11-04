@@ -36,6 +36,15 @@ func (s *Sqlite) GetListenActivity(ctx context.Context, opts db.ListenActivityOp
 			GROUP BY hour_bucket`,
 			t1.Unix(), t2.Unix(), opts.ArtistID,
 		)
+	case opts.AlbumGroupID > 0:
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT (l.listened_at / 3600) * 3600 AS hour_bucket, COUNT(*) AS listen_count
+			FROM album_report_events l
+			JOIN tracks t ON l.track_id = t.id
+			WHERE l.listened_at >= ? AND l.listened_at < ? AND l.album_group_id = ?
+			GROUP BY hour_bucket`,
+			t1.Unix(), t2.Unix(), opts.AlbumGroupID,
+		)
 	case opts.AlbumID > 0:
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT (l.listened_at / 3600) * 3600 AS hour_bucket, COUNT(*) AS listen_count

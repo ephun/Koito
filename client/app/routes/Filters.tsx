@@ -53,6 +53,22 @@ export default function Filters() {
     setMessage("");
   }
 
+  function move(id: string, direction: -1 | 1) {
+    setDraft(previous => {
+      if (!previous) return previous;
+      const rules = [...previous.rules];
+      const index = rules.findIndex(rule => rule.id === id);
+      const rule = rules[index];
+      if (!rule) return previous;
+      let other = index + direction;
+      while (other >= 0 && other < rules.length && (rules[other].type !== rule.type || rules[other].subtype !== rule.subtype)) other += direction;
+      if (other < 0 || other >= rules.length) return previous;
+      [rules[index], rules[other]] = [rules[other], rules[index]];
+      return { rules };
+    });
+    setMessage("");
+  }
+
   async function save() {
     if (!saved || !draft || saving) return;
     setSaving(true);
@@ -108,7 +124,10 @@ export default function Filters() {
         {["direct", "heuristic", "aggregate"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="attribution" subtype={subtype} embedded onChange={upsert} onRemove={remove} />)}
       </section>}
     </>}
-    {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
+    {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
+      <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
+      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} />)}
+    </section>}
   </main>;
 }
 

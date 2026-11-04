@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 )
 
 type InspectedRecord struct {
@@ -34,7 +35,7 @@ type FilterIssue struct {
 
 // Diagnostic checks evaluate enabled programs against this record. Naming
 // filters see earlier naming changes. Direct attribution reads original fields.
-func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex) ([]FilterIssue, error) {
+func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex, catalogAlbumID int64) ([]FilterIssue, error) {
 	issues := append(append([]FilterIssue{}, r.TimeIssues...), r.MusicIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
@@ -83,6 +84,20 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 				namingEnv[key] = value
 			}
 		}
+	}
+	if catalogAlbumID > 0 {
+		namingEnv["catalog.album_id"] = filters.Integer(catalogAlbumID)
+	}
+	grouping, err := music.CompileGroupingPrograms(groupingFilters(config))
+	if err != nil {
+		return nil, err
+	}
+	_, _, groupIssues, err := grouping.Resolve(ctx, namingEnv)
+	if err != nil {
+		return nil, err
+	}
+	for _, issue := range groupIssues {
+		issues = append(issues, FilterIssue{issue.ID, issue.Name, issue.Issue})
 	}
 	return issues, nil
 }
@@ -148,7 +163,12 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 			break
 		}
 	}
-	result.FilterIssues, err = inspectFilterIssues(ctx, result.Record.matchingRecord, version.Config, personal)
+	var catalogAlbumID int64
+	err = tx.QueryRowContext(ctx, `SELECT t.release_id FROM tracks t WHERE t.id=(SELECT p.track_id FROM source_plays p WHERE p.play_key=? AND p.policy='filters-v1' UNION ALL SELECT a.track_id FROM source_aggregates a JOIN source_aggregate_records ar ON ar.aggregate_key=a.aggregate_key WHERE ar.record_id=? LIMIT 1)`, result.Record.PlayKey, id).Scan(&catalogAlbumID)
+	if err != nil && err != sql.ErrNoRows {
+		return result, err
+	}
+	result.FilterIssues, err = inspectFilterIssues(ctx, result.Record.matchingRecord, version.Config, personal, catalogAlbumID)
 	if err != nil {
 		return result, err
 	}

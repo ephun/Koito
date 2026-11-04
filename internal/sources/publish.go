@@ -291,6 +291,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
 		return result, err
 	}
+	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {
+		return result, err
+	}
 	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {
 		return result, err
 	}

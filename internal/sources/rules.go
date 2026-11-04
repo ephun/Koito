@@ -129,10 +129,12 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
 	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema(), "inference:time": timeSchema()}}
+	state.Blocks.Schemas["presentation:grouping"] = music.GroupingSchema()
 	state.Blocks.Schemas["matching:play"] = playSchema()
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
+	state.Blocks.Templates["presentation:grouping"] = []ProgramTemplate{{"editions", "Group edition suffixes", editionGroupingProgram()}}
 	state.Blocks.Templates["matching:play"] = []ProgramTemplate{{"overlap", "Overlapping timestamp ranges", defaultPlayProgram(0)}, {"tolerance", "Timestamp ranges within 30 seconds", defaultPlayProgram(30)}}
 	state.Blocks.Templates["matching:music"] = []ProgramTemplate{{"exact", "Exact comparison names", defaultMusicProgram(true, true)}, {"case", "Case-insensitive comparison names", defaultMusicProgram(false, true)}}
 	var err error
@@ -323,6 +325,9 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		}
 		other.Choices["source.service"] = schema.Choices["source.service"]
 		other.Choices["file.hash"] = schema.Choices["file.hash"]
+		if key == "presentation:grouping" {
+			other.Choices["source.service"] = append(append([]filters.Choice{}, schema.Choices["source.service"]...), filters.Choice{Label: "Koito", Value: "koito"})
+		}
 		if other.PairFields {
 			for _, side := range []string{"left.", "right."} {
 				other.Choices[side+"source.service"] = schema.Choices["source.service"]
@@ -347,7 +352,7 @@ func validateRules(config RuleConfig) error {
 		return errors.New("At most 64 filters can be saved.")
 	}
 	ids := map[string]bool{}
-	music, plays := 0, 0
+	musicRules, plays := 0, 0
 	timeScopes := map[string]bool{}
 	for _, rule := range config.Rules {
 		if rule.Migration != nil {
@@ -361,7 +366,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
+		if rule.Program != nil && !(rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -405,6 +410,16 @@ func validateRules(config RuleConfig) error {
 			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
+		case rule.Type == "presentation" && rule.Subtype == "grouping":
+			if rule.Program == nil {
+				return errors.New("Grouping filters need IF and SET blocks.")
+			}
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Grouping conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, music.GroupingSchema()); err != nil {
+				return err
+			}
 		case rule.Type == "presentation" && rule.Subtype == "naming":
 			if rule.Program == nil {
 				return errors.New("Naming filters need IF and SET blocks.")
@@ -413,7 +428,7 @@ func validateRules(config RuleConfig) error {
 				return fmt.Errorf("Filter %s: %w", rule.ID, err)
 			}
 		case rule.Type == "matching" && rule.Subtype == "music":
-			music++
+			musicRules++
 			if rule.Program != nil {
 				if rule.Scope != (RuleScope{}) {
 					return errors.New("Move Music matching conditions into IF blocks.")
@@ -543,7 +558,7 @@ func validateRules(config RuleConfig) error {
 			return errors.New("Unsupported rule type.")
 		}
 	}
-	if music > 1 {
+	if musicRules > 1 {
 		legacy := 0
 		for _, rule := range config.Rules {
 			if rule.Type == "matching" && rule.Subtype == "music" && rule.Program == nil {
