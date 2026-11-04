@@ -48,7 +48,8 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 		var env filters.Env
 		switch {
 		case rule.Type == "presentation" && rule.Subtype == "naming":
-			if _, genres := namingTargets(rule.Program); genres {
+			names, genres := namingTargets(rule.Program)
+			if genres && (!names || !statementsRead(rule.Program.Steps, "catalog.kind")) {
 				continue
 			}
 			if !scopeContains(rule.Scope, r, from, until) {
@@ -78,6 +79,11 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 		if rule.Type == "attribution" && rule.Subtype == "heuristic" {
 			if issue := heuristicDomainIssue(r, result); issue != nil {
 				result.Issues = append(result.Issues, *issue)
+			}
+		}
+		if rule.Type == "presentation" {
+			if _, assigned := result.Values["artist.genres"]; assigned {
+				result.Issues = append(result.Issues, filters.Issue{Path: "artist.genres", Reason: "Artist genres require an artist context."})
 			}
 		}
 		for _, issue := range result.Issues {

@@ -40,7 +40,7 @@ func statementsRead(steps []filters.Statement, field string) bool {
 // Catalog corrections explicitly select a catalog context. Record programs
 // continue to use their original source context during projection.
 func CatalogName(ctx context.Context, config RuleConfig, kind string, id int64, original string) (string, []FilterIssue, error) {
-	programs, err := compileNaming(config)
+	programs, err := compileNamingDomain(config, true)
 	if err != nil {
 		return original, nil, err
 	}
@@ -49,6 +49,7 @@ func CatalogName(ctx context.Context, config RuleConfig, kind string, id int64, 
 
 type catalogNamingState struct {
 	Name             string
+	Genres           []string
 	Artists, Primary []int64
 	CreditsAssigned  bool
 	Aliases          []string
@@ -124,6 +125,19 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 		}
 	}
 	current := catalogNamingState{Name: original}
+	if kind == "artist" {
+		env["catalog.artist_id"] = filters.Integer(id)
+		labels, _ := env["source.genres"].Items()
+		current.Genres = []string{}
+		seen := map[string]bool{}
+		for _, label := range labels {
+			if text, ok := label.Text(); ok && strings.TrimSpace(text) != "" && !seen[text] {
+				current.Genres = append(current.Genres, text)
+				seen[text] = true
+			}
+		}
+		env["artist.genres"] = aliasList(current.Genres)
+	}
 	current.Aliases, _ = aliasNames(env["original.aliases"])
 	env["display.aliases"] = aliasList(current.Aliases)
 	current.Artists, _ = creditIdentifiers(env["catalog.artist_ids"])
@@ -132,7 +146,8 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 	env["display.primary_artist_ids"] = identifierList(current.Primary)
 	issues := []FilterIssue{}
 	for _, program := range programs {
-		if !statementsRead(program.rule.Program.Steps, "catalog.kind") {
+		_, genres := namingTargets(program.rule.Program)
+		if !statementsRead(program.rule.Program.Steps, "catalog.kind") && (!genres || kind != "artist") {
 			continue
 		}
 		if program.rule.Scope != (RuleScope{}) {
@@ -152,6 +167,7 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 
 		candidate := current
 		valid := true
+		invalidGenres := false
 		for key, value := range out.Values {
 			switch key {
 			case target:
@@ -168,6 +184,14 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 				} else {
 					candidate.Aliases = names
 					candidate.AliasesAssigned = true
+				}
+			case "artist.genres":
+				labels, ok := aliasNames(value)
+				if kind != "artist" || !ok {
+					valid = false
+					invalidGenres = true
+				} else {
+					candidate.Genres = labels
 				}
 			case "display.artist_ids":
 				ids, ok := creditIdentifiers(value)
@@ -209,7 +233,11 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 			}
 		}
 		if !valid {
-			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, filters.Issue{Path: "catalog", Reason: "Choose nonempty names and aliases, existing artists, and primary artists included in the credits."}})
+			issue := filters.Issue{Path: "catalog", Reason: "Choose nonempty names and aliases, existing artists, and primary artists included in the credits."}
+			if invalidGenres {
+				issue = filters.Issue{Path: "artist.genres", Reason: "Choose nonempty genre labels in an artist context."}
+			}
+			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, issue})
 			continue
 		}
 		current = candidate
@@ -217,19 +245,23 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 		env[target] = filters.String(current.Name)
 		env["display.artist_ids"] = identifierList(current.Artists)
 		env["display.primary_artist_ids"] = identifierList(current.Primary)
+		if kind == "artist" {
+			env["artist.genres"] = aliasList(current.Genres)
+		}
 
 	}
 	return current, issues, nil
 }
 
 func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...catalogNameItem) error {
-	programs, err := compileNaming(config)
+	programs, err := compileNamingDomain(config, true)
 	if err != nil {
 		return err
 	}
 	selected := []namingProgram{}
 	for _, program := range programs {
-		if statementsRead(program.rule.Program.Steps, "catalog.kind") {
+		_, genres := namingTargets(program.rule.Program)
+		if genres || statementsRead(program.rule.Program.Steps, "catalog.kind") {
 			selected = append(selected, program)
 		}
 	}
@@ -253,8 +285,12 @@ func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig, tar
 			return err
 		}
 	}
+	if err = addCatalogGenreInputs(ctx, tx, items); err != nil {
+		return err
+	}
 	for _, item := range items {
 		resolved, issues, e := resolveCatalogNaming(ctx, selected, item.kind, item.id, item.name, item.metadata)
+		issues = catalogDomainIssues(selected, issues, false)
 		name := resolved.Name
 		if e != nil {
 			return e
@@ -300,6 +336,24 @@ func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig, tar
 		}
 	}
 	return nil
+}
+
+func catalogDomainIssues(programs []namingProgram, issues []FilterIssue, genres bool) []FilterIssue {
+	selected := map[string]bool{}
+	for _, program := range programs {
+		names, labels := namingTargets(program.rule.Program)
+		selected[program.rule.ID] = names
+		if genres {
+			selected[program.rule.ID] = labels
+		}
+	}
+	result := []FilterIssue{}
+	for _, issue := range issues {
+		if selected[issue.FilterID] {
+			result = append(result, issue)
+		}
+	}
+	return result
 }
 
 type catalogNameItem struct {
@@ -419,13 +473,14 @@ func catalogNameItems(ctx context.Context, tx *sql.Tx) ([]catalogNameItem, error
 
 func previewCatalogNames(ctx context.Context, tx *sql.Tx, before, after RuleConfig) ([]NamingExample, error) {
 	selectPrograms := func(config RuleConfig) ([]namingProgram, error) {
-		programs, err := compileNaming(config)
+		programs, err := compileNamingDomain(config, true)
 		if err != nil {
 			return nil, err
 		}
 		selected := []namingProgram{}
 		for _, program := range programs {
-			if statementsRead(program.rule.Program.Steps, "catalog.kind") {
+			_, genres := namingTargets(program.rule.Program)
+			if genres || statementsRead(program.rule.Program.Steps, "catalog.kind") {
 				selected = append(selected, program)
 			}
 		}
@@ -445,6 +500,9 @@ func previewCatalogNames(ctx context.Context, tx *sql.Tx, before, after RuleConf
 	}
 	items, err := catalogNameItems(ctx, tx)
 	if err != nil {
+		return nil, err
+	}
+	if err = addCatalogGenreInputs(ctx, tx, items); err != nil {
 		return nil, err
 	}
 	artistNames := map[int64]string{}

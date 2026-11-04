@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"github.com/gabehf/koito/internal/filters"
 	"sort"
-	"strings"
 )
 
 func artistGenreProgram(id int64) *filters.Program {
@@ -32,57 +31,71 @@ func ArtistGenres(ctx context.Context, config RuleConfig, artistID int64, name s
 }
 
 func resolveArtistGenres(ctx context.Context, programs []namingProgram, artistID int64, name string, source []string, evidence ...filters.Value) ([]string, []FilterIssue, error) {
+	state, issues, err := resolveCatalogNaming(ctx, programs, "artist", artistID, name, genreEnvironment(genreArtist{id: artistID, name: name, labels: source, evidence: evidence}))
+	return state.Genres, issues, err
+}
+
+func genreEnvironment(artist genreArtist) filters.Env {
 	values := []filters.Value{}
-	for _, label := range source {
+	for _, label := range artist.labels {
 		values = append(values, filters.String(label))
 	}
-	env := filters.Env{"catalog.kind": filters.String("artist"), "catalog.id": filters.Integer(artistID), "catalog.artist_id": filters.Integer(artistID), "original.artist": filters.String(name), "display.artist": filters.String(name), "source.genres": filters.Values(values...), "source.genre_records": filters.Values(evidence...), "artist.genres": filters.Values(values...)}
-	current := append([]string{}, source...)
-	issues := []FilterIssue{}
-	for _, program := range programs {
-		if program.rule.Scope != (RuleScope{}) {
-			continue
+	return filters.Env{"catalog.artist_id": filters.Integer(artist.id), "source.genres": filters.Values(values...), "source.genre_records": filters.Values(artist.evidence...)}
+}
+
+func addCatalogGenreInputs(ctx context.Context, tx *sql.Tx, items []catalogNameItem) error {
+	targets := []int64{}
+	if len(items) == 1 {
+		if items[0].kind != "artist" {
+			return nil
 		}
-		out, e := program.program.Run(ctx, env)
-		if e != nil {
-			return nil, issues, e
-		}
-		for _, issue := range out.Issues {
-			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, issue})
-		}
-		if len(out.Issues) > 0 {
-			continue
-		}
-		value, assigned := out.Values["artist.genres"]
-		if !assigned {
-			continue
-		}
-		items, ok := value.Items()
-		next := []string{}
-		for _, item := range items {
-			text, valid := item.Text()
-			if !valid || strings.TrimSpace(text) == "" {
-				ok = false
-				break
+		targets = append(targets, items[0].id)
+	}
+	artists, err := loadArtistGenreInputs(ctx, tx, targets...)
+	if err != nil {
+		return err
+	}
+	byID := map[int64]filters.Env{}
+	for _, artist := range artists {
+		byID[artist.id] = genreEnvironment(artist)
+	}
+	for i := range items {
+		if items[i].kind == "artist" {
+			for key, value := range byID[items[i].id] {
+				items[i].metadata[key] = value
 			}
-			next = append(next, text)
-		}
-		if !ok {
-			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, filters.Issue{Path: "artist.genres", Reason: "Artist genres require a list of nonempty text labels."}})
-			continue
-		}
-		current = next
-		env["artist.genres"] = value
-	}
-	result := []string{}
-	seen := map[string]bool{}
-	for _, label := range current {
-		if strings.TrimSpace(label) != "" && !seen[label] {
-			seen[label] = true
-			result = append(result, label)
 		}
 	}
-	return result, issues, nil
+	return nil
+}
+
+func catalogArtistMetadata(ctx context.Context, tx *sql.Tx, targets ...int64) (map[int64]filters.Env, error) {
+	items := []catalogNameItem{}
+	if len(targets) > 0 {
+		item, _, err := nativeCatalogItem(ctx, tx, "artist", targets[0])
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	} else {
+		var err error
+		items, err = catalogNameItems(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result := map[int64]filters.Env{}
+	for _, item := range items {
+		if item.kind == "artist" {
+			result[item.id] = item.metadata
+		}
+	}
+	return result, nil
+}
+
+func resolveGenreArtist(ctx context.Context, programs []namingProgram, artist genreArtist, metadata filters.Env) ([]string, []FilterIssue, error) {
+	state, issues, err := resolveCatalogNaming(ctx, programs, "artist", artist.id, artist.name, metadata, genreEnvironment(artist))
+	return state.Genres, issues, err
 }
 
 func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...int64) error {
@@ -93,6 +106,13 @@ func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig, tar
 	artists, err := loadArtistGenreInputs(ctx, tx, targets...)
 	if err != nil {
 		return err
+	}
+	metadata := map[int64]filters.Env{}
+	if len(programs) > 0 {
+		metadata, err = catalogArtistMetadata(ctx, tx, targets...)
+		if err != nil {
+			return err
+		}
 	}
 	for _, q := range []string{`DELETE FROM artist_genres`, `DELETE FROM artist_genre_issues`} {
 		args := []any{}
@@ -110,7 +130,8 @@ func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig, tar
 	}
 	defer insert.Close()
 	for _, artist := range artists {
-		genres, issues, e := resolveArtistGenres(ctx, programs, artist.id, artist.name, artist.labels, artist.evidence...)
+		genres, issues, e := resolveGenreArtist(ctx, programs, artist, metadata[artist.id])
+		issues = catalogDomainIssues(programs, issues, true)
 		if e != nil {
 			return e
 		}
@@ -224,12 +245,16 @@ func previewArtistGenres(ctx context.Context, tx *sql.Tx, before, after RuleConf
 	if err != nil {
 		return nil, err
 	}
+	metadata, err := catalogArtistMetadata(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	for _, artist := range artists {
-		a, _, e := resolveArtistGenres(ctx, old, artist.id, artist.name, artist.labels, artist.evidence...)
+		a, _, e := resolveGenreArtist(ctx, old, artist, metadata[artist.id])
 		if e != nil {
 			return nil, e
 		}
-		b, _, e := resolveArtistGenres(ctx, next, artist.id, artist.name, artist.labels, artist.evidence...)
+		b, _, e := resolveGenreArtist(ctx, next, artist, metadata[artist.id])
 		if e != nil {
 			return nil, e
 		}

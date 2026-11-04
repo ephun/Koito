@@ -1013,3 +1013,37 @@ There were zero collisions or estimates.
 All preservation fingerprints and three original-file hashes passed.
 Track 271 retained its 521 plays and original album associations.
 Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.
+
+## Combined catalog names and artist genres
+
+Artist names, aliases, credits, and genres now share the catalog Naming evaluator.
+Filters read earlier valid Naming results in their saved order.
+A single filter can assign a name and derive genre labels from that new name.
+Invalid names, genre labels, credits, or unsupported actions reject the filter's complete result.
+Earlier valid results remain available to later filters.
+
+Filters can branch on Item type to apply different artist and record actions.
+An artist genre assignment in a record branch rejects that filter's record result and produces an inspectable issue.
+Source genre evidence is loaded before catalog Naming publication.
+Native capture, enrichment, previews, and rebuilding use the same catalog Naming state.
+Shared aliases refresh genre-dependent names for other affected artists as well as their genre assignments.
+
+New regressions cover ordered assignments within and across filters, name and genre validation failures,
+record/artist branching, native capture, source-alias ambiguity, previews, rebuilding, and restoration.
+The full Go suite passes.
+Native Grouping conditions that read corrected display names, catalog-read coverage,
+and the final Phase 4 requirement audit remain open.
+
+Actual-import browser acceptance used artist 1 and its 369 existing plays.
+One filter assigned a displayed name and derived its genre label from that new name.
+Both previews, native search, genre-filtered charts, and the two-action editor passed.
+The editor and chart passed at 390 and 320 pixels without page errors.
+Original record, play, alias, and source-genre fingerprints stayed unchanged.
+Restoring the original configuration restored the original name, genres, and checked fingerprints.
+
+Main activation passed after a database backup and Rebuild.
+The rebuild completed in 65.219 seconds with 191,473 records and 168,424 plays.
+There were zero collisions or estimates.
+All preservation fingerprints and three original-file hashes passed.
+Track 271 retained its 521 plays and original album associations.
+Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.

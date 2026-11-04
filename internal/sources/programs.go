@@ -35,7 +35,7 @@ func namingSchema() filters.Schema {
 			"library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
 		Targets: map[string]filters.Type{"display.aliases": filters.List, "display.artist_ids": filters.List, "display.primary_artist_ids": filters.List, "display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
-		Help:    map[string]string{"display.aliases": "Choose alternate names used by search.", "display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
+		Help:    map[string]string{"display.aliases": "Choose alternate names used by search.", "display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
 		Labels:  map[string]string{"display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	}
 }
@@ -149,10 +149,10 @@ func compileNamingDomain(config RuleConfig, genres bool) ([]namingProgram, error
 		if hasGenres && rule.Scope != (RuleScope{}) {
 			return nil, fmt.Errorf("Filter %s needs genre conditions inside IF or WHERE.", rule.ID)
 		}
-		if hasNames && hasGenres {
-			return nil, fmt.Errorf("Filter %s must separate artist genres from record naming actions.", rule.ID)
+		if genres && !hasGenres && !statementsRead(rule.Program.Steps, "catalog.kind") {
+			continue
 		}
-		if hasGenres != genres {
+		if !genres && hasGenres && (!hasNames || !statementsRead(rule.Program.Steps, "catalog.kind")) {
 			continue
 		}
 		compiled, err := filters.CompileProgram(*rule.Program, namingSchema())
@@ -215,6 +215,9 @@ func applyNaming(ctx context.Context, programs []namingProgram, r matchingRecord
 			return v, err
 		}
 		if len(result.Issues) > 0 {
+			continue
+		}
+		if _, assigned := result.Values["artist.genres"]; assigned {
 			continue
 		}
 		// Validate the complete change before allowing later filters to read it.

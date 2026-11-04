@@ -300,6 +300,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = publishCatalogIdentifiers(ctx, tx, config); err != nil {
 		return result, err
 	}
+	if err = refreshSourceGenres(ctx, tx); err != nil {
+		return result, err
+	}
 	if err = publishCatalogNames(ctx, tx, config); err != nil {
 		return result, err
 	}
@@ -311,9 +314,6 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		return result, err
 	}
 	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {
-		return result, err
-	}
-	if err = refreshSourceGenres(ctx, tx); err != nil {
 		return result, err
 	}
 	if err = publishArtistGenres(ctx, tx, config); err != nil {

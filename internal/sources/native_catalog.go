@@ -43,11 +43,21 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 			if err = publishArtistGenres(ctx, tx, version.Config, artist); err != nil {
 				return err
 			}
+			if artist != id {
+				item, _, err := nativeCatalogItem(ctx, tx, "artist", artist)
+				if err != nil {
+					return err
+				}
+				if err = publishCatalogNames(ctx, tx, version.Config, item); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	active := false
 	for _, rule := range version.Config.Rules {
-		if rule.Enabled && rule.Program != nil && statementsRead(rule.Program.Steps, "catalog.kind") && (rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "matching" && rule.Subtype == "music") {
+		_, genres := namingTargets(rule.Program)
+		if rule.Enabled && rule.Program != nil && (statementsRead(rule.Program.Steps, "catalog.kind") || genres && kind == "artist") && (rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "matching" && rule.Subtype == "music") {
 			active = true
 		}
 	}
