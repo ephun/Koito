@@ -40,6 +40,8 @@ type RuleSettings struct {
 	EstimateTimes     bool   `json:"estimate_times,omitempty"`
 }
 type Rule struct {
+	Priority *int `json:"priority,omitempty"`
+	compiled *filters.CompiledProgram
 	Name     string           `json:"name,omitempty"`
 	Program  *filters.Program `json:"program,omitempty"`
 	ID       string           `json:"id"`
@@ -120,11 +122,18 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
-	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema()}}
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema()}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
 		return state, err
+	}
+	migrated := migrateDirectPrograms(state.Current.Config)
+	state.Blocks.Legacy = map[string]Rule{}
+	for i, rule := range migrated.Rules {
+		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil {
+			state.Blocks.Legacy[rule.ID] = rule
+		}
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT id,COALESCE(parent_id,0),config_json,label,created_at FROM filter_versions ORDER BY id DESC LIMIT 50`)
 	if err != nil {
@@ -273,6 +282,17 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		schema.Choices["file.hash"] = append(schema.Choices["file.hash"], filters.Choice{Label: file.Filename, Value: file.Hash})
 	}
 	state.Blocks.Schemas["presentation:naming"] = schema
+	for key, other := range state.Blocks.Schemas {
+		if key == "presentation:naming" {
+			continue
+		}
+		if other.Choices == nil {
+			other.Choices = map[string][]filters.Choice{}
+		}
+		other.Choices["source.service"] = schema.Choices["source.service"]
+		other.Choices["file.hash"] = schema.Choices["file.hash"]
+		state.Blocks.Schemas[key] = other
+	}
 	return state, nil
 }
 
@@ -284,7 +304,10 @@ func validateRules(config RuleConfig) error {
 	music, plays := 0, 0
 	timeScopes := map[string]bool{}
 	for _, rule := range config.Rules {
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming") {
+		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
+			return errors.New("Filter priority must be between 0 and 100000.")
+		}
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && rule.Subtype == "direct") {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -355,6 +378,15 @@ func validateRules(config RuleConfig) error {
 				return errors.New("Invalid displayed source.")
 			}
 		case rule.Type == "attribution" && rule.Subtype == "direct":
+			if rule.Program != nil {
+				if rule.Scope != (RuleScope{}) {
+					return errors.New("Move direct attribution conditions into IF blocks.")
+				}
+				if _, err := filters.CompileProgram(*rule.Program, directSchema()); err != nil {
+					return err
+				}
+				continue
+			}
 			if rule.Settings.Listener != "self" && rule.Settings.Listener != "other" && rule.Settings.Listener != "unknown" {
 				return errors.New("Choose a listener.")
 			}

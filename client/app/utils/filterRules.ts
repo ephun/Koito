@@ -15,6 +15,7 @@ export type RuleSettings = {
 };
 
 export type Rule = {
+  priority?: number;
   name?: string;
   program?: FilterProgram;
   id: string;
@@ -33,7 +34,7 @@ export type RuleScope = {
 export type FilterSource = { id: number; service: string; records: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
-  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema> };
+  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema>; legacy?: Record<string, Rule> };
   current: RuleVersion;
   time_files: { hash: string; filename: string; source_id: number; records: number }[];
   sources: FilterSource[];

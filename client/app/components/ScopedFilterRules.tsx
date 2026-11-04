@@ -65,7 +65,8 @@ export function ScopedRule({ rule, state, busy, blocked = false, onChange, onRem
 
 export function AddScopedRule({ state, type, subtype, busy, onAdd }: { state: FilterState; type: string; subtype?: string; busy: boolean; onAdd: (rule: Rule) => void }) {
   const [open, setOpen] = useState(false);
-  const [choice, setChoice] = useState(subtype || "direct");
+  const blocksForDirect = !!state.blocks?.schemas["attribution:direct"];
+  const [choice, setChoice] = useState(subtype || (type === "attribution" && blocksForDirect ? (state.sources.some(source => source.records > 0 && source.service !== "itunes") ? "heuristic" : "aggregate") : "direct"));
   const [sourceID, setSourceID] = useState("");
   const id = useId();
   const sources = state.sources.filter(source => source.records > 0 && (type === "attribution" && choice !== "aggregate" || source.service === "itunes"));
@@ -86,7 +87,7 @@ export function AddScopedRule({ state, type, subtype, busy, onAdd }: { state: Fi
   if (!open) return <button type="button" className="m-4 text-sm underline disabled:opacity-50 sm:m-5" disabled={busy} onClick={() => setOpen(true)}>Add filter</button>;
   return <div aria-label={`Add ${type} filter`} className="space-y-3 p-4 sm:p-5">
     {type === "attribution" && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-type`}>Type</label><select id={`${id}-type`} className={input} disabled={busy} value={choice} onChange={event => setChoice(event.target.value)}>
-      <option value="direct">Direct</option>{observed.length > 0 && <option value="heuristic">Heuristic</option>}{state.sources.some(source => source.service === "itunes" && source.records > 0) && <option value="aggregate">Aggregate</option>}
+      {!blocksForDirect && <option value="direct">Direct</option>}{observed.length > 0 && <option value="heuristic">Heuristic</option>}{state.sources.some(source => source.service === "itunes" && source.records > 0) && <option value="aggregate">Aggregate</option>}
     </select></div>}
     {(type === "attribution" && choice !== "aggregate" || sources.length > 1) && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-source`}>Source</label><select id={`${id}-source`} className={input} value={selected?.id || ""} disabled={busy} onChange={event => setSourceID(event.target.value)}>{sources.map(source => <option key={source.id} value={source.id}>{sourceName(source.service)}</option>)}</select></div>}
     <div className="flex gap-3"><button type="button" className={button} disabled={busy || !selected} onClick={add}>Add</button><button type="button" className="px-2 underline" disabled={busy} onClick={() => setOpen(false)}>Cancel</button></div>

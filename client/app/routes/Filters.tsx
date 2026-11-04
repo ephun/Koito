@@ -27,6 +27,7 @@ export default function Filters() {
     setStale(false);
     try {
       const state = await filterRequest<FilterState>();
+      state.current.config.rules = state.current.config.rules.map(rule => rule.program ? rule : state.blocks?.legacy?.[rule.id] || rule);
       state.sources ||= [];
       state.files ||= [];
       state.libraries ||= [];
@@ -190,7 +191,8 @@ export default function Filters() {
 
     {saved?.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="attribution-title">Attribution</h2><FieldHelp label="Attribution">Determine which listening belongs to you.</FieldHelp></div>
-      {["direct", "heuristic", "aggregate"].map(subtype => {
+      {saved && draft && saved.blocks?.schemas["attribution:direct"] && <ProgramFilterManager state={saved} config={draft} busy={saving} type="attribution" subtype="direct" embedded onChange={upsert} onRemove={remove} />}
+      {(saved.blocks?.schemas["attribution:direct"] ? ["heuristic", "aggregate"] : ["direct", "heuristic", "aggregate"]).map(subtype => {
         const rules = draft?.rules.filter(rule => rule.type === "attribution" && rule.subtype === subtype) || [];
         return !!rules.length && <div key={subtype} className={card}><div>
           <div className="flex items-center gap-1 px-4 pt-4 sm:px-5 sm:pt-5"><h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3><FieldHelp label={`${subtypeName(subtype)} attribution`}>{subtype === "direct" ? "Choose who listened using information you know." : subtype === "heuristic" ? "Estimate who listened using supporting listening evidence." : "Assign your share of a cumulative listening total."}</FieldHelp></div>

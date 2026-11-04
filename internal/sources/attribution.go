@@ -101,12 +101,12 @@ func chooseRule(config RuleConfig, kind, subtype string, applies func(Rule) bool
 }
 
 func directAttribution(r matchingRecord, config RuleConfig, from, until time.Time) Attribution {
-	rule, conflict := chooseRule(config, "attribution", "direct", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, until) })
+	rule, conflict := chooseDirectRule(config, r, from, until)
 	if conflict {
-		return Attribution{Listener: "unknown", Basis: "conflicting direct rules", Rules: []string{}, Rank: scopeRank(rule.Scope)}
+		return Attribution{Listener: "unknown", Basis: "conflicting direct rules", Rules: []string{}, Rank: rulePriority(*rule)}
 	}
 	if rule != nil {
-		return Attribution{Listener: rule.Settings.Listener, Basis: "direct", Rules: []string{rule.ID}, Rank: scopeRank(rule.Scope)}
+		return Attribution{Listener: rule.Settings.Listener, Basis: "direct", Rules: []string{rule.ID}, Rank: rulePriority(*rule)}
 	}
 	if r.Service == "itunes" {
 		return Attribution{Listener: "unknown", Basis: "unattributed library", Rules: []string{}}

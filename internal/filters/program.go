@@ -28,6 +28,7 @@ type compiledStatement struct {
 	branches        []compiledBranch
 	target          string
 	expected        Type
+	choices         []Choice
 	value           *Expression
 }
 type compiledBranch struct {
@@ -114,6 +115,10 @@ func compileStatements(steps []Statement, s Schema, depth int, n *int) ([]compil
 				return nil, fmt.Errorf("SET %s requires a %s value.", step.Set, kind)
 			}
 			c.target, c.value, c.expected = step.Set, x, kind
+			c.choices = s.Choices[step.Set]
+			if x.op == "literal" && !allowedChoice(x.value, c.choices) {
+				return nil, fmt.Errorf("SET %s requires an available choice.", step.Set)
+			}
 		}
 		out = append(out, c)
 	}
@@ -178,11 +183,30 @@ func runStatements(ctx context.Context, steps []compiledStatement, env, changes 
 			if step.expected != Any && value.Type != step.expected {
 				return &Issue{position + ".value", "Value has an incompatible type."}, nil
 			}
+			if !allowedChoice(value, step.choices) {
+				return &Issue{position + ".value", "Value is not an available choice."}, nil
+			}
 			env[step.target] = value
 			changes[step.target] = value
 		}
 	}
 	return nil, nil
+}
+
+func allowedChoice(value Value, choices []Choice) bool {
+	if len(choices) == 0 {
+		return true
+	}
+	text, ok := value.Text()
+	if !ok {
+		return false
+	}
+	for _, choice := range choices {
+		if text == choice.Value {
+			return true
+		}
+	}
+	return false
 }
 
 func reason(v Value) string {

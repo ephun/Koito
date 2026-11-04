@@ -157,3 +157,30 @@ Additional checks verified source choices and draft discard at 320 pixels.
 
 The local application exposes the editor with the existing configuration unchanged.
 Remaining work includes migrating the older filter controls into the same manager and completing the other Phase 4 requirements.
+
+## Direct attribution migration
+
+Direct attribution now uses the same IF/THEN/ELSE and SET editor as naming.
+SET Listener offers Me, Someone else, and Unknown.
+New attribution filters start disabled. Their blocks remain editable while disabled.
+Priority is available behind a collapsed control.
+Higher priorities win. Conflicting assignments at equal priority remain unresolved.
+
+Existing direct-attribution settings receive equivalent editing programs.
+Every source, record, device, artist, library, track, file, and interval condition is retained.
+Previous specificity becomes an explicit priority.
+Presence checks preserve the earlier treatment of missing condition fields.
+Saved history stays unchanged. Programs are persisted when the edited configuration is saved.
+The legacy API representation continues to execute through its original scope behavior.
+
+Migration tests compare original and converted attribution across matching and mismatching records.
+They cover disabled settings, absent metadata, date boundaries, priorities, and conflicting assignments.
+Backend tests also verify ELSE behavior, disabling a program, and unchanged source records.
+The full Go suite and frontend type checking and build pass.
+
+Browser acceptance used the isolated copy of the actual imported history.
+A source-based attribution filter changed the displayed play count from 168,424 to 159,322.
+Disabling it restored 168,424 plays. All 191,473 records remained stored.
+The editor passed 390-pixel and 320-pixel checks without browser errors.
+
+Matching, inference, heuristic attribution, aggregate attribution, grouping, genres, and metadata controls remain in Phase 4.
