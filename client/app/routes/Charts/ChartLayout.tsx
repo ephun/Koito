@@ -1,5 +1,7 @@
 import { useFetcher, useLocation, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "api/api";
 import { average } from "color.js";
 import { type PaginatedResponse } from "api/api";
 import PeriodSelector from "~/components/PeriodSelector";
@@ -33,6 +35,8 @@ export default function ChartLayout<T>({
 
   const currentParams = new URLSearchParams(location.search);
   const currentPage = parseInt(currentParams.get("page") || "1", 10);
+  const genre = currentParams.get("genre") || "";
+  const { data: genres = [] } = useQuery({ queryKey: ["genres"], queryFn: () => apiFetch<string[]>("/apis/web/v1/genres"), enabled: title !== "Last Played" });
 
   const data: PaginatedResponse<T> = fetcher.data?.[endpoint]
     ? fetcher.data[endpoint]
@@ -46,9 +50,12 @@ export default function ChartLayout<T>({
     const img = (data.items[0] as any)?.item?.image;
     if (!img) return;
 
+    let active = true;
     average(img.small, { amount: 1 }).then((color) => {
+      if (!active) return;
       setBgColor(`rgba(${color[0]},${color[1]},${color[2]},0.2)`);
-    });
+    }).catch(() => { if (active) setBgColor("transparent"); });
+    return () => { active = false; };
   }, [data]);
 
   const period = currentParams.get("period") ?? "day";
@@ -226,6 +233,11 @@ export default function ChartLayout<T>({
             setter={handleSetPeriod}
             disableCache
           />
+          {title !== "Last Played" && (genres.length > 0 || genre) && <select aria-label="Genre" value={genre} onChange={event => updateParams({genre: event.target.value || null, page: "1"})} className="max-w-full rounded border border-gray-400 px-2 py-1">
+            <option value="">All genres</option>
+            {genre && !genres.includes(genre) && <option value={genre}>{genre}</option>}
+            {genres.map(label => <option key={label} value={label}>{label}</option>)}
+          </select>}
           <div className="flex gap-3">
             <select
               value={year ?? ""}

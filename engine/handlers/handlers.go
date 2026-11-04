@@ -67,6 +67,7 @@ func OptsFromRequest(r *http.Request) db.GetItemsOpts {
 		limit, page, tf.Week, tf.Month, tf.Year, tf.FromUnix, tf.ToUnix, artistId, albumId, trackId, period)
 
 	return db.GetItemsOpts{
+		Genre:        r.URL.Query().Get("genre"),
 		AlbumGroupID: albumGroupID,
 		Limit:        limit,
 		Page:         page,

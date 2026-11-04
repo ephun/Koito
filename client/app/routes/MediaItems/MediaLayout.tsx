@@ -38,9 +38,12 @@ export default function MediaLayout(props: Props) {
   const { user } = useAppContext();
 
   useEffect(() => {
+    let active = true;
     average(props.img.xs, { amount: 1 }).then((color) => {
+      if (!active) return;
       setBgColor(`rgba(${color[0]},${color[1]},${color[2]},0.2)`);
-    });
+    }).catch(() => { if (active) setBgColor("transparent"); });
+    return () => { active = false; };
   }, [props.img]);
 
   const replaceImageCallback = () => {

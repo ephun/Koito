@@ -41,6 +41,10 @@ func (s *Sqlite) topAlbumReports(ctx context.Context, opts db.GetItemsOpts) (*db
 		artist = ` AND EXISTS(SELECT 1 FROM artist_releases ar WHERE ar.release_id=l.release_id AND ar.artist_id=?)`
 		args = append(args, opts.ArtistID)
 	}
+	if opts.Genre != "" {
+		artist += ` AND EXISTS(SELECT 1 FROM artist_tracks gat JOIN artist_genres ag ON ag.artist_id=gat.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
+		args = append(args, opts.Genre)
+	}
 	args = append(args, opts.Limit, offset)
 	rows, err := s.db.QueryContext(ctx, `WITH counts AS (
  SELECT `+albumReportKey+` AS report_key,l.album_group_id,MIN(l.release_id) AS release_id,SUM(l.amount) AS listen_count

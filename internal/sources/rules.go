@@ -134,6 +134,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
+	state.Blocks.Templates["presentation:naming"] = []ProgramTemplate{{"names", "Displayed names", displayedNameProgram()}, {"genres", "Artist genres", artistGenreProgram(0)}}
 	state.Blocks.Templates["presentation:grouping"] = []ProgramTemplate{{"editions", "Group edition suffixes", editionGroupingProgram()}}
 	state.Blocks.Templates["matching:play"] = []ProgramTemplate{{"overlap", "Overlapping timestamp ranges", defaultPlayProgram(0)}, {"tolerance", "Timestamp ranges within 30 seconds", defaultPlayProgram(30)}}
 	state.Blocks.Templates["matching:music"] = []ProgramTemplate{{"exact", "Exact comparison names", defaultMusicProgram(true, true)}, {"case", "Case-insensitive comparison names", defaultMusicProgram(false, true)}}

@@ -124,6 +124,7 @@ type AddArtistsToTrackOpts struct {
 }
 
 type GetItemsOpts struct {
+	Genre        string
 	AlbumGroupID int
 	Limit        int
 	Page         int

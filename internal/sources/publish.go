@@ -297,6 +297,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = refreshSourceGenres(ctx, tx); err != nil {
 		return result, err
 	}
+	if err = publishArtistGenres(ctx, tx, config); err != nil {
+		return result, err
+	}
 	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {
 		return result, err
 	}

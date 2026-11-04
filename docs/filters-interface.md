@@ -246,7 +246,7 @@ Every implemented subtype uses the shared filter manager and conditional editor.
 | Attribution | Direct | Assign Me, Someone else, or Unknown |
 | Attribution | Heuristic | Assign listening using explicit personal-play collections |
 | Attribution | Aggregate | Assign a percentage of cumulative counts |
-| Presentation | Naming | Assign displayed artist, album, and track names |
+| Presentation | Naming | Assign displayed music names or artist genres |
 | Presentation | Grouping | Report album editions together while retaining release identities |
 
 Each filter has a name, an enabled state, IF/THEN summaries, and an expandable editor.
@@ -277,7 +277,18 @@ Imports and listening history provide record inspection and source downloads.
 Inspection shows unresolved conditions, count contributions, attribution, and record-pair comparisons.
 Manual matching decisions remain separate from automatic comparisons.
 Koito's native search remains the music lookup interface.
-Contextual catalog corrections, genres, and optional listening metadata remain in Phase 4.
+Contextual catalog corrections and optional listening metadata remain in Phase 4.
+
+Artist genres use Naming filters in an artist context.
+Record naming and artist genre actions belong in separate filters.
+Source genre labels supplies the original labels associated with an unambiguous artist alias.
+Source genre records also supplies source identifiers, file hashes, record identifiers, and field locations.
+WHERE and MAP can select labels from particular sources or files.
+LIST supplies manual labels. An empty list clears the assignment.
+Disabling an assignment restores the preceding interpretation of the evidence.
+Artist pages link to their genre filter and to genre-constrained artist charts.
+Chart selectors use the published genre values and retain date and pagination constraints.
+Genre previews compare final label sets. Unresolved assignments remain inspectable on artist pages.
 
 Grouping uses SET Album group with ordinary conditions, expressions, and branches.
 Its starting filter recognizes selected deluxe, expanded, and remastered suffixes.

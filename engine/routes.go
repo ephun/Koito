@@ -63,6 +63,7 @@ func bindRoutes(
 			r.Get("/top/tracks", handlers.GetTopTracksHandler(db))
 			r.Get("/top/albums", handlers.GetTopAlbumsHandler(db))
 			r.Get("/top/artists", handlers.GetTopArtistsHandler(db))
+			r.Get("/genres", handlers.GetGenresHandler(db))
 
 			r.Get("/listens", handlers.GetListensHandler(db))
 			r.Get("/listen-activity", handlers.GetListenActivityHandler(db))

@@ -48,6 +48,9 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 		var env filters.Env
 		switch {
 		case rule.Type == "presentation" && rule.Subtype == "naming":
+			if _, genres := namingTargets(rule.Program); genres {
+				continue
+			}
 			if !scopeContains(rule.Scope, r, from, until) {
 				continue
 			}

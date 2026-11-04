@@ -490,7 +490,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 		} else {
 			query = countedListeningQuery(query, opts.Timeframe)
 		}
-		rows, err = s.db.QueryContext(ctx, query, t1.Unix(), t2.Unix(), albumID, opts.Limit, offset)
+		rows, err = s.genreChartRows(ctx, query, opts.Genre, false, t1.Unix(), t2.Unix(), albumID, opts.Limit, offset)
 
 	case opts.ArtistID > 0:
 		query := `
@@ -516,7 +516,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 			JOIN releases rls ON twt.release_id = rls.id
 			ORDER BY r.rank, r.track_id`
 
-		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.ArtistID, opts.Limit, offset)
+		rows, err = s.genreChartRows(ctx, countedListeningQuery(query, opts.Timeframe), opts.Genre, false, t1.Unix(), t2.Unix(), opts.ArtistID, opts.Limit, offset)
 
 	default:
 		query := `
@@ -540,7 +540,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 			JOIN releases rls ON twt.release_id = rls.id
 			ORDER BY r.rank, r.track_id`
 
-		rows, err = s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.Limit, offset)
+		rows, err = s.genreChartRows(ctx, countedListeningQuery(query, opts.Timeframe), opts.Genre, false, t1.Unix(), t2.Unix(), opts.Limit, offset)
 	}
 
 	if err != nil {

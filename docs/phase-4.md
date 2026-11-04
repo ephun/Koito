@@ -99,11 +99,10 @@ They are excluded from Git.
 
 ## Remaining Phase 4 work
 
-1. Add source and manual genres with artist genre assignment and chart filtering.
-2. Add optional source and metadata tags to listening rows.
-3. Integrate contextual corrections with native search and replace the remaining destructive cleanup operations.
-4. Extend previews, exceptions, and undo checks to those remaining actions.
-5. Verify every Phase 4 acceptance criterion against the completed implementation.
+1. Add optional source and metadata tags to listening rows.
+2. Integrate contextual corrections with native search and replace the remaining destructive cleanup operations.
+3. Extend previews, exceptions, and undo checks to those remaining actions.
+4. Verify every Phase 4 acceptance criterion against the completed implementation.
 
 ## Atomic engine and first integration
 
@@ -522,3 +521,37 @@ Source labels include nonmusic classifications, such as Audiobook and Voice Memo
 These labels are evidence rather than automatic decisions about qualifying listening.
 Regression tests cover exact labels, repeated values, unsupported shapes, count-independent inspection, and idempotent rebuilding.
 Source and database tests pass. Artist assignments, conflict resolution, manual overrides, and chart filtering remain unfinished.
+
+## Artist genre assignments and charts
+
+Migration 14 adds derived artist assignments and unresolved-filter explanations.
+Publication resolves artist labels in the same transaction as the view.
+Original genre evidence remains in `source_genres` and the preserved records.
+Exact artist aliases link evidence only when the alias identifies one catalog artist.
+Unlinked or ambiguous labels remain available in record inspection.
+
+Naming filters can assign Artist genres using LIST, source label collections, and conditional expressions.
+Source genre records retain file, source, record, and field references for WHERE and MAP conditions.
+Artist genre filters evaluate separately from record naming filters.
+Mixing those actions within one filter fails validation during compilation.
+Genre conditions use ordinary IF or collection expressions rather than legacy scope fields.
+Later assignments override earlier assignments. Empty lists clear labels, and disabling a filter restores its predecessors.
+Artist responses distinguish resolved labels, source evidence, and unresolved conditions.
+
+Album, track, and artist charts constrain contributions before counting and ranking.
+Genre constraints combine with date bounds, artist/album constraints, album groups, and undated all-time counts.
+The chart dropdown lists published labels. Artist labels link to the corresponding artist chart.
+Artist pages prepare or reopen a contextual Naming filter through Edit genres.
+Check changes includes before-and-after artist genre sets.
+
+Actual-import acceptance found 10,629 evidence entries linked to 920 catalog artists, producing 178 distinct published labels.
+Source records and play fingerprints remained unchanged during chart checks at 390 pixels.
+The chart browser check passed without page errors after handling missing image colors.
+An isolated manual assignment changed Ra Ra Riot's three source labels to one existing label.
+Its preview showed the change, raw records stayed unchanged, and restoring the original configuration restored all three labels.
+The main database's previous evidence rebuild preserved 191,473 records, 168,424 plays, and three original-file hashes.
+
+The full Go suite, frontend type checking, and production build pass.
+Contextual-editor browser verification passed at 390 and 320 pixels, including draft discard and no page errors.
+The main application rebuilt in 63.11 seconds, preserving 191,473 records, 168,424 plays, and all three original-file hashes.
+Optional listening tags and replacement of destructive catalog edits remain required Phase 4 work.

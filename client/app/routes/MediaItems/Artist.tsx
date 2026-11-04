@@ -1,4 +1,4 @@
-import { useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
 import TopTracks from "~/components/TopTracks";
 import { type Artist } from "api/api";
 import LastPlayed from "~/components/LastPlayed";
@@ -8,6 +8,7 @@ import ActivityGrid from "~/components/ActivityGrid";
 import { timeListenedString } from "~/utils/utils";
 import InterestGraph from "~/components/InterestGraph";
 import MediaItemNote from "~/components/MediaItemNote";
+import { useAppContext } from "~/providers/AppProvider";
 
 export async function clientLoader({ params }: LoaderFunctionArgs) {
   const res = await fetch(`/apis/web/v1/artist/${params.id}`);
@@ -21,6 +22,7 @@ export async function clientLoader({ params }: LoaderFunctionArgs) {
 export default function Artist() {
   const artist = useLoaderData() as Artist;
   const period = "all_time";
+  const {user} = useAppContext();
 
   let index = artist.aliases.indexOf(artist.name);
   if (index !== -1) {
@@ -39,8 +41,12 @@ export default function Artist() {
       listenCount={artist.listen_count}
       firstListen={artist.first_listen}
       imgItemId={artist.id}
-      subContent={<></>}
+      subContent={<div className="flex max-w-full flex-wrap gap-2">{artist.genres?.map(genre => <Link key={genre} className="rounded border border-(--color-bg-tertiary) px-2 py-1 text-sm hover:underline" to={`/chart/top/artists?period=all_time&genre=${encodeURIComponent(genre)}`}>{genre}</Link>)}{user?.role === "admin" && <Link className="text-sm underline" to={`/filters?artist=${artist.id}`}>Edit genres</Link>}</div>}
     >
+      {!!artist.genre_issues?.length && <details className="mt-6 rounded border border-(--color-bg-tertiary) p-3">
+        <summary className="cursor-pointer text-sm">Unresolved genre filters</summary>
+        <ul className="mt-2 space-y-2 text-sm">{artist.genre_issues.map((issue,index) => <li key={index}><Link className="underline" to="/filters">{issue.name || "Filter"}</Link>: {issue.reason}</li>)}</ul>
+      </details>}
       <div className="flex flex-col gap-14">
         <div className="flex flex-col gap-10 md:gap-12 mt-8 max-w-[1400px]">
           <div className="flex gap-10 md:gap-20 flex-wrap xl:flex-nowrap items-start">
@@ -51,7 +57,7 @@ export default function Artist() {
               showSeeMore
               className="max-w-[750px] lg:max-w-[450px]"
             />
-            <div className="min-w-[350px] flex-1">
+            <div className="min-w-0 w-full sm:min-w-[350px] flex-1">
               <LastPlayed
                 limit={11}
                 artistId={artist.id}

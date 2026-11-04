@@ -27,12 +27,15 @@ func namingSchema() filters.Schema {
 	return filters.Schema{
 		RawFields: true,
 		Fields: map[string]filters.Type{
+			"catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
 			"record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text,
 			"library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
-		Targets: map[string]filters.Type{"display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text},
+		Targets: map[string]filters.Type{"display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List},
+		Help:    map[string]string{"artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
+		Labels:  map[string]string{"artist.genres": "Artist genres", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	}
 }
 
@@ -105,7 +108,32 @@ func previewNaming(ctx context.Context, plan matchPlan, before, after RuleConfig
 	return examples, nil
 }
 
+func namingTargets(program *filters.Program) (names, genres bool) {
+	if program == nil {
+		return
+	}
+	var visit func([]filters.Statement)
+	visit = func(steps []filters.Statement) {
+		for _, step := range steps {
+			if step.Set == "artist.genres" {
+				genres = true
+			} else if step.Set != "" {
+				names = true
+			}
+			visit(step.Then)
+			visit(step.Else)
+			for _, branch := range step.ElseIf {
+				visit(branch.Then)
+			}
+		}
+	}
+	visit(program.Steps)
+	return
+}
 func compileNaming(config RuleConfig) ([]namingProgram, error) {
+	return compileNamingDomain(config, false)
+}
+func compileNamingDomain(config RuleConfig, genres bool) ([]namingProgram, error) {
 	var programs []namingProgram
 	for _, rule := range config.Rules {
 		if !rule.Enabled || rule.Type != "presentation" || rule.Subtype != "naming" {
@@ -113,6 +141,16 @@ func compileNaming(config RuleConfig) ([]namingProgram, error) {
 		}
 		if rule.Program == nil {
 			return nil, fmt.Errorf("Naming filter %s has no program.", rule.ID)
+		}
+		hasNames, hasGenres := namingTargets(rule.Program)
+		if hasGenres && rule.Scope != (RuleScope{}) {
+			return nil, fmt.Errorf("Filter %s needs genre conditions inside IF or WHERE.", rule.ID)
+		}
+		if hasNames && hasGenres {
+			return nil, fmt.Errorf("Filter %s must separate artist genres from record naming actions.", rule.ID)
+		}
+		if hasGenres != genres {
+			continue
 		}
 		compiled, err := filters.CompileProgram(*rule.Program, namingSchema())
 		if err != nil {
@@ -170,6 +208,9 @@ func applyNaming(ctx context.Context, programs []namingProgram, r matchingRecord
 		// Validate the complete change before allowing later filters to read it.
 		candidate := v
 		for key, value := range result.Values {
+			if key == "artist.genres" {
+				continue
+			}
 			text, ok := value.Text()
 			if !ok {
 				return v, fmt.Errorf("Naming filter %s must produce text.", program.rule.ID)

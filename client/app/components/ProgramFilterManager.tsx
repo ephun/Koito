@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FilterBlockEditor, { expressionSummary, statementSummary } from "./FilterBlockEditor";
 import FieldHelp from "./FieldHelp";
 import { Switch, filterInput as input, filterButton as button } from "./FilterControls";
@@ -6,10 +6,11 @@ import { defaultRuleSettings, filterRequest, type FilterState, type Rule, type R
 
 type NamingExample = { record_id: number; field: string; before: string; after: string };
 
-export default function ProgramFilterManager({ state, config, busy, type = "presentation", subtype = "naming", embedded = false, onChange, onRemove, onMove }: {
-  state: FilterState; config: RuleConfig; busy: boolean; type?: string; subtype?: string; embedded?: boolean; onChange: (rule: Rule) => void; onRemove: (id: string) => void; onMove?: (id: string, direction: -1 | 1) => void;
+export default function ProgramFilterManager({ state, config, busy, type = "presentation", subtype = "naming", embedded = false, onChange, onRemove, onMove, focusId }: {
+  state: FilterState; config: RuleConfig; busy: boolean; type?: string; subtype?: string; embedded?: boolean; onChange: (rule: Rule) => void; onRemove: (id: string) => void; onMove?: (id: string, direction: -1 | 1) => void; focusId?: string;
 }) {
   const [expanded, setExpanded] = useState<string>();
+  useEffect(() => { if (focusId) setExpanded(focusId); }, [focusId]);
   const [templateName, setTemplateName] = useState("");
   const [checking, setChecking] = useState(false);
   const [examples, setExamples] = useState<NamingExample[]>();

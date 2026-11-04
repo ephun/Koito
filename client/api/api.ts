@@ -319,6 +319,8 @@ type SimpleTrack = {
   image: ImageList;
 };
 type Artist = {
+  genres?: string[];
+  genre_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;
   name: string;
   image: ImageList;

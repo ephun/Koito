@@ -5,13 +5,14 @@ import FieldHelp from "~/components/FieldHelp";
 import ProgramFilterManager from "~/components/ProgramFilterManager";
 import { useAppContext } from "~/providers/AppProvider";
 import { filterButton as button } from "~/components/FilterControls";
-import { filterRequest, FilterRequestError, type FilterState, type Rule, type RuleConfig, type RuleVersion } from "~/utils/filterRules";
+import { defaultRuleSettings, filterRequest, FilterRequestError, type FilterState, type Rule, type RuleConfig, type RuleVersion } from "~/utils/filterRules";
 
 export default function Filters() {
   const { user } = useAppContext();
   const queries = useQueryClient();
   const [params] = useSearchParams();
   const recordID = params.get("record");
+  const artistID = Number(params.get("artist")) || 0;
   const [saved, setSaved] = useState<FilterState>();
   const [draft, setDraft] = useState<RuleConfig>();
   const [loading, setLoading] = useState(true);
@@ -19,6 +20,7 @@ export default function Filters() {
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
   const [message, setMessage] = useState("");
+  const [focusedFilter, setFocusedFilter] = useState<string>();
 
   async function load() {
     setLoading(true);
@@ -32,7 +34,18 @@ export default function Filters() {
       state.files ||= [];
       state.libraries ||= [];
       setSaved(state);
-      setDraft(structuredClone(state.current.config));
+      const next = structuredClone(state.current.config);
+      if (artistID > 0) {
+        const existing = next.rules.find(rule => rule.type === "presentation" && rule.subtype === "naming" && rule.program?.steps.some(step => step.if?.op === "eq" && step.if.args?.[0]?.field === "catalog.artist_id" && step.if.args?.[1]?.value === artistID && step.then?.some(action => action.set === "artist.genres")));
+        if (existing) setFocusedFilter(existing.id);
+        else {
+          const created: Rule = {id: crypto.randomUUID(), name: "Artist genres", type: "presentation", subtype: "naming", enabled: true, scope: {}, settings: {...defaultRuleSettings}, program: {steps: [{if: {op: "eq", args: [{op:"field",field:"catalog.artist_id"},{op:"literal",value:artistID}]}, then: [{set:"artist.genres",value:{op:"field",field:"source.genres"}}]}]}};
+          next.rules.push(created);
+          setFocusedFilter(created.id);
+        }
+      }
+
+      setDraft(next);
     } catch (error) {
       setError(errorMessage(error));
     } finally { setLoading(false); }
@@ -40,7 +53,7 @@ export default function Filters() {
 
   useEffect(() => {
     if (user?.role === "admin" && !recordID) void load();
-  }, [user?.role, recordID]);
+  }, [user?.role, recordID, artistID]);
 
   function upsert(rule: Rule) {
     setDraft(previous => previous && ({ rules: previous.rules.some(existing => existing.id === rule.id)
@@ -126,7 +139,7 @@ export default function Filters() {
     </>}
     {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
-      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} />)}
+      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={subtype === "naming" ? focusedFilter : undefined} />)}
     </section>}
   </main>;
 }

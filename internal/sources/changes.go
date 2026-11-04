@@ -163,6 +163,11 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	if err != nil {
 		return preview, plan, config, added, err
 	}
+	genres, err := previewArtistGenres(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.NamingExamples = append(preview.NamingExamples, genres...)
 	preview.MusicExamples, err = previewMusic(ctx, tx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err

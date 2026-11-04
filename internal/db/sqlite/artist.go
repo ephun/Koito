@@ -96,16 +96,31 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		) WHERE artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&rank)
 
+	genres, err := s.artistGenreEvidence(ctx, opts.ID)
+	if err != nil {
+		return nil, err
+	}
+	resolvedGenres, err := s.artistGenres(ctx, opts.ID)
+	if err != nil {
+		return nil, err
+	}
+	genreIssues, err := s.artistGenreIssues(ctx, opts.ID)
+	if err != nil {
+		return nil, err
+	}
 	return &models.Artist{
-		ID:           opts.ID,
-		MbzID:        parseNullableUUID(mbzID),
-		Name:         name.String,
-		Aliases:      aliases,
-		Image:        catalog.BuildImageList(parseNullableUUID(image)),
-		ListenCount:  listenCount,
-		TimeListened: timeListened,
-		FirstListen:  firstListenUnix,
-		AllTimeRank:  rank,
+		GenreIssues:   genreIssues,
+		GenreEvidence: genres,
+		Genres:        resolvedGenres,
+		ID:            opts.ID,
+		MbzID:         parseNullableUUID(mbzID),
+		Name:          name.String,
+		Aliases:       aliases,
+		Image:         catalog.BuildImageList(parseNullableUUID(image)),
+		ListenCount:   listenCount,
+		TimeListened:  timeListened,
+		FirstListen:   firstListenUnix,
+		AllTimeRank:   rank,
 	}, nil
 }
 
@@ -397,7 +412,7 @@ func (s *Sqlite) GetTopArtistsPaginated(ctx context.Context, opts db.GetItemsOpt
 		JOIN artists_with_name awn ON awn.id = r.artist_id
 		ORDER BY r.rank, r.artist_id`
 
-	rows, err := s.db.QueryContext(ctx, countedListeningQuery(query, opts.Timeframe), t1.Unix(), t2.Unix(), opts.Limit, offset)
+	rows, err := s.genreChartRows(ctx, countedListeningQuery(query, opts.Timeframe), opts.Genre, true, t1.Unix(), t2.Unix(), opts.Limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("GetTopArtistsPaginated: %w", err)
 	}
