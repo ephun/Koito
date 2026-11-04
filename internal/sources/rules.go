@@ -130,6 +130,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
 	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema(), "inference:time": timeSchema()}}
 	state.Blocks.Schemas["presentation:grouping"] = music.GroupingSchema()
+	state.Blocks.Schemas["inclusion:scope"] = music.ScopeSchema()
 	state.Blocks.Schemas["matching:play"] = playSchema()
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
@@ -370,7 +371,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
+		if rule.Program != nil && !(rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -414,6 +415,16 @@ func validateRules(config RuleConfig) error {
 			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
+		case rule.Type == "inclusion" && rule.Subtype == "scope":
+			if rule.Program == nil {
+				return errors.New("Scope filters need IF and SET blocks.")
+			}
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Scope conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, music.ScopeSchema()); err != nil {
+				return err
+			}
 		case rule.Type == "presentation" && rule.Subtype == "grouping":
 			if rule.Program == nil {
 				return errors.New("Grouping filters need IF and SET blocks.")

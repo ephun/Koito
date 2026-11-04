@@ -322,6 +322,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {
 		return result, err
 	}
+	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
+		return result, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
 	return result, err
 }

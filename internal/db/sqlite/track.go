@@ -70,7 +70,7 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 	track.Artists = artists
 
 	var listenCount int64
-	err = s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens WHERE `+historyPredicate("track_id"), db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&listenCount)
+	err = s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM displayed_listens WHERE `+historyPredicate("track_id"), db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&listenCount)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +78,13 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 
 	var timeListened int64
 	s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(SUM(t.duration), 0) FROM listens l JOIN tracks t ON l.track_id = t.id WHERE `+historyPredicate("t.id"),
+		SELECT COALESCE(SUM(t.duration), 0) FROM displayed_listens l JOIN tracks t ON l.track_id = t.id WHERE `+historyPredicate("t.id"),
 		id).Scan(&timeListened)
 	track.TimeListened = timeListened
 
 	var firstListenUnix int64
 	err = s.db.QueryRowContext(ctx,
-		`SELECT listened_at FROM listens WHERE `+historyPredicate("track_id")+` ORDER BY listened_at ASC LIMIT 1`, id).
+		`SELECT listened_at FROM displayed_listens WHERE `+historyPredicate("track_id")+` ORDER BY listened_at ASC LIMIT 1`, id).
 		Scan(&firstListenUnix)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("getTrackByID: first listen: %w", err)
@@ -95,7 +95,7 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 	s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT rank FROM (
 			SELECT h.canonical_track_id AS track_id, RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
-			FROM listens l JOIN track_history_members h ON h.track_id=l.track_id GROUP BY h.canonical_track_id
+			FROM displayed_listens l JOIN track_history_members h ON h.track_id=l.track_id GROUP BY h.canonical_track_id
 		) WHERE track_id = (SELECT canonical_track_id FROM track_history_members WHERE track_id=?)`, db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&rank)
 	track.AllTimeRank = rank
 	if err = s.trackHistory(ctx, &track); err != nil {
@@ -115,6 +115,10 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 		return nil, err
 	}
 	track.IdentifierIssues, err = s.catalogIdentifierIssues(ctx, "track", id)
+	if err != nil {
+		return nil, err
+	}
+	track.ScopeIssues, err = s.trackScopeIssues(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +217,9 @@ func (s *Sqlite) SaveTrack(ctx context.Context, opts db.SaveTrackOpts) (*models.
 		return nil, err
 	}
 
+	if err = music.RefreshScope(ctx, tx, id64); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("SaveTrack: commit: %w", err)
 	}
@@ -478,7 +485,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 		query := `
 			WITH TrackCounts AS (
 				SELECT h.canonical_track_id AS track_id,MIN(t.release_id) AS album_id, COUNT(*) AS listen_count
-				FROM listens l
+				FROM displayed_listens l
 				JOIN track_history_members h ON h.track_id=l.track_id
 				JOIN tracks t ON l.track_id = t.id
 				WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?
@@ -512,7 +519,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 		query := `
 			WITH TrackCounts AS (
 				SELECT h.canonical_track_id AS track_id, COUNT(*) AS listen_count
-				FROM listens l
+				FROM displayed_listens l
 				JOIN track_history_members h ON h.track_id=l.track_id
 				JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 				WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?
@@ -538,7 +545,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 		query := `
 			WITH TrackCounts AS (
 				SELECT h.canonical_track_id AS track_id, COUNT(*) AS listen_count
-				FROM listens l JOIN track_history_members h ON h.track_id=l.track_id
+				FROM displayed_listens l JOIN track_history_members h ON h.track_id=l.track_id
 				WHERE l.listened_at BETWEEN ? AND ?
 				GROUP BY h.canonical_track_id
 			),
@@ -611,7 +618,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 func (s *Sqlite) CountTracks(ctx context.Context, timeframe db.Timeframe) (int64, error) {
 	t1, t2 := db.TimeframeToTimeRange(timeframe)
 	var count int64
-	err := s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(DISTINCT h.canonical_track_id) FROM listens l JOIN track_history_members h ON h.track_id=l.track_id WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
+	err := s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(DISTINCT h.canonical_track_id) FROM displayed_listens l JOIN track_history_members h ON h.track_id=l.track_id WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
 }
@@ -621,7 +628,7 @@ func (s *Sqlite) CountNewTracks(ctx context.Context, timeframe db.Timeframe) (in
 	var count int64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM (
-			SELECT h.canonical_track_id FROM listens l JOIN track_history_members h ON h.track_id=l.track_id
+			SELECT h.canonical_track_id FROM displayed_listens l JOIN track_history_members h ON h.track_id=l.track_id
 			GROUP BY h.canonical_track_id
 			HAVING MIN(l.listened_at) BETWEEN ? AND ?
 		)`,

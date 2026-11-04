@@ -2,10 +2,9 @@ import React, { useEffect, useState } from "react";
 import { average } from "color.js";
 import { type ImageList } from "api/api";
 import ImageDropHandler from "~/components/ImageDropHandler";
-import { Edit, ImageIcon, Plus, Trash } from "lucide-react";
+import { Edit, ImageIcon, Plus, EyeOff } from "lucide-react";
 import { useAppContext } from "~/providers/AppProvider";
 import ImageReplaceModal from "~/components/modals/ImageReplaceModal";
-import DeleteModal from "~/components/modals/DeleteModal";
 import EditModal from "~/components/modals/EditModal/EditModal";
 import AddListenModal from "~/components/modals/AddListenModal";
 import MbzIcon from "~/components/icons/MbzIcon";
@@ -32,7 +31,6 @@ interface Props {
 
 export default function MediaLayout(props: Props) {
   const [bgColor, setBgColor] = useState<string>("(--color-bg)");
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [addListenModalOpen, setAddListenModalOpen] = useState(false);
@@ -183,16 +181,9 @@ export default function MediaLayout(props: Props) {
                     />
                   </button>
                 )}
-                <button
-                  title="Delete Item"
-                  className="hover:cursor-pointer"
-                  onClick={() => setDeleteModalOpen(true)}
-                >
-                  <Trash
-                    size={iconSize}
-                    className="hover:stroke-(--color-fg-secondary)"
-                  />
-                </button>
+                <Link title="Edit inclusion" aria-label="Edit inclusion" className="hover:cursor-pointer" to={`/filters?catalog=${props.type.toLowerCase()}&id=${props.id}&edit=scope`}>
+                  <EyeOff size={iconSize} className="hover:stroke-(--color-fg-secondary)" />
+                </Link>
                 <EditModal
                   open={renameModalOpen}
                   setOpen={setRenameModalOpen}
@@ -205,13 +196,6 @@ export default function MediaLayout(props: Props) {
                   id={props.imgItemId}
                   musicbrainzId={props.musicbrainzId}
                   type={props.type === "Track" ? "Album" : props.type}
-                />
-                <DeleteModal
-                  open={deleteModalOpen}
-                  setOpen={setDeleteModalOpen}
-                  title={props.title}
-                  id={props.id}
-                  type={props.type}
                 />
               </>
             )}

@@ -68,20 +68,20 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	}
 
 	var listenCount int64
-	s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
+	s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM displayed_listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&listenCount)
 
 	var timeListened int64
 	s.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(t.duration), 0)
-		FROM listens l JOIN tracks t ON l.track_id = t.id
+		FROM displayed_listens l JOIN tracks t ON l.track_id = t.id
 		JOIN displayed_artist_tracks at2 ON t.id = at2.track_id
 		WHERE at2.artist_id = ?`,
 		opts.ID).Scan(&timeListened)
 
 	var firstListenUnix int64
 	err = s.db.QueryRowContext(ctx, `
-		SELECT l.listened_at FROM listens l
+		SELECT l.listened_at FROM displayed_listens l
 		JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 		WHERE at2.artist_id = ? ORDER BY l.listened_at ASC LIMIT 1`,
 		opts.ID).Scan(&firstListenUnix)
@@ -94,7 +94,7 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		SELECT rank FROM (
 			SELECT at2.artist_id,
 			       RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
-			FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
+			FROM displayed_listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 			GROUP BY at2.artist_id
 		) WHERE artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&rank)
@@ -413,7 +413,7 @@ func (s *Sqlite) GetTopArtistsPaginated(ctx context.Context, opts db.GetItemsOpt
 	query := `
 		WITH ArtistCounts AS (
 			SELECT at2.artist_id, COUNT(*) AS listen_count
-			FROM listens l
+			FROM displayed_listens l
 			JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ?
 			GROUP BY at2.artist_id
@@ -570,7 +570,7 @@ func (s *Sqlite) CountArtists(ctx context.Context, timeframe db.Timeframe) (int6
 	var count int64
 	err := s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT COUNT(DISTINCT at2.artist_id)
-		FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
+		FROM displayed_listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 		WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
@@ -582,7 +582,7 @@ func (s *Sqlite) CountNewArtists(ctx context.Context, timeframe db.Timeframe) (i
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM (
 			SELECT at2.artist_id
-			FROM listens l
+			FROM displayed_listens l
 			JOIN tracks t ON l.track_id = t.id
 			JOIN displayed_artist_tracks at2 ON t.id = at2.track_id
 			GROUP BY at2.artist_id

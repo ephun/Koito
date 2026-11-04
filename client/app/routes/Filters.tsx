@@ -26,6 +26,7 @@ export default function Filters() {
   const [focusedFilter, setFocusedFilter] = useState<string>();
   const [focusedMatching, setFocusedMatching] = useState(false);
   const [focusedGrouping, setFocusedGrouping] = useState(false);
+  const [focusedScope, setFocusedScope] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -33,6 +34,7 @@ export default function Filters() {
     setStale(false);
     setFocusedMatching(false);
     setFocusedGrouping(false);
+    setFocusedScope(false);
     setFocusedFilter(undefined);
     try {
       const state = await filterRequest<FilterState>();
@@ -58,9 +60,11 @@ export default function Filters() {
         const classification = catalogKind === "album" && catalogEdit === "classification";
         const credits = ["album","track"].includes(catalogKind) && catalogEdit === "credits";
         const aliases = catalogEdit === "aliases";
-        const id = `catalog-${aliases ? "aliases" : credits ? "credits" : classification ? "classification" : identifier ? "identifier" : "name"}-${catalogKind}-${catalogID}`;
+        const scope = catalogEdit === "scope";
+        const id = `catalog-${scope ? "scope" : aliases ? "aliases" : credits ? "credits" : classification ? "classification" : identifier ? "identifier" : "name"}-${catalogKind}-${catalogID}`;
         setFocusedMatching(identifier);
         setFocusedGrouping(classification);
+        setFocusedScope(scope);
         const existing = next.rules.find(rule => rule.id === id);
         if (!existing) {
           const response = await fetch(`/apis/web/v1/${catalogKind}/${catalogID}`);
@@ -68,6 +72,10 @@ export default function Filters() {
           const item = await response.json();
           const field = catalogKind === "track" ? "title" : catalogKind;
           const name = catalogKind === "artist" ? item.name : item.title;
+          if (scope) {
+            const condition = catalogKind === "artist" || catalogKind === "track" ? {op:"in",args:[{op:"literal",value:catalogID},{op:"field",field:catalogKind === "artist" ? "catalog.artist_ids" : "catalog.track_ids"}]} : {op:"eq",args:[{op:"field",field:"catalog.album_id"},{op:"literal",value:catalogID}]};
+            next.rules.push({id,name:`Inclusion for ${name}`.slice(0,200),type:"inclusion",subtype:"scope",enabled:true,scope:{},settings:{...defaultRuleSettings},program:{steps:[{if:condition,then:[{set:"view.include",value:{op:"literal",value:false}}]}]}});
+          } else
           if (aliases) {
             const response = await fetch(`/apis/web/v1/${catalogKind}/${catalogID}/aliases`);
             if (!response.ok) throw new Error("Could not load aliases.");
@@ -179,7 +187,11 @@ export default function Filters() {
     </>}
     {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
-      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={(subtype === "grouping" ? focusedGrouping : !focusedMatching && !focusedGrouping) ? focusedFilter : undefined} />)}
+      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={(subtype === "grouping" ? focusedGrouping : !focusedMatching && !focusedGrouping && !focusedScope) ? focusedFilter : undefined} />)}
+    </section>}
+    {saved && draft && <section aria-labelledby="inclusion-title" className="space-y-3">
+      <div className="flex items-center gap-2"><h2 id="inclusion-title">Inclusion</h2><FieldHelp label="Inclusion">Choose which music contributes to the view.</FieldHelp></div>
+      <ProgramFilterManager state={saved} config={draft} busy={saving} type="inclusion" subtype="scope" embedded onChange={upsert} onRemove={remove} onMove={move} focusId={focusedScope ? focusedFilter : undefined} />
     </section>}
   </main>;
 }

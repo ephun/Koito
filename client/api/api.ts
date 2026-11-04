@@ -178,11 +178,6 @@ function updateApiKeyLabel(id: number, label: string): Promise<Response> {
   });
 }
 
-function deleteItem(itemType: string, id: number): Promise<Response> {
-  return fetch(`/apis/web/v1/${itemType}/${id}`, {
-    method: "DELETE",
-  });
-}
 function updateUser(username: string, password: string) {
   const form = new URLSearchParams();
   form.append("username", username);
@@ -273,7 +268,6 @@ export {
   login,
   logout,
   getCfg,
-  deleteItem,
   updateUser,
   getAliases,
   createAlias,
@@ -298,6 +292,7 @@ type ImageList = {
   xl: string;
 };
 type Track = {
+  scope_issues?: {filter_id:string;name:string;path:string;reason:string}[];
   identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;

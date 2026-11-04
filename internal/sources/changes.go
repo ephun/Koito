@@ -32,6 +32,7 @@ type PreviewExample struct {
 	Artist string    `json:"artist"`
 }
 type FilterPreview struct {
+	ScopeExamples    []NamingExample  `json:"scope_examples"`
 	GroupingExamples []NamingExample  `json:"grouping_examples"`
 	MusicExamples    []NamingExample  `json:"music_examples"`
 	NamingExamples   []NamingExample  `json:"naming_examples"`
@@ -191,6 +192,10 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.GroupingExamples = append(preview.GroupingExamples, classifications...)
+	preview.ScopeExamples, err = previewScope(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
 	preview.BaseVersion = current.ID
 	preview.After = len(plan.Plays)
 	preview.Records = len(records)

@@ -109,6 +109,9 @@ func initializeMusic(db *sql.DB) error {
 	if err = music.RefreshHistories(ctx, tx, sensitive); err != nil {
 		return err
 	}
+	if err = music.RefreshScope(ctx, tx, 0); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

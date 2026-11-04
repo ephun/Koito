@@ -320,34 +320,24 @@ func TestValidateToken(t *testing.T) {
 	assert.Equal(t, 401, resp.StatusCode)
 }
 
-func TestDelete(t *testing.T) {
+func TestRetiredCatalogDeletionKeepsOriginalItemsAndListens(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/artist/1", nil)
+	before, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1")
+	for _, kind := range []string{"artist", "album", "track"} {
+		response, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/"+kind+"/1", nil)
+		require.NoError(t, err)
+		response.Body.Close()
+		require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+		response, err = makeAuthRequest(t, session, "GET", "/apis/web/v1/"+kind+"/1", nil)
+		require.NoError(t, err)
+		response.Body.Close()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	}
+	after, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/album/1", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/1")
-	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/track/1", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
+	require.Equal(t, before, after)
 	truncateTestData(t)
 }
 
@@ -355,12 +345,12 @@ func TestLoginGate(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
 
-	req, err := http.NewRequest("DELETE", host()+"/apis/web/v1/artist/1", nil)
+	req, err := http.NewRequest("GET", host()+"/apis/web/v1/artist/1", nil)
 	require.NoError(t, err)
 	req.Header.Add("Authorization", "Token "+apikey)
 	resp, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
-	assert.Equal(t, 204, resp.StatusCode)
+	assert.Equal(t, 200, resp.StatusCode)
 
 	req, err = http.NewRequest("GET", host()+"/apis/web/v1/artist/3", nil)
 	require.NoError(t, err)

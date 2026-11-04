@@ -742,3 +742,52 @@ All three original-file hashes and the preservation fingerprints passed.
 The checked track retained 521 plays across the same album appearances.
 Empty alias responses use lists, and contextual alias and credit editors also tolerate older empty responses.
 Focused empty-list checks and subsequent frontend type checking and production build passed.
+
+## Reversible catalog exclusion
+
+Inclusion / Scope now evaluates ordered IF / THEN / ELSE filters over catalog music.
+Conditions can use shared track histories, individual album appearances, releases, artist identities, and original or displayed names.
+SET Include in the view chooses whether matching music contributes to listening history and totals.
+Later filters can include explicit exceptions to earlier exclusions.
+Artist conditions use the displayed credit identities, including reversible credit corrections.
+
+Migration 21 stores derived track decisions and unresolved conditions separately from original listens.
+The displayed event view and weighted count views apply the same decisions.
+Calendar history, all-time totals, undated counts, item totals, rankings, and activity reads now use those views.
+Original export and mutation helpers retain original-listen reads.
+Disabling exclusion restores the original listening view.
+New native tracks evaluate the active Scope filters after their history assignment.
+
+Edit inclusion replaces Delete Item and opens a contextual Scope filter.
+Track conditions follow all appearances in the selected track's current shared history.
+Album conditions follow that release. Artist conditions follow its credited music, including collaborations.
+Check changes shows included and excluded music.
+Scope previews also evaluate pending catalog names and artist-credit assignments.
+Unresolved conditions are inspectable on track pages.
+The old catalog Delete modal, client helper, and artist, album, and track deletion routes were retired.
+Authenticated integration checks confirm retired requests are rejected and original items and listens remain present.
+
+Regression tests cover shared histories across releases, later inclusion exceptions, restoration, future native tracks,
+undated library counts, and combined pending Naming and Scope changes.
+Original physical listens and aggregate amounts remain unchanged in these tests.
+The full Go suite, frontend type checking, and production build passed.
+
+Actual-import browser acceptance excluded track 271's 521 displayed plays.
+Displayed total plays changed from 168,424 to 167,903 while raw records, reconciled plays, aliases, and physical listens stayed unchanged.
+Preview, 390 and 320 pixel layouts, and the rendered track page passed without page errors.
+Restoring the original configuration restored the original counts and all checked fingerprints.
+
+Profiling identified a slow appearance query through joined title and history views.
+Replacing it with batched primary-name, track, history, and credit reads reduced measured loading of 24,450 appearances
+from 64–78 seconds to 0.27 seconds against the imported database.
+The second complete browser acceptance run passed and restored the original counts and fingerprints.
+
+This Scope implementation evaluates catalog music, rather than source records or individual listening rows.
+Per-listen deletion, combined Music-matching/Scope previews, mixed-action Grouping consistency,
+catalog-read coverage, and the full Phase 4 completion audit remain open.
+
+Main activation passed after a database backup and migration 21.
+The main rebuild completed in 63.61 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and preservation fingerprints passed.
+The checked track retained its 521 plays across the same album appearances.
+New generic Scope filters start disabled. Contextual exclusion drafts require Save changes before taking effect.

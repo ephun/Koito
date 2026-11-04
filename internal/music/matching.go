@@ -26,8 +26,8 @@ type IdentityFilter struct {
 }
 
 type IdentityIssue struct {
-	ID   string
-	Name string
+	ID   string `json:"filter_id"`
+	Name string `json:"name"`
 	filters.Issue
 }
 type identityProgram struct {

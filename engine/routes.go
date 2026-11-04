@@ -115,13 +115,9 @@ func bindRoutes(
 				r.Post("/filters/save", filters)
 			}
 
-			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))
 			r.Patch("/artist/{id}/image", handlers.ReplaceArtistImageHandler(db))
 
-			r.Delete("/album/{id}", handlers.DeleteAlbumHandler(db))
 			r.Patch("/album/{id}/image", handlers.ReplaceAlbumImageHandler(db))
-
-			r.Delete("/track/{id}", handlers.DeleteTrackHandler(db))
 
 			r.Post("/listens", handlers.SubmitListenWithIDHandler(db))
 			r.Delete("/listens", handlers.DeleteListenHandler(db))

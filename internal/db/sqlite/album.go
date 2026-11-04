@@ -86,20 +86,20 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 
 	var listenCount int64
 	s.db.QueryRowContext(ctx, countedListeningQuery(`
-		SELECT COUNT(*) FROM listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
+		SELECT COUNT(*) FROM displayed_listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		id).Scan(&listenCount)
 	ret.ListenCount = listenCount
 
 	var timeListened int64
 	s.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(t.duration), 0)
-		FROM listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`,
+		FROM displayed_listens l JOIN tracks t ON l.track_id = t.id WHERE t.release_id = ?`,
 		id).Scan(&timeListened)
 	ret.TimeListened = timeListened
 
 	var firstListenUnix int64
 	err = s.db.QueryRowContext(ctx, `
-		SELECT l.listened_at FROM listens l JOIN tracks t ON l.track_id = t.id
+		SELECT l.listened_at FROM displayed_listens l JOIN tracks t ON l.track_id = t.id
 		WHERE t.release_id = ? ORDER BY l.listened_at ASC LIMIT 1`, id).Scan(&firstListenUnix)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("getAlbumByID: first listen: %w", err)
@@ -111,7 +111,7 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 		SELECT rank FROM (
 			SELECT t.release_id,
 			       RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
-			FROM listens l JOIN tracks t ON l.track_id = t.id
+			FROM displayed_listens l JOIN tracks t ON l.track_id = t.id
 			GROUP BY t.release_id
 		) WHERE release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&rank)
 	ret.AllTimeRank = rank

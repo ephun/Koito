@@ -22,7 +22,7 @@ func (s *Sqlite) GetInterest(ctx context.Context, opts db.GetInterestOpts) ([]db
 	switch {
 	case opts.ArtistID != 0:
 		query = `
-			SELECT l.listened_at FROM listens l
+			SELECT l.listened_at FROM displayed_listens l
 			JOIN tracks t ON t.id = l.track_id
 			JOIN displayed_artist_tracks at2 ON at2.track_id = t.id
 			WHERE at2.artist_id = ?
@@ -37,14 +37,14 @@ func (s *Sqlite) GetInterest(ctx context.Context, opts db.GetInterestOpts) ([]db
 		arg = opts.AlbumGroupID
 	case opts.AlbumID != 0:
 		query = `
-			SELECT l.listened_at FROM listens l
+			SELECT l.listened_at FROM displayed_listens l
 			JOIN tracks t ON t.id = l.track_id
 			WHERE t.release_id = ?
 			ORDER BY l.listened_at`
 		arg = opts.AlbumID
 	case opts.TrackID != 0:
 		query = `
-			SELECT listened_at FROM listens WHERE ` + historyPredicate("track_id") + ` ORDER BY listened_at`
+			SELECT listened_at FROM displayed_listens WHERE ` + historyPredicate("track_id") + ` ORDER BY listened_at`
 		arg = opts.TrackID
 	default:
 		return nil, errors.New("GetInterest: artist id, album id, or track id must be provided")

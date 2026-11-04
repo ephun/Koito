@@ -14,8 +14,9 @@ import (
 const albumReportKey = `CASE WHEN l.album_group_id>0 THEN 'group:'||l.album_group_id ELSE 'release:'||l.release_id END`
 
 func albumReportQuery(query string, timeframe db.Timeframe) string {
+	query = strings.ReplaceAll(query, "FROM listens l", "FROM displayed_listens l")
 	if !includesUndated(timeframe) {
-		return strings.ReplaceAll(query, "FROM listens l", "FROM album_report_events l")
+		return strings.ReplaceAll(query, "FROM displayed_listens l", "FROM album_report_events l")
 	}
 	query = countedListeningQuery(query, timeframe)
 	query = strings.ReplaceAll(query, "FROM listening_counts l", "FROM album_report_counts l")
