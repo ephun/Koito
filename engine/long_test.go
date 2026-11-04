@@ -396,79 +396,32 @@ func TestLoginGate(t *testing.T) {
 	truncateTestData(t)
 }
 
-func TestAliasesAndSearch(t *testing.T) {
+func TestRetiredAliasWritesKeepOriginalAliases(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/1/aliases", strings.NewReader(`{"alias":"Sayuri"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1/aliases")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var actual []models.Alias
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&actual))
-	require.Len(t, actual, 2)
-	assert.ElementsMatch(t, []models.Alias{
-		{ID: 1, Alias: "さユり", Source: "Canonical", Primary: true},
-		{ID: 1, Alias: "Sayuri", Source: "Manual", Primary: false},
-	}, actual)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/album/1/aliases", strings.NewReader(`{"alias":"Sanketsu Girl"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/1/aliases")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	actual = nil
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&actual))
-	require.Len(t, actual, 2)
-	assert.ElementsMatch(t, []models.Alias{
-		{ID: 1, Alias: "酸欠少女", Source: "Canonical", Primary: true},
-		{ID: 1, Alias: "Sanketsu Girl", Source: "Manual", Primary: false},
-	}, actual)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/aliases", strings.NewReader(`{"alias":"Tower of Flower"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/aliases/primary", strings.NewReader(`{"alias":"Tower of Flower"}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var track models.Track
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&track))
-	require.Len(t, actual, 2)
-	assert.Equal(t, track.Title, "Tower of Flower")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/artist/1/aliases/primary", strings.NewReader(`{"alias":"Sayuri"}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// make sure searching works with aliases
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/search?q=Sanketsu")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var results handlers.SearchResults
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&results))
-	require.Len(t, results.Albums, 1)
-	assert.Equal(t, results.Albums[0].Title, "酸欠少女")
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/search?q=Sayuri")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	results = handlers.SearchResults{}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&results))
-	require.Len(t, results.Artists, 1)
-	assert.Equal(t, results.Artists[0].Name, "Sayuri") // reflects the new primary alias
-
-	truncateTestData(t)
+	for _, kind := range []string{"artist", "album", "track"} {
+		t.Run(kind, func(t *testing.T) {
+			endpoint := "/apis/web/v1/" + kind + "/1/aliases"
+			read := func() []models.Alias {
+				response, err := makeAuthRequest(t, session, "GET", endpoint, nil)
+				require.NoError(t, err)
+				defer response.Body.Close()
+				require.Equal(t, http.StatusOK, response.StatusCode)
+				var result []models.Alias
+				require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+				return result
+			}
+			before := read()
+			require.NotEmpty(t, before)
+			for _, request := range []struct{ method, path string }{{"POST", endpoint}, {"DELETE", endpoint}, {"PATCH", endpoint + "/primary"}} {
+				response, err := makeAuthRequest(t, session, request.method, request.path, strings.NewReader(`{"alias":"Rejected alias"}`))
+				require.NoError(t, err)
+				response.Body.Close()
+				require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+			}
+			require.Equal(t, before, read())
+		})
+	}
 }
 
 func TestStats(t *testing.T) {

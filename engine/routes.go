@@ -116,21 +116,12 @@ func bindRoutes(
 			}
 
 			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))
-			r.Delete("/artist/{id}/aliases", handlers.DeleteArtistAliasHandler(db))
-			r.Post("/artist/{id}/aliases", handlers.CreateArtistAliasHandler(db))
 			r.Patch("/artist/{id}/image", handlers.ReplaceArtistImageHandler(db))
-			r.Patch("/artist/{id}/aliases/primary", handlers.SetPrimaryArtistAliasHandler(db))
 
 			r.Delete("/album/{id}", handlers.DeleteAlbumHandler(db))
-			r.Delete("/album/{id}/aliases", handlers.DeleteAlbumAliasHandler(db))
-			r.Post("/album/{id}/aliases", handlers.CreateAlbumAliasHandler(db))
 			r.Patch("/album/{id}/image", handlers.ReplaceAlbumImageHandler(db))
-			r.Patch("/album/{id}/aliases/primary", handlers.SetPrimaryAlbumAliasHandler(db))
 
 			r.Delete("/track/{id}", handlers.DeleteTrackHandler(db))
-			r.Delete("/track/{id}/aliases", handlers.DeleteTrackAliasHandler(db))
-			r.Post("/track/{id}/aliases", handlers.CreateTrackAliasHandler(db))
-			r.Patch("/track/{id}/aliases/primary", handlers.SetPrimaryTrackAliasHandler(db))
 
 			r.Post("/listens", handlers.SubmitListenWithIDHandler(db))
 			r.Delete("/listens", handlers.DeleteListenHandler(db))

@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 import { Modal } from "../Modal";
-import AliasManager from "./AliasManager";
 
 interface Props {
   type: string;
@@ -20,7 +19,7 @@ export default function EditModal({ open, setOpen, type, id }: Props) {
     <Modal maxW={1000} isOpen={open} onClose={handleClose}>
       <div className="flex flex-col items-start gap-6 w-full">
         <Link className="underline" to={`/filters?catalog=${type}&id=${id}`} onClick={handleClose}>Edit name</Link>
-        <AliasManager id={id} type={type} />
+        <Link className="underline" to={`/filters?catalog=${type}&id=${id}&edit=aliases`} onClick={handleClose}>Edit aliases</Link>
         {type === "album" && (
           <>
             <Link className="underline" to={`/filters?catalog=album&id=${id}&edit=classification`} onClick={handleClose}>Edit Various Artists</Link>

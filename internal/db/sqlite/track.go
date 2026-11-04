@@ -371,12 +371,12 @@ func (s *Sqlite) DeleteTrackAlias(ctx context.Context, id int32, alias string) e
 
 func (s *Sqlite) GetAllTrackAliases(ctx context.Context, id int32) ([]models.Alias, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT alias, source, is_primary FROM track_aliases WHERE track_id = ?`, id)
+		`SELECT alias, source, is_primary FROM displayed_track_aliases WHERE track_id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllTrackAliases: %w", err)
 	}
 	defer rows.Close()
-	var aliases []models.Alias
+	aliases := []models.Alias{}
 	for rows.Next() {
 		var a models.Alias
 		var isPrimary int
@@ -632,13 +632,13 @@ func (s *Sqlite) CountNewTracks(ctx context.Context, timeframe db.Timeframe) (in
 func (s *Sqlite) SearchTracks(ctx context.Context, q string) ([]*models.Track, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id, COALESCE(canonical_name.display_name,t.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='track' AND ci.item_id=t.id),t.musicbrainz_id),''), t.release_id, r.image
-		FROM track_aliases ta
-		JOIN track_history_members h ON h.track_id=ta.track_id
+		FROM tracks t_search LEFT JOIN displayed_track_aliases ta ON ta.track_id=t_search.id
+		JOIN track_history_members h ON h.track_id=t_search.id
 		JOIN tracks_with_title t ON h.canonical_track_id = t.id
 		JOIN releases r ON t.release_id = r.id
  LEFT JOIN catalog_names canonical_name ON canonical_name.kind='track' AND canonical_name.item_id=t.id
- LEFT JOIN catalog_names cn ON cn.kind='track' AND cn.item_id=ta.track_id
-		WHERE ta.alias LIKE ? OR ta.alias LIKE ? OR cn.display_name LIKE ?
+ LEFT JOIN catalog_names cn ON cn.kind='track' AND cn.item_id=t_search.id
+		WHERE ta.alias LIKE ? OR ta.alias LIKE ? OR COALESCE(cn.display_name,t.title) LIKE ?
 		LIMIT 50`,
 		q+"%", "%"+q+"%", "%"+q+"%",
 	)

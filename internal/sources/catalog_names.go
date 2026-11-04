@@ -51,8 +51,36 @@ type catalogNamingState struct {
 	Name             string
 	Artists, Primary []int64
 	CreditsAssigned  bool
+	Aliases          []string
+	AliasesAssigned  bool
 }
 
+func aliasNames(value filters.Value) ([]string, bool) {
+	values, ok := value.Items()
+	if !ok {
+		return nil, false
+	}
+	names := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		name, ok := value.Text()
+		if !ok || strings.TrimSpace(name) == "" {
+			return nil, false
+		}
+		if !seen[name] {
+			names = append(names, name)
+			seen[name] = true
+		}
+	}
+	return names, true
+}
+func aliasList(names []string) filters.Value {
+	values := []filters.Value{}
+	for _, name := range names {
+		values = append(values, filters.String(name))
+	}
+	return filters.Values(values...)
+}
 func identifierList(ids []int64) filters.Value {
 	values := []filters.Value{}
 	for _, id := range ids {
@@ -96,6 +124,8 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 		}
 	}
 	current := catalogNamingState{Name: original}
+	current.Aliases, _ = aliasNames(env["original.aliases"])
+	env["display.aliases"] = aliasList(current.Aliases)
 	current.Artists, _ = creditIdentifiers(env["catalog.artist_ids"])
 	current.Primary, _ = creditIdentifiers(env["original.primary_artist_ids"])
 	env["display.artist_ids"] = identifierList(current.Artists)
@@ -130,6 +160,14 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 					valid = false
 				} else {
 					candidate.Name = text
+				}
+			case "display.aliases":
+				names, ok := aliasNames(value)
+				if !ok {
+					valid = false
+				} else {
+					candidate.Aliases = names
+					candidate.AliasesAssigned = true
 				}
 			case "display.artist_ids":
 				ids, ok := creditIdentifiers(value)
@@ -171,10 +209,11 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 			}
 		}
 		if !valid {
-			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, filters.Issue{Path: "catalog", Reason: "Choose a nonempty name, existing artists, and primary artists included in the credits."}})
+			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, filters.Issue{Path: "catalog", Reason: "Choose nonempty names and aliases, existing artists, and primary artists included in the credits."}})
 			continue
 		}
 		current = candidate
+		env["display.aliases"] = aliasList(current.Aliases)
 		env[target] = filters.String(current.Name)
 		env["display.artist_ids"] = identifierList(current.Artists)
 		env["display.primary_artist_ids"] = identifierList(current.Primary)
@@ -194,7 +233,7 @@ func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig) err
 			selected = append(selected, program)
 		}
 	}
-	for _, query := range []string{`DELETE FROM catalog_names`, `DELETE FROM catalog_name_issues`, `DELETE FROM catalog_credits`, `DELETE FROM catalog_credit_sets`} {
+	for _, query := range []string{`DELETE FROM catalog_aliases`, `DELETE FROM catalog_alias_sets`, `DELETE FROM catalog_names`, `DELETE FROM catalog_name_issues`, `DELETE FROM catalog_credits`, `DELETE FROM catalog_credit_sets`} {
 		if _, err = tx.ExecContext(ctx, query); err != nil {
 			return err
 		}
@@ -213,6 +252,16 @@ func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig) err
 			return e
 		}
 
+		if resolved.AliasesAssigned {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_alias_sets(kind,item_id) VALUES(?,?)`, item.kind, item.id); err != nil {
+				return err
+			}
+			for _, alias := range resolved.Aliases {
+				if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_aliases(kind,item_id,alias) VALUES(?,?,?)`, item.kind, item.id, alias); err != nil {
+					return err
+				}
+			}
+		}
 		if resolved.CreditsAssigned {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_credit_sets(kind,item_id) VALUES(?,?)`, item.kind, item.id); err != nil {
 				return err
@@ -280,6 +329,30 @@ func catalogNameItems(ctx context.Context, tx *sql.Tx) ([]catalogNameItem, error
 			indices[item.kind] = map[int64]int{}
 		}
 		indices[item.kind][item.id] = i
+	}
+	aliasRows, err := tx.QueryContext(ctx, `SELECT 'artist',artist_id,alias FROM artist_aliases UNION ALL SELECT 'album',release_id,alias FROM release_aliases UNION ALL SELECT 'track',track_id,alias FROM track_aliases ORDER BY 1,2,3`)
+	if err != nil {
+		return nil, err
+	}
+	aliases := map[int][]filters.Value{}
+	for aliasRows.Next() {
+		var kind, name string
+		var id int64
+		if err = aliasRows.Scan(&kind, &id, &name); err != nil {
+			aliasRows.Close()
+			return nil, err
+		}
+		if index, ok := indices[kind][id]; ok {
+			aliases[index] = append(aliases[index], filters.String(name))
+		}
+	}
+	err = aliasRows.Err()
+	aliasRows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		items[i].metadata["original.aliases"] = filters.Values(aliases[i]...)
 	}
 	credits := map[int][]filters.Value{}
 	creditIDs := map[int][]filters.Value{}
@@ -394,6 +467,11 @@ func previewCatalogNames(ctx context.Context, tx *sql.Tx, before, after RuleConf
 			if len(examples) == 12 {
 				break
 			}
+		}
+		x, _ := json.Marshal(a.Aliases)
+		y, _ := json.Marshal(b.Aliases)
+		if string(x) != string(y) {
+			examples = append(examples, NamingExample{Field: "Aliases: " + item.name, Before: string(x), After: string(y)})
 		}
 		for _, change := range []struct {
 			field         string

@@ -57,7 +57,8 @@ export default function Filters() {
         const identifier = catalogEdit === "identifier";
         const classification = catalogKind === "album" && catalogEdit === "classification";
         const credits = ["album","track"].includes(catalogKind) && catalogEdit === "credits";
-        const id = `catalog-${credits ? "credits" : classification ? "classification" : identifier ? "identifier" : "name"}-${catalogKind}-${catalogID}`;
+        const aliases = catalogEdit === "aliases";
+        const id = `catalog-${aliases ? "aliases" : credits ? "credits" : classification ? "classification" : identifier ? "identifier" : "name"}-${catalogKind}-${catalogID}`;
         setFocusedMatching(identifier);
         setFocusedGrouping(classification);
         const existing = next.rules.find(rule => rule.id === id);
@@ -67,11 +68,17 @@ export default function Filters() {
           const item = await response.json();
           const field = catalogKind === "track" ? "title" : catalogKind;
           const name = catalogKind === "artist" ? item.name : item.title;
+          if (aliases) {
+            const response = await fetch(`/apis/web/v1/${catalogKind}/${catalogID}/aliases`);
+            if (!response.ok) throw new Error("Could not load aliases.");
+            const names = await response.json() as {alias:string}[];
+            next.rules.push({id,name:`Aliases for ${name}`.slice(0,200),type:"presentation",subtype:"naming",enabled:true,scope:{},settings:{...defaultRuleSettings},program:{steps:[{if:{op:"and",args:[{op:"eq",args:[{op:"field",field:"catalog.kind"},{op:"literal",value:catalogKind}]},{op:"eq",args:[{op:"field",field:"catalog.id"},{op:"literal",value:catalogID}]}]},then:[{set:"display.aliases",value:{op:"list",args:(names || []).map(item=>({op:"literal",value:item.alias}))}}]}]}});
+          } else
           if (credits) {
             const response = await fetch(`/apis/web/v1/${catalogKind}/${catalogID}/artists`);
             if (!response.ok) throw new Error("Could not load artist credits.");
             const artists = await response.json() as {id:number;is_primary:boolean}[];
-            next.rules.push({id,name:`Artist credits for ${name}`.slice(0,200),type:"presentation",subtype:"naming",enabled:true,scope:{},settings:{...defaultRuleSettings},program:{steps:[{if:{op:"and",args:[{op:"eq",args:[{op:"field",field:"catalog.kind"},{op:"literal",value:catalogKind}]},{op:"eq",args:[{op:"field",field:"catalog.id"},{op:"literal",value:catalogID}]}]},then:[{set:"display.artist_ids",value:{op:"list",args:artists.map(artist=>({op:"literal",value:artist.id}))}},{set:"display.primary_artist_ids",value:{op:"list",args:artists.filter(artist=>artist.is_primary).map(artist=>({op:"literal",value:artist.id}))}}]}]}});
+            next.rules.push({id,name:`Artist credits for ${name}`.slice(0,200),type:"presentation",subtype:"naming",enabled:true,scope:{},settings:{...defaultRuleSettings},program:{steps:[{if:{op:"and",args:[{op:"eq",args:[{op:"field",field:"catalog.kind"},{op:"literal",value:catalogKind}]},{op:"eq",args:[{op:"field",field:"catalog.id"},{op:"literal",value:catalogID}]}]},then:[{set:"display.artist_ids",value:{op:"list",args:(artists || []).map(artist=>({op:"literal",value:artist.id}))}},{set:"display.primary_artist_ids",value:{op:"list",args:(artists || []).filter(artist=>artist.is_primary).map(artist=>({op:"literal",value:artist.id}))}}]}]}});
           } else
           next.rules.push({id, name: `${classification ? "Various Artists" : identifier ? "MusicBrainz identifier" : "Name"} for ${name}`.slice(0,200), type:identifier ? "matching" : "presentation", subtype:classification ? "grouping" : identifier ? "music" : "naming", enabled:true, scope:{}, settings:{...defaultRuleSettings}, program:{steps:[{if:{op:"and",args:[{op:"eq",args:[{op:"field",field:"catalog.kind"},{op:"literal",value:catalogKind}]},{op:"eq",args:[{op:"field",field:"catalog.id"},{op:"literal",value:catalogID}]}]},then:[{set:classification ? "group.various_artists" : identifier ? "music.identifier" : `display.${field}`,value:{op:"literal",value:classification ? item.is_various_artists : identifier ? item.musicbrainz_id || "" : name}}]}]}});
         }

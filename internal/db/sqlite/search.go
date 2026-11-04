@@ -40,11 +40,11 @@ func sliceTopN[T any](candidates []T, scoreOf func(T) float64, n int) []T {
 func (s *Sqlite) SearchArtists(ctx context.Context, q string) ([]*models.Artist, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT a.id, COALESCE(cn.display_name,awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image
-		FROM artist_aliases aa
-		JOIN artists_with_name awn ON aa.artist_id = awn.id
+		FROM artists a_search LEFT JOIN displayed_artist_aliases aa ON aa.artist_id=a_search.id
+		JOIN artists_with_name awn ON a_search.id = awn.id
 		JOIN artists a ON a.id = awn.id
  LEFT JOIN catalog_names cn ON cn.kind='artist' AND cn.item_id=a.id
-		WHERE aa.alias LIKE ? OR aa.alias LIKE ? OR cn.display_name LIKE ?
+		WHERE aa.alias LIKE ? OR aa.alias LIKE ? OR COALESCE(cn.display_name,awn.name) LIKE ?
 		LIMIT 50`,
 		q+"%", "%"+q+"%", "%"+q+"%",
 	)
@@ -89,10 +89,10 @@ func (s *Sqlite) SearchArtists(ctx context.Context, q string) ([]*models.Artist,
 func (s *Sqlite) SearchAlbums(ctx context.Context, q string) ([]*models.Album, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT r.id, COALESCE(cn.display_name,r.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='album' AND ci.item_id=r.id),r.musicbrainz_id),''), r.image, COALESCE((SELECT various_artists FROM album_classification ac WHERE ac.album_id=r.id),r.various_artists)
-		FROM release_aliases ra
-		JOIN releases_with_title r ON ra.release_id = r.id
+		FROM releases r_search LEFT JOIN displayed_release_aliases ra ON ra.release_id=r_search.id
+		JOIN releases_with_title r ON r_search.id = r.id
  LEFT JOIN catalog_names cn ON cn.kind='album' AND cn.item_id=r.id
-		WHERE ra.alias LIKE ? OR ra.alias LIKE ? OR cn.display_name LIKE ?
+		WHERE ra.alias LIKE ? OR ra.alias LIKE ? OR COALESCE(cn.display_name,r.title) LIKE ?
 		LIMIT 50`,
 		q+"%", "%"+q+"%", "%"+q+"%",
 	)

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -43,10 +44,10 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	var name, aliasesConcat sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		SELECT a.id, a.musicbrainz_id, a.image, a.image_source, awn.name,
-		       group_concat(aa.alias, '||') AS aliases
+		       json_group_array(aa.alias) FILTER (WHERE aa.alias IS NOT NULL) AS aliases
 		FROM artists_with_name awn
 		JOIN artists a ON a.id = awn.id
-		LEFT JOIN artist_aliases aa ON aa.artist_id = a.id
+		LEFT JOIN displayed_artist_aliases aa ON aa.artist_id = a.id
 		WHERE a.id = ?
 		GROUP BY a.id`,
 		opts.ID,
@@ -60,7 +61,9 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 
 	var aliases []string
 	if aliasesConcat.Valid && aliasesConcat.String != "" {
-		aliases = strings.Split(aliasesConcat.String, "||")
+		if err = json.Unmarshal([]byte(aliasesConcat.String), &aliases); err != nil {
+			return nil, err
+		}
 		utils.Unique(&aliases)
 	}
 
@@ -273,12 +276,12 @@ func (s *Sqlite) DeleteArtistAlias(ctx context.Context, id int32, alias string) 
 
 func (s *Sqlite) GetAllArtistAliases(ctx context.Context, id int32) ([]models.Alias, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT alias, source, is_primary FROM artist_aliases WHERE artist_id = ?`, id)
+		`SELECT alias, source, is_primary FROM displayed_artist_aliases WHERE artist_id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllArtistAliases: %w", err)
 	}
 	defer rows.Close()
-	var aliases []models.Alias
+	aliases := []models.Alias{}
 	for rows.Next() {
 		var a models.Alias
 		var isPrimary int

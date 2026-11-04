@@ -343,12 +343,12 @@ func (s *Sqlite) DeleteAlbumAlias(ctx context.Context, id int32, alias string) e
 
 func (s *Sqlite) GetAllAlbumAliases(ctx context.Context, id int32) ([]models.Alias, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT alias, source, is_primary FROM release_aliases WHERE release_id = ?`, id)
+		`SELECT alias, source, is_primary FROM displayed_release_aliases WHERE release_id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllAlbumAliases: %w", err)
 	}
 	defer rows.Close()
-	var aliases []models.Alias
+	aliases := []models.Alias{}
 	for rows.Next() {
 		var a models.Alias
 		var isPrimary int

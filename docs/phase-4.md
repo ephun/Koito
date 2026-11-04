@@ -700,3 +700,45 @@ Main activation passed after a database backup and migration 19.
 The main rebuild completed in 68.89 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
 All three original-file hashes and preservation fingerprints passed.
 Track 271 retained 521 plays across its original album appearances.
+
+## Reversible aliases
+
+Naming filters can assign alternate search names in artist, album, and track contexts.
+Original aliases remain separate from the derived alias sets in migration 20.
+An empty assigned set is distinct from having no correction.
+Search retains the displayed name even when its alias set is empty.
+Disabling the filter restores the original aliases.
+
+Alias and name actions share atomic validation with artist credits.
+Aliases preserve spelling and punctuation. Empty or non-text entries produce an inspectable issue.
+Repeated identical aliases are removed while different capitalization remains distinguishable.
+Original aliases are available as a list for expressions.
+Check changes shows before-and-after alias sets.
+
+Edit aliases prepares or reopens a contextual Naming filter in the shared editor.
+The old Alias Manager and its add, delete, and primary-alias write routes were retired.
+Displayed-name changes use Edit name.
+Music identity equivalence continues through Music matching comparison actions.
+The new Naming alias action controls search. It does not introduce recording or play equivalence.
+Ingestion lookup and original export reads retain their original alias tables.
+
+Search and alias inspection use the derived views, and artist details use the same displayed alias set.
+Artist details now read a JSON list instead of splitting aliases at a delimiter.
+A regression verifies an alias containing literal double bars remains one alias.
+Other tests cover all three search types, previews, disabling, empty sets, atomic validation, original values,
+and rejection of retired authenticated write requests.
+
+Actual-import browser testing assigned a clearly temporary alias to artist 1 through the contextual editor.
+It verified preview, native search, unchanged displayed name, and layout at 390 and 320 pixels without page errors.
+Record, play, and original-alias fingerprints stayed unchanged.
+Restoring the original configuration restored the original alias list and removed the temporary search result.
+The full Go suite, frontend type checking, production build, and subsequent detail-read regression suites passed.
+
+Catalog deletion controls, mixed-action Grouping consistency, catalog-read coverage, and the complete Phase 4 audit remain open.
+
+Main activation passed after a backup and migration 20.
+The main rebuild completed in 63.953 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and the preservation fingerprints passed.
+The checked track retained 521 plays across the same album appearances.
+Empty alias responses use lists, and contextual alias and credit editors also tolerate older empty responses.
+Focused empty-list checks and subsequent frontend type checking and production build passed.
