@@ -16,6 +16,8 @@ interface Props {
   artistId?: Number;
   albumId?: Number;
   trackId?: number;
+  musicTrackId?: number;
+  showAlbums?: boolean;
   hideArtists?: boolean;
   showNowPlaying?: boolean;
   showSeeMore?: boolean;
@@ -82,7 +84,7 @@ export default function LastPlays(props: Props) {
 
     if (albumId) return track.album_id === albumId;
     if (artistId) return track.artists.some((a) => a.id === artistId);
-    if (trackId) return track.id === trackId;
+    if (trackId) return track.id === trackId || !!props.musicTrackId && track.music_track_id === props.musicTrackId;
 
     return false;
   };
@@ -117,6 +119,7 @@ export default function LastPlays(props: Props) {
           npData={npData}
           showNP={showNP()}
           hideArtists={props.hideArtists}
+          showAlbums={props.showAlbums}
           onDelete={handleDelete}
         />
       )}

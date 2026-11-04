@@ -299,6 +299,9 @@ type ImageList = {
 };
 type Track = {
   id: number;
+  music_track_id?: number;
+  albums?: { id: number; title: string; listen_count: number }[];
+  recordings?: { key: string; musicbrainz_id?: string; spotify_uri?: string }[];
   title: string;
   artists: SimpleArtists[];
   listen_count: number;
@@ -346,6 +349,8 @@ type Alias = {
   is_primary: boolean;
 };
 type Listen = {
+  album_id?: number;
+  album?: string;
   play_key?: string;
   record_id?: number;
   evidence?: string;

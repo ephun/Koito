@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/gabehf/koito/internal/music"
 )
 
 func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
@@ -104,8 +106,8 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	}
 	for _, play := range plan.Plays {
 		r := byID[play.Representative]
-		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album}
-		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title})
+		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID})
 		cacheKey := string(raw)
 		track, ok := tracks[cacheKey]
 		var err error
@@ -155,7 +157,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		r := byID[aggregate.Representative]
 		var track any
 		if aggregate.Attributed > 0 {
-			v := spotifyItem{Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album}
+			v := spotifyItem{Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
 			id, err := projectTrack(ctx, tx, v)
 			if err != nil {
 				return result, err
@@ -202,6 +204,19 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 				return result, err
 			}
 		}
+	}
+	// The version being published may differ from filter_state until commit.
+	var rawConfig string
+	if err = tx.QueryRowContext(ctx, `SELECT config_json FROM filter_versions WHERE id=?`, versionID).Scan(&rawConfig); err != nil {
+		return result, err
+	}
+	var config RuleConfig
+	if err = json.Unmarshal([]byte(rawConfig), &config); err != nil {
+		return result, err
+	}
+	musicRule, _ := config.matchingRules()
+	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive); err != nil {
+		return result, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
 	return result, err

@@ -243,7 +243,7 @@ func TestImportListenBrainz_MBIDMapping(t *testing.T) {
 
 	album, err := store.GetAlbum(context.Background(), db.GetAlbumOpts{MusicBrainzID: uuid.MustParse("177ebc28-0115-3897-8eb3-ebf74ce23790")})
 	require.NoError(t, err)
-	assert.Equal(t, "Zombie", album.Title)
+	assert.Equal(t, "Unknown Album", album.Title, "a release identifier alone supplies no album title")
 	artist, err := store.GetArtist(context.Background(), db.GetArtistOpts{MusicBrainzID: uuid.MustParse("c98d40fd-f6cf-4b26-883e-eaa515ee2851")})
 	require.NoError(t, err)
 	assert.Equal(t, "The Cranberries", artist.Name)

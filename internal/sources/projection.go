@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/gabehf/koito/internal/music"
 )
 
 type ProjectionResult struct {
@@ -18,13 +20,14 @@ type ProjectionResult struct {
 	Undated    int64  `json:"undated"`
 }
 type spotifyItem struct {
-	Timestamp string `json:"ts"`
-	Title     string `json:"master_metadata_track_name"`
-	Artist    string `json:"master_metadata_album_artist_name"`
-	Album     string `json:"master_metadata_album_album_name"`
-	URI       string `json:"spotify_track_uri"`
-	ReasonEnd string `json:"reason_end"`
-	Played    int64  `json:"ms_played"`
+	Timestamp   string `json:"ts"`
+	Title       string `json:"master_metadata_track_name"`
+	Artist      string `json:"master_metadata_album_artist_name"`
+	Album       string `json:"master_metadata_album_album_name"`
+	URI         string `json:"spotify_track_uri"`
+	RecordingID string `json:"recording_id,omitempty"`
+	ReasonEnd   string `json:"reason_end"`
+	Played      int64  `json:"ms_played"`
 }
 
 func insertID(ctx context.Context, tx *sql.Tx, query string, args ...any) (int64, error) {
@@ -68,7 +71,17 @@ func projectTrack(ctx context.Context, tx *sql.Tx, v spotifyItem) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT t.id FROM tracks t JOIN track_aliases a ON a.track_id=t.id JOIN artist_tracks ar ON ar.track_id=t.id WHERE t.release_id=? AND a.alias=? AND ar.artist_id=? ORDER BY t.id LIMIT 1`, album, v.Title, artist).Scan(&track)
+	// A shared name supplies a history, not proof of a shared performance.
+	// Known conflicting recording identities retain separate appearances.
+	identity := ""
+	if v.RecordingID != "" || v.URI != "" {
+		identity = music.RecordingKey(0, v.RecordingID, v.URI)
+	}
+	err = tx.QueryRowContext(ctx, `SELECT t.id FROM tracks t JOIN track_aliases a ON a.track_id=t.id JOIN artist_tracks ar ON ar.track_id=t.id
+	    LEFT JOIN track_recordings tr ON tr.track_id=t.id
+	    WHERE t.release_id=? AND a.alias=? AND ar.artist_id=? AND
+	    ((?='' AND (tr.recording_key IS NULL OR tr.recording_key LIKE 'appearance:%')) OR tr.recording_key=?)
+	    ORDER BY t.id LIMIT 1`, album, v.Title, artist, identity, identity).Scan(&track)
 	if errors.Is(err, sql.ErrNoRows) {
 		track, err = insertID(ctx, tx, `INSERT INTO tracks(release_id) VALUES(?)`, album)
 		if err != nil {
@@ -81,6 +94,9 @@ func projectTrack(ctx context.Context, tx *sql.Tx, v spotifyItem) (int64, error)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("project track: %w", err)
+	}
+	if err = music.AssignRecording(ctx, tx, track, v.RecordingID, v.URI); err != nil {
+		return 0, err
 	}
 	return track, nil
 }

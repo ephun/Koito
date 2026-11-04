@@ -36,7 +36,7 @@ func (s *Sqlite) CountListensToItem(ctx context.Context, opts db.TimeListenedOpt
 	case opts.TrackID > 0:
 		err = s.db.QueryRowContext(ctx, countedListeningQuery(`
 			SELECT COUNT(*) FROM listens
-			WHERE listened_at BETWEEN ? AND ? AND track_id = ?`, opts.Timeframe),
+			WHERE listened_at BETWEEN ? AND ? AND `+historyPredicate("track_id"), opts.Timeframe),
 			t1.Unix(), t2.Unix(), opts.TrackID).Scan(&count)
 	default:
 		return 0, errors.New("CountListensToItem: an id must be provided")
@@ -80,7 +80,7 @@ func (s *Sqlite) CountTimeListenedToItem(ctx context.Context, opts db.TimeListen
 		err = s.db.QueryRowContext(ctx, `
 			SELECT COALESCE(SUM(t.duration), 0)
 			FROM listens l JOIN tracks t ON l.track_id = t.id
-			WHERE l.listened_at BETWEEN ? AND ? AND t.id = ?`,
+			WHERE l.listened_at BETWEEN ? AND ? AND `+historyPredicate("t.id"),
 			t1.Unix(), t2.Unix(), opts.TrackID).Scan(&seconds)
 	default:
 		return 0, errors.New("CountTimeListenedToItem: an id must be provided")

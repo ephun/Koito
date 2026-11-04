@@ -49,7 +49,7 @@ func (s *Sqlite) GetListenActivity(ctx context.Context, opts db.ListenActivityOp
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT (listened_at / 3600) * 3600 AS hour_bucket, COUNT(*) AS listen_count
 			FROM listens
-			WHERE listened_at >= ? AND listened_at < ? AND track_id = ?
+			WHERE listened_at >= ? AND listened_at < ? AND `+historyPredicate("track_id")+`
 			GROUP BY hour_bucket`,
 			t1.Unix(), t2.Unix(), opts.TrackID,
 		)
@@ -143,7 +143,7 @@ func (s *Sqlite) GetListenStreak(ctx context.Context, opts db.ListenActivityOpts
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT (listened_at / 3600) * 3600 AS hour_bucket
 			FROM listens
-			WHERE listened_at <= ? AND track_id = ?
+			WHERE listened_at <= ? AND `+historyPredicate("track_id")+`
 			GROUP BY hour_bucket
 			ORDER BY hour_bucket DESC`,
 			endOfToday.Unix(), opts.TrackID,
@@ -272,7 +272,7 @@ func (s *Sqlite) GetLongestListenStreak(ctx context.Context, opts db.ListenActiv
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT (listened_at / 3600) * 3600 AS hour_bucket
 			FROM listens
-			WHERE listened_at <= ? AND track_id = ?
+			WHERE listened_at <= ? AND `+historyPredicate("track_id")+`
 			GROUP BY hour_bucket
 			ORDER BY hour_bucket DESC`,
 			endOfToday.Unix(), opts.TrackID,

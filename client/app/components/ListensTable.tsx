@@ -12,6 +12,7 @@ interface ListensTableProps {
   npData?: NowPlaying;
   showNP?: boolean;
   hideArtists?: boolean;
+  showAlbums?: boolean;
   onDelete: (listen: Listen) => void;
 }
 
@@ -20,6 +21,7 @@ export default function ListensTable({
   npData,
   showNP,
   hideArtists,
+  showAlbums,
   onDelete,
 }: ListensTableProps) {
   const { user } = useAppContext();
@@ -98,6 +100,7 @@ export default function ListensTable({
                 {item.evidence === "last_played" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Last played<FieldHelp label="Last-played evidence">Reported as the library's most recent play.</FieldHelp></span>}
                 {item.attribution_basis === "heuristic" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Heuristic<FieldHelp label="Heuristic attribution">Assigned to you using the enabled heuristic.</FieldHelp></span>}
               </div>
+              {showAlbums && item.album_id && <Link className="mt-1 block truncate text-xs text-(--color-fg-secondary) hover:underline" to={`/album/${item.album_id}`}>{item.album}</Link>}
             </td>
             <td
               className={`text-end whitespace-nowrap ${timeColClasses}`}

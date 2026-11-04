@@ -12,11 +12,13 @@ import (
 func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) ([]*db.ExportItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.listened_at, l.user_id, l.client, l.play_key,
-		       t.id AS track_id, t.musicbrainz_id AS track_mbid, t.duration,
+		       t.id AS track_id, COALESCE(t.musicbrainz_id,rec.musicbrainz_id) AS track_mbid, t.duration,
 		       t.release_id,
 		       r.musicbrainz_id AS release_mbid, r.image, r.image_source, r.various_artists
 		FROM listens l
 		JOIN tracks t ON l.track_id = t.id
+		LEFT JOIN track_recordings tr ON tr.track_id=t.id
+		LEFT JOIN recordings rec ON rec.recording_key=tr.recording_key
 		JOIN releases r ON t.release_id = r.id
 		WHERE l.user_id = ?
 		  AND (l.listened_at > ? OR (l.listened_at = ? AND (l.track_id > ? OR (l.track_id = ? AND l.play_key > ?))))

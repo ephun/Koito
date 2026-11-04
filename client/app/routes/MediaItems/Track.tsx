@@ -1,5 +1,5 @@
 import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
-import { type Album, type Artist, type Track } from "api/api";
+import { type Track } from "api/api";
 import LastPlayed from "~/components/LastPlayed";
 import MediaLayout from "./MediaLayout";
 import ActivityGrid from "~/components/ActivityGrid";
@@ -7,24 +7,16 @@ import { timeListenedString } from "~/utils/utils";
 import InterestGraph from "~/components/InterestGraph";
 
 export async function clientLoader({ params }: LoaderFunctionArgs) {
-  let res = await fetch(`/apis/web/v1/track/${params.id}`);
+  const res = await fetch(`/apis/web/v1/track/${params.id}`);
   if (!res.ok) {
     throw new Response("Failed to load track", { status: res.status });
   }
   const track: Track = await res.json();
-  res = await fetch(`/apis/web/v1/album/${track.album_id}`);
-  if (!res.ok) {
-    throw new Response("Failed to load album for track", {
-      status: res.status,
-    });
-  }
-  const album: Album = await res.json();
-  return { track: track, album: album };
+  return { track };
 }
 
 export default function Track() {
-  const { track, album } = useLoaderData();
-  const period = "all_time";
+  const { track } = useLoaderData<typeof clientLoader>();
 
   return (
     <MediaLayout
@@ -43,7 +35,7 @@ export default function Track() {
           {track.artists.length > 0 && (
             <p>
               By{" "}
-              {track.artists.map((artist: Artist, i: number) => (
+              {track.artists.map((artist, i) => (
                 <span key={artist.id}>
                   {i > 0 && i !== track.artists.length - 1 && ", "}
                   {i === track.artists.length - 1 && track.artists.length > 1
@@ -58,16 +50,19 @@ export default function Track() {
           )}
           <p>
             Appears on{" "}
-            <Link className="hover:underline" to={`/album/${track.album_id}`}>
-              {album.title}
-            </Link>
+            {track.albums?.map((album, index) => <span key={album.id}>
+              {index > 0 && ", "}
+              <Link className="hover:underline" to={`/album/${album.id}`} title={`${album.listen_count.toLocaleString()} plays`}>
+                {album.title}
+              </Link>
+            </span>)}
           </p>
         </>
       }
     >
       <div className="flex flex-col gap-10 md:gap-20 mt-14">
-        <div className="min-w-[350px] flex-1">
-          <LastPlayed limit={11} trackId={track.id} showNowPlaying />
+        <div className="min-w-0 flex-1">
+          <LastPlayed limit={11} trackId={track.id} musicTrackId={track.music_track_id} showAlbums showNowPlaying showSeeMore />
         </div>
         <div className="flex flex-wrap gap-10">
           <InterestGraph type="track" id={track.id} />

@@ -11,6 +11,7 @@ import (
 	"github.com/gabehf/koito/internal/cfg"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/music"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
@@ -44,6 +45,10 @@ func New() (*Sqlite, error) {
 	if err := goose.Up(db, "."); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("sqlite.New: goose: %w", err)
+	}
+	if err := initializeMusic(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite.New: music identities: %w", err)
 	}
 	// No request from the previous server process can still be extracting.
 	// Interrupted attempts remain visible and can safely be retried.
@@ -82,8 +87,29 @@ func NewInMemory() (*Sqlite, error) {
 		sqldb.Close()
 		return nil, fmt.Errorf("sqlite.NewInMemory: goose: %w", err)
 	}
+	if err := initializeMusic(sqldb); err != nil {
+		sqldb.Close()
+		return nil, err
+	}
 
 	return &Sqlite{db: sqldb}, nil
+}
+
+func initializeMusic(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	sensitive, err := music.CaseSensitive(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if err = music.RefreshHistories(ctx, tx, sensitive); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Not part of the DB interface this package implements. Only used for testing.

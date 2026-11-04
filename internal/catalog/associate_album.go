@@ -33,7 +33,7 @@ func AssociateAlbum(ctx context.Context, d db.AlbumStore, opts AssociateAlbumOpt
 	}
 	releaseTitle := opts.ReleaseName
 	if releaseTitle == "" {
-		releaseTitle = opts.TrackName
+		releaseTitle = "Unknown Album"
 	}
 	if opts.ReleaseMbzID != uuid.Nil {
 		l.Debug().Msgf("Associating album '%s' by MusicBrainz release ID", releaseTitle)
@@ -187,7 +187,7 @@ func matchAlbumByTitle(ctx context.Context, d db.AlbumStore, opts AssociateAlbum
 	if opts.ReleaseName != "" {
 		releaseName = opts.ReleaseName
 	} else {
-		releaseName = opts.TrackName
+		releaseName = "Unknown Album"
 	}
 
 	a, err := d.GetAlbum(ctx, db.GetAlbumOpts{

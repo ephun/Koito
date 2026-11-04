@@ -6,7 +6,7 @@ This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 through 3 are complete. Phase 4 is next. Later phases below are proposed
+Phases 1 through 3 are complete. Phase 4 is in progress. Later phases below are proposed
 work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
@@ -186,7 +186,7 @@ must remain attached to stable records or music identities across rebuilds.
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
 | 2 | Last.fm imports and the first matching rules in Filters | Complete |
 | 3 | iTunes counts, inference, and shared-history attribution | Complete |
-| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | Next; builds on 2 and 3 |
+| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories implemented |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
 | 7 | Concert and gameplay data | After 3-4; uses 6 where relevant |
@@ -385,6 +385,10 @@ options, and the default treatment of uncertain shared listening.
 
 **Outcome:** music can be matched, renamed, and grouped without destroying its
 original spelling, identifiers, or album association.
+
+**Status: in progress.** Track histories across albums are implemented and verified.
+The atomic filter evaluator, builder, metadata cleanup, genres, and optional tags remain in this phase.
+Implementation and acceptance evidence: [Phase 4](phase-4.md).
 
 ### First milestone: track history across albums
 
