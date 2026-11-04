@@ -126,7 +126,6 @@ export default function Filters() {
     {loading && <p role="status">Loading filters...</p>}
     {message && <p role="status" className="text-sm text-(--color-fg-secondary)">{message}</p>}
 
-    {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
     {music && plays && <section aria-labelledby="matching-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
       <div className={card}>
@@ -200,6 +199,7 @@ export default function Filters() {
       })}
       <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>
     </section>}
+    {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
   </main>;
 }
 
