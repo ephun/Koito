@@ -72,7 +72,17 @@ func TestListenScopeFollowsRecordThroughMatchAndSplit(t *testing.T) {
 	}{{"split", 1, 2}, {"match", 0, 1}} {
 		change = currentChange(t, s)
 		change.Decision = &DecisionChange{Left: 1, Right: 2, Action: test.action}
-		_, err = s.Save(ctx, change)
+		versions := count(t, s, "filter_versions")
+		decisions := count(t, s, "match_decisions")
+		stored := count(t, s, "listens")
+		preview, e := s.Preview(ctx, change)
+		require.NoError(t, e)
+		require.NotEmpty(t, preview.ScopeExamples)
+		require.Equal(t, versions, count(t, s, "filter_versions"))
+		require.Equal(t, decisions, count(t, s, "match_decisions"))
+		require.Equal(t, stored, count(t, s, "listens"))
+		change.Token = preview.Token
+		_, err = s.Apply(ctx, change)
 		require.NoError(t, err)
 		check(test.visible)
 		require.Equal(t, test.stored, count(t, s, "listens"))

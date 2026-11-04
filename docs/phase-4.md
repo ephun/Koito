@@ -870,3 +870,46 @@ Main activation passed after a database backup.
 The main rebuild completed in 63.75 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
 All three original-file hashes and preservation fingerprints passed.
 Track 271 retained 521 plays across the same album appearances.
+
+## Scope previews use the pending view
+
+Inclusion previews now run the pending projection inside a database savepoint.
+They use the same publication path as Save and Rebuild, including newly created catalog appearances.
+The temporary projection and version are rolled back before the preview returns.
+Preview holds the shared write lock while evaluating this temporary state.
+
+Samples compare actual current inclusion with pending inclusion.
+New and removed plays appear as Absent on the corresponding side.
+Combined music-history changes and play splits can therefore change inclusion samples correctly.
+
+Regression tests cover newly allocated catalog items, matching and splitting, changed history membership,
+and publication failure after derived changes have started.
+They verify preserved versions, decisions, projection runs, physical plays, and displayed counts.
+The full Go suite passes.
+
+Incoming native metadata corrections, catalog-read coverage, and the full Phase 4 completion audit remain open.
+
+The native-capture audit found a concrete remaining gap.
+SaveArtist, SaveAlbum, and SaveTrack preserve their original canonical aliases.
+Catalog Naming, alias, artist-credit, and identifier caches are currently published by the source projection path.
+SaveTrack refreshes matching histories and inclusion, and SaveAlbum applies grouping and classification.
+The remaining catalog corrections need equivalent immediate native-capture evaluation.
+This requires coverage for incoming items, their dependent metadata conditions, and preserved originals before closing Phase 4.
+
+Actual-import verification used records 23,829 and 179,240 from a matched play.
+The temporary inclusion filter changed the actual total from 168,424 to 168,423.
+Previewing their split showed the newly independent play as Absent to Included.
+All checked database fingerprints were identical before and after Preview, including versions and manual decisions.
+The preview completed in 71.16 seconds on the local actual-import database.
+
+Main activation passed after a database backup.
+The rebuild completed in 62.219 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and preservation fingerprints passed.
+Track 271 retained its 521 plays and original album associations.
+Desktop, 390-pixel, and 320-pixel track views passed without page errors.
+
+Restoration verification passed against the pre-change configuration and original baseline fingerprints.
+The actual displayed total returned to 168,424.
+Stable play fields and physical listens also matched the main database.
+The first restoration assertion compared projection version stamps, which correctly change during Save.
+The corrected verification compares stable play content while Preview checks still include version stamps.

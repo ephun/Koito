@@ -192,7 +192,7 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.GroupingExamples = append(preview.GroupingExamples, classifications...)
-	preview.ScopeExamples, err = previewScope(ctx, tx, current.Config, config)
+	preview.ScopeExamples, err = previewProjectedScope(ctx, tx, current.ID, current.Config, config, plan)
 	if err != nil {
 		return preview, plan, config, added, err
 	}
@@ -370,7 +370,9 @@ func equalIDs(a, b []int64) bool {
 }
 
 func (s *Store) Preview(ctx context.Context, change FilterChange) (FilterPreview, error) {
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return FilterPreview{}, err
 	}
