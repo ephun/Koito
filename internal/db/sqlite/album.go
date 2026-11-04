@@ -11,7 +11,6 @@ import (
 	"github.com/gabehf/koito/internal/catalog"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
-	"github.com/gabehf/koito/internal/music"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -226,9 +225,6 @@ func (s *Sqlite) SaveAlbum(ctx context.Context, opts db.SaveAlbumOpts) (*models.
 		return nil, fmt.Errorf("SaveAlbum: canonical alias: %w", err)
 	}
 
-	if err := music.AssignAlbumGroup(ctx, tx, id64); err != nil {
-		return nil, fmt.Errorf("SaveAlbum: grouping: %w", err)
-	}
 	if err := refreshNativeCatalogItem(ctx, tx, "album", int64(id)); err != nil {
 		return nil, err
 	}

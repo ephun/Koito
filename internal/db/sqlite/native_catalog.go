@@ -22,6 +22,8 @@ func refreshNativeCatalogItem(ctx context.Context, tx *sql.Tx, kind string, id i
 			return err
 		}
 		return music.RefreshScope(ctx, tx, id)
+	case "album":
+		return music.AssignAlbumGroup(ctx, tx, id)
 	}
 	return nil
 }

@@ -179,6 +179,7 @@ type groupingRequest struct {
 	release         groupingRelease
 	label           string
 	explicit        bool
+	inheritNative   bool
 	play, aggregate string
 }
 
@@ -270,13 +271,14 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		if e != nil {
 			return e
 		}
+		inherit := !explicit
 		if !explicit {
 			if value, ok := nativeLabels[r.id]; ok {
 				label = value
 				explicit = true
 			}
 		}
-		requests = append(requests, groupingRequest{r, label, explicit, input.PlayKey, input.AggregateKey})
+		requests = append(requests, groupingRequest{release: r, label: label, explicit: explicit, inheritNative: inherit, play: input.PlayKey, aggregate: input.AggregateKey})
 	}
 	// Only explicit nonempty assignments create groups. An unchanged base title
 	// can then join that group. Explicit empty assignments remain exceptions.
@@ -350,6 +352,10 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	}
 	members := map[[2]int64]bool{}
 	for _, r := range requests {
+		if r.inheritNative {
+			// An absent source override follows native_release_groups in the report views.
+			continue
+		}
 		label := r.label
 		if !r.explicit {
 			label = r.release.title
@@ -379,7 +385,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	return nil
 }
 
-// AssignAlbumGroup applies current native defaults to a newly captured release.
+// AssignAlbumGroup refreshes current native defaults after capture or enrichment.
 // Existing source overrides remain untouched.
 func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	var config string
@@ -397,13 +403,31 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 		return err
 	}
 	programs, err := CompileGroupingPrograms(settings.Rules)
-	if err != nil || len(programs.programs) == 0 {
+	if err != nil {
 		return err
+	}
+	if _, err = db.ExecContext(ctx, `DELETE FROM album_classification WHERE album_id=?`, releaseID); err != nil {
+		return err
+	}
+	if _, err = db.ExecContext(ctx, `DELETE FROM album_classification_issues WHERE album_id=?`, releaseID); err != nil {
+		return err
+	}
+	if err = clearNativeAlbumAssignment(ctx, db, releaseID); err != nil {
+		return err
+	}
+	if len(programs.programs) == 0 {
+		return nil
 	}
 	var title, credits, raw string
 	var various bool
 	err = db.QueryRowContext(ctx, `SELECT r.title,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]'),r.various_artists FROM releases_with_title r WHERE r.id=?`, releaseID).Scan(&title, &credits, &raw, &various)
 	if err != nil {
+		return err
+	}
+	if err = rekeySourceAlbumAssignments(ctx, db, releaseID, credits); err != nil {
+		return err
+	}
+	if err = pruneAlbumMemberships(ctx, db, releaseID); err != nil {
 		return err
 	}
 	var names []string
@@ -493,7 +517,6 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	if err != nil {
 		return err
 	}
-	var canonical int64
 	for _, candidate := range candidates {
 		env["catalog.id"] = filters.Integer(candidate)
 		env["original.various_artists"] = filters.Bool(candidateFlags[candidate])
@@ -506,18 +529,108 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 		if assigned && target != label {
 			continue
 		}
+		if err = clearNativeAlbumAssignment(ctx, db, candidate); err != nil {
+			return err
+		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO native_release_groups(release_id,group_id) VALUES(?,?) ON CONFLICT(release_id) DO UPDATE SET group_id=excluded.group_id`, candidate, id); err != nil {
 			return err
 		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO album_group_members(group_id,release_id) VALUES(?,?) ON CONFLICT DO NOTHING`, id, candidate); err != nil {
 			return err
 		}
-		if canonical == 0 || candidate < canonical {
-			canonical = candidate
+	}
+	return refreshAlbumGroupCanonical(ctx, db, id)
+}
+
+func refreshAlbumGroupCanonical(ctx context.Context, db Database, groupID int64) error {
+	_, err := db.ExecContext(ctx, `UPDATE album_groups SET canonical_release_id=(SELECT m.release_id FROM album_group_members m JOIN releases_with_title r ON r.id=m.release_id WHERE m.group_id=album_groups.id ORDER BY CASE WHEN r.title=album_groups.title THEN 0 ELSE 1 END,m.release_id LIMIT 1) WHERE id=?`, groupID)
+	return err
+}
+
+func clearNativeAlbumAssignment(ctx context.Context, db Database, releaseID int64) error {
+	if _, err := db.ExecContext(ctx, `DELETE FROM native_release_groups WHERE release_id=?`, releaseID); err != nil {
+		return err
+	}
+	return pruneAlbumMemberships(ctx, db, releaseID)
+}
+
+func pruneAlbumMemberships(ctx context.Context, db Database, releaseID int64) error {
+	rows, err := db.QueryContext(ctx, `SELECT group_id FROM album_group_members WHERE release_id=?`, releaseID)
+	if err != nil {
+		return err
+	}
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `DELETE FROM album_group_members AS m WHERE release_id=? AND NOT EXISTS(SELECT 1 FROM native_release_groups n WHERE n.release_id=m.release_id AND n.group_id=m.group_id) AND NOT EXISTS(SELECT 1 FROM source_play_groupings g JOIN source_plays p ON p.play_key=g.play_key JOIN tracks t ON t.id=p.track_id WHERE t.release_id=m.release_id AND g.group_id=m.group_id) AND NOT EXISTS(SELECT 1 FROM source_aggregate_groupings g JOIN source_aggregates a ON a.aggregate_key=g.aggregate_key JOIN tracks t ON t.id=a.track_id WHERE t.release_id=m.release_id AND g.group_id=m.group_id)`, releaseID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err = refreshAlbumGroupCanonical(ctx, db, id); err != nil {
+			return err
 		}
 	}
-	if canonical > 0 {
-		_, err = db.ExecContext(ctx, `UPDATE album_groups SET canonical_release_id=? WHERE id=?`, canonical, id)
+	return nil
+}
+
+// Explicit source labels survive enrichment. Their credit-based group key follows
+// the release's newly known credits while their label and exception remain intact.
+func rekeySourceAlbumAssignments(ctx context.Context, db Database, releaseID int64, credits string) error {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT g.id,g.title FROM album_groups g JOIN source_play_groupings s ON s.group_id=g.id JOIN source_plays p ON p.play_key=s.play_key JOIN tracks t ON t.id=p.track_id WHERE t.release_id=? UNION SELECT DISTINCT g.id,g.title FROM album_groups g JOIN source_aggregate_groupings s ON s.group_id=g.id JOIN source_aggregates a ON a.aggregate_key=s.aggregate_key JOIN tracks t ON t.id=a.track_id WHERE t.release_id=?`, releaseID, releaseID)
+	if err != nil {
+		return err
 	}
-	return err
+	type assignment struct {
+		id    int64
+		label string
+	}
+	items := []assignment{}
+	for rows.Next() {
+		var a assignment
+		if err = rows.Scan(&a.id, &a.label); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, a)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, a := range items {
+		key := albumGroupKey(credits, a.label)
+		if _, err = db.ExecContext(ctx, `INSERT INTO album_groups(group_key,title,canonical_release_id) VALUES(?,?,?) ON CONFLICT(group_key) DO NOTHING`, key, a.label, releaseID); err != nil {
+			return err
+		}
+		var id int64
+		if err = db.QueryRowContext(ctx, `SELECT id FROM album_groups WHERE group_key=?`, key).Scan(&id); err != nil {
+			return err
+		}
+		if _, err = db.ExecContext(ctx, `UPDATE source_play_groupings SET group_id=? WHERE group_id=? AND play_key IN(SELECT p.play_key FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE t.release_id=?)`, id, a.id, releaseID); err != nil {
+			return err
+		}
+		if _, err = db.ExecContext(ctx, `UPDATE source_aggregate_groupings SET group_id=? WHERE group_id=? AND aggregate_key IN(SELECT p.aggregate_key FROM source_aggregates p JOIN tracks t ON t.id=p.track_id WHERE t.release_id=?)`, id, a.id, releaseID); err != nil {
+			return err
+		}
+		if _, err = db.ExecContext(ctx, `INSERT INTO album_group_members(group_id,release_id) VALUES(?,?) ON CONFLICT DO NOTHING`, id, releaseID); err != nil {
+			return err
+		}
+		if err = refreshAlbumGroupCanonical(ctx, db, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

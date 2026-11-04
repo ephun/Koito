@@ -976,3 +976,40 @@ There were zero collisions or estimates.
 All preservation fingerprints and three original-file hashes passed.
 Track 271 retained its 521 plays and original album associations.
 Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.
+
+## Grouping after native metadata enrichment
+
+Source contributions with no explicit grouping action now inherit the native release group through the reporting views.
+Only explicit source assignments populate the source grouping tables.
+An explicit empty assignment keeps a contribution separate.
+This applies to dated plays and undated cumulative contributions.
+Rebuild converts older grouping caches to this representation before development acceptance.
+
+Native grouping refresh removes stale native membership and classification before evaluating current metadata.
+Explicit source labels remain independent, and their group keys follow newly known release credits.
+Empty former groups retain their identity with no canonical release.
+Canonical releases are selected from current members, preferring the base release title.
+Source-specific labels and separation exceptions survive native changes and rebuilding.
+
+New regressions cover Spotify plays and iTunes undated counts on the same release.
+They check inherited defaults, pinned source labels, explicit separation, classification fallback,
+credit enrichment, old membership cleanup, canonical selection, original records, and rebuild consistency.
+A publication failure rolls back raw credit additions and all affected derived group assignments together.
+The full Go suite and targeted failure regressions pass.
+
+Actual-import acceptance used album 209 and its 2,807 existing plays.
+Two contributing record IDs supplied explicit grouping exceptions.
+The remaining 2,805 plays followed a simulated native metadata change to the new group.
+One play retained its pinned source group, and one remained separate.
+The simulation ran inside a rolled-back database transaction.
+The original configuration and record, play, release flag, credit, and physical-listen fingerprints were restored and verified.
+
+The remaining audit includes native Grouping conditions that read corrected display names,
+combined catalog Naming/genre actions, catalog-read coverage, and the complete Phase 4 requirements.
+
+Main activation passed after a database backup and Rebuild.
+The rebuild completed in 61.64 seconds with 191,473 records and 168,424 plays.
+There were zero collisions or estimates.
+All preservation fingerprints and three original-file hashes passed.
+Track 271 retained its 521 plays and original album associations.
+Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.
