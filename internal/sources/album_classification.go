@@ -9,19 +9,8 @@ import (
 	"github.com/gabehf/koito/internal/music"
 )
 
-func compileAlbumClassification(config RuleConfig) ([]namingProgram, error) {
-	programs := []namingProgram{}
-	for _, rule := range config.Rules {
-		if !rule.Enabled || rule.Type != "presentation" || rule.Subtype != "grouping" || rule.Program == nil || !statementsRead(rule.Program.Steps, "catalog.kind") {
-			continue
-		}
-		compiled, err := filters.CompileProgram(*rule.Program, music.GroupingSchema())
-		if err != nil {
-			return nil, err
-		}
-		programs = append(programs, namingProgram{rule, compiled})
-	}
-	return programs, nil
+func compileAlbumClassification(config RuleConfig) (music.GroupingPrograms, error) {
+	return music.CompileGroupingPrograms(groupingFilters(config))
 }
 
 func publishAlbumClassification(ctx context.Context, tx *sql.Tx, config RuleConfig) error {
@@ -34,7 +23,7 @@ func publishAlbumClassification(ctx context.Context, tx *sql.Tx, config RuleConf
 			return err
 		}
 	}
-	if len(programs) == 0 {
+	if !programs.Active() {
 		return nil
 	}
 	albums, err := classificationAlbums(ctx, tx)
@@ -71,32 +60,16 @@ type classificationAlbum struct {
 	metadata filters.Env
 }
 
-func resolveAlbumClassification(ctx context.Context, programs []namingProgram, album classificationAlbum) (bool, bool, []FilterIssue, error) {
-	current, assigned := album.various, false
-	issues := []FilterIssue{}
-	env := filters.Env{"catalog.kind": filters.String("album"), "catalog.id": filters.Integer(album.id), "catalog.album_id": filters.Integer(album.id), "original.album": filters.String(album.title), "display.album": filters.String(album.title), "original.various_artists": filters.Bool(album.various), "group.various_artists": filters.Bool(current)}
-	for key, value := range album.metadata {
-		env[key] = value
-	}
-	for _, program := range programs {
-		out, e := program.program.Run(ctx, env)
-		if e != nil {
-			return current, assigned, issues, e
-		}
-		for _, issue := range out.Issues {
-			issues = append(issues, FilterIssue{program.rule.ID, program.rule.Name, issue})
-		}
-		if len(out.Issues) > 0 {
-			continue
-		}
-		if value, ok := out.Values["group.various_artists"]; ok {
-			current, _ = value.Bool()
-			assigned = true
-			env["group.various_artists"] = value
+func resolveAlbumClassification(ctx context.Context, programs music.GroupingPrograms, album classificationAlbum) (bool, bool, []FilterIssue, error) {
+	env := music.AlbumGroupingEnvironment(album.id, album.title, album.various, album.metadata)
+	result, issues, err := programs.ResolveValues(ctx, env)
+	converted := []FilterIssue{}
+	for _, issue := range issues {
+		if programs.WritesClassification(issue.ID) {
+			converted = append(converted, FilterIssue{issue.ID, issue.Name, issue.Issue})
 		}
 	}
-
-	return current, assigned, issues, nil
+	return result.VariousArtists, result.VariousAssigned, converted, err
 }
 
 func previewAlbumClassification(ctx context.Context, tx *sql.Tx, before, after RuleConfig) ([]NamingExample, error) {
@@ -109,7 +82,7 @@ func previewAlbumClassification(ctx context.Context, tx *sql.Tx, before, after R
 		return nil, err
 	}
 	examples := []NamingExample{}
-	if len(old) == 0 && len(next) == 0 {
+	if !old.Active() && !next.Active() {
 		return examples, nil
 	}
 	albums, err := classificationAlbums(ctx, tx)

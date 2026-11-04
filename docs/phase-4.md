@@ -833,3 +833,40 @@ Main activation passed after a backup and migration 22.
 The main rebuild completed in 63.422 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
 All three original-file hashes and preservation fingerprints passed.
 The checked track retained its original 521 plays and album associations.
+
+## Combined Grouping actions
+
+Edition grouping and Various Artists now use one ordered evaluator and one result state.
+An action can read values assigned earlier in its filter or by earlier filters.
+A runtime failure rejects that filter's complete result while retaining earlier valid filters.
+Various Artists assignments require an album context, and unsupported record-context assignments produce an inspectable issue.
+
+Native grouping, classification publication, classification preview, and native album capture share the same album environment.
+It includes the album identity, original compilation flag, and complete artist credit lists.
+Artist names containing commas remain intact.
+Classification-only filters also work with an unconditional TRUE condition.
+
+Imported plays and undated contributions inherit explicitly assigned native album groups.
+Explicit record, source, file, or library assignments remain independent overrides.
+An absent native assignment stays absent and does not create a new group.
+Regression checks retain independent grouping of cumulative contributions on one appearance.
+
+New native releases apply both grouping and classification assignments immediately.
+Existing base releases are evaluated with their own identities and original compilation flags before joining a group.
+This preserves release-specific exceptions during native capture.
+
+The full Go suite passes.
+New evaluator and database regressions cover combined assignments, intra-filter value reads, atomic failure,
+record-context rejection, native artist conditions, source inheritance, disabling, and new-release exceptions.
+Original flags, releases, records, and listening rows remain intact in these tests.
+Actual-import browser verification passed both previews, grouped totals, and the shared editor together.
+Album 209 contributed its actual 2,807 plays to the temporary group.
+The classification change and both SET actions were verified at 390 and 320 pixels without page errors.
+Raw records, plays, artist aliases, album aliases, original compilation flags, and album appearances retained their fingerprints.
+Restoring the original configuration restored the original album state and fingerprints.
+The API acceptance setup materializes both legacy programs and their required additions, matching the Filters page.
+
+Main activation passed after a database backup.
+The main rebuild completed in 63.75 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and preservation fingerprints passed.
+Track 271 retained 521 plays across the same album appearances.

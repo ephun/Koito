@@ -54,18 +54,33 @@ func CompileGroupingPrograms(rules []IdentityFilter) (GroupingPrograms, error) {
 	return p, nil
 }
 
+type GroupingResult struct {
+	Album           string
+	AlbumAssigned   bool
+	VariousArtists  bool
+	VariousAssigned bool
+}
+
 func (p GroupingPrograms) Resolve(ctx context.Context, env filters.Env) (string, bool, []IdentityIssue, error) {
+	result, issues, err := p.ResolveValues(ctx, env)
+	return result.Album, result.AlbumAssigned, issues, err
+}
+func (p GroupingPrograms) ResolveValues(ctx context.Context, env filters.Env) (GroupingResult, []IdentityIssue, error) {
 	local := filters.Env{}
-	for k, v := range env {
-		local[k] = v
+	for key, value := range env {
+		local[key] = value
 	}
 	local["group.album"] = filters.String("")
-	label, assigned := "", false
+	if _, ok := local["group.various_artists"]; !ok {
+		local["group.various_artists"] = local["original.various_artists"]
+	}
+	result := GroupingResult{}
+	result.VariousArtists, _ = local["group.various_artists"].Bool()
 	issues := []IdentityIssue{}
 	for _, program := range p.programs {
 		out, err := program.compiled.Run(ctx, local)
 		if err != nil {
-			return label, assigned, issues, err
+			return result, issues, err
 		}
 		for _, issue := range out.Issues {
 			issues = append(issues, IdentityIssue{program.filter.ID, program.filter.Name, issue})
@@ -73,13 +88,80 @@ func (p GroupingPrograms) Resolve(ctx context.Context, env filters.Env) (string,
 		if len(out.Issues) > 0 {
 			continue
 		}
+		if _, assigned := out.Values["group.various_artists"]; assigned {
+			kind, _ := local["catalog.kind"].Text()
+			if kind != "album" {
+				issues = append(issues, IdentityIssue{program.filter.ID, program.filter.Name, filters.Issue{Path: "group.various_artists", Reason: "Various Artists needs an album context."}})
+				continue
+			}
+		}
 		if value, ok := out.Values["group.album"]; ok {
-			label, _ = value.Text()
-			assigned = true
+			result.Album, _ = value.Text()
+			result.AlbumAssigned = true
 			local["group.album"] = value
 		}
+		if value, ok := out.Values["group.various_artists"]; ok {
+			result.VariousArtists, _ = value.Bool()
+			result.VariousAssigned = true
+			local["group.various_artists"] = value
+		}
 	}
-	return label, assigned, issues, nil
+	return result, issues, nil
+}
+
+func AlbumGroupingEnvironment(id int64, title string, various bool, metadata ...filters.Env) filters.Env {
+	env := filters.Env{"catalog.kind": filters.String("album"), "catalog.id": filters.Integer(id), "catalog.album_id": filters.Integer(id), "source.service": filters.String("koito"), "original.album": filters.String(title), "display.album": filters.String(title), "original.various_artists": filters.Bool(various), "group.various_artists": filters.Bool(various)}
+	for _, extra := range metadata {
+		for key, value := range extra {
+			env[key] = value
+		}
+	}
+	if artists, ok := env["original.artists"].Items(); ok && len(artists) == 1 {
+		env["original.artist"] = artists[0]
+		env["display.artist"] = artists[0]
+	} else {
+		delete(env, "original.artist")
+		delete(env, "display.artist")
+	}
+	return env
+}
+func NativeAlbumGroupingEnvironment(id int64, title, artist, credits string, various bool) (filters.Env, error) {
+	ids, err := filters.FromJSON(json.RawMessage("[" + credits + "]"))
+	if err != nil {
+		return nil, err
+	}
+	values, _ := ids.Items()
+	names := filters.Values()
+	if len(values) == 1 {
+		names = filters.Values(filters.String(artist))
+	} else {
+		names, err = filters.FromJSON(json.RawMessage(artist))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return AlbumGroupingEnvironment(id, title, various, filters.Env{"catalog.artist_ids": ids, "original.artists": names}), nil
+}
+func groupingSets(steps []filters.Statement, target string) bool {
+	for _, step := range steps {
+		if step.Set == target || groupingSets(step.Then, target) || groupingSets(step.Else, target) {
+			return true
+		}
+		for _, branch := range step.ElseIf {
+			if groupingSets(branch.Then, target) {
+				return true
+			}
+		}
+	}
+	return false
+}
+func (p GroupingPrograms) WritesClassification(id string) bool {
+	for _, program := range p.programs {
+		if program.filter.ID == id {
+			return groupingSets(program.filter.Program.Steps, "group.various_artists")
+		}
+	}
+	return false
 }
 
 type AlbumGroupingInput struct {
@@ -90,6 +172,7 @@ type AlbumGroupingInput struct {
 }
 type groupingRelease struct {
 	id                     int64
+	various                bool
 	title, artist, credits string
 }
 type groupingRequest struct {
@@ -128,7 +211,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	rows, err := db.QueryContext(ctx, `SELECT r.id,r.title,
  COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),
  COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]')
- FROM releases_with_title r ORDER BY r.id`)
+ ,r.various_artists FROM releases_with_title r ORDER BY r.id`)
 	if err != nil {
 		return err
 	}
@@ -137,7 +220,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	for rows.Next() {
 		var r groupingRelease
 		var raw string
-		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw); err != nil {
+		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw, &r.various); err != nil {
 			rows.Close()
 			return err
 		}
@@ -160,14 +243,21 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		return err
 	}
 	requests := make([]groupingRequest, 0, len(order)+len(inputs))
+	nativeLabels := map[int64]string{}
 	for _, id := range order {
 		r := releases[id]
-		env := filters.Env{"original.artist": filters.String(r.artist), "original.album": filters.String(r.title), "original.title": filters.String(""), "display.artist": filters.String(r.artist), "display.album": filters.String(r.title), "display.title": filters.String(""), "source.service": filters.String("koito"), "catalog.album_id": filters.Integer(id)}
+		env, e := NativeAlbumGroupingEnvironment(id, r.title, r.artist, r.credits, r.various)
+		if e != nil {
+			return e
+		}
 		label, explicit, _, e := programs.Resolve(ctx, env)
 		if e != nil {
 			return e
 		}
 		requests = append(requests, groupingRequest{release: r, label: label, explicit: explicit})
+		if explicit {
+			nativeLabels[id] = label
+		}
 	}
 	for _, input := range inputs {
 		r, ok := releases[input.ReleaseID]
@@ -179,6 +269,12 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		label, explicit, _, e := programs.Resolve(ctx, env)
 		if e != nil {
 			return e
+		}
+		if !explicit {
+			if value, ok := nativeLabels[r.id]; ok {
+				label = value
+				explicit = true
+			}
 		}
 		requests = append(requests, groupingRequest{r, label, explicit, input.PlayKey, input.AggregateKey})
 	}
@@ -305,7 +401,8 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 		return err
 	}
 	var title, credits, raw string
-	err = db.QueryRowContext(ctx, `SELECT r.title,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]') FROM releases_with_title r WHERE r.id=?`, releaseID).Scan(&title, &credits, &raw)
+	var various bool
+	err = db.QueryRowContext(ctx, `SELECT r.title,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]'),r.various_artists FROM releases_with_title r WHERE r.id=?`, releaseID).Scan(&title, &credits, &raw, &various)
 	if err != nil {
 		return err
 	}
@@ -317,10 +414,35 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	if len(names) == 1 {
 		artist = names[0]
 	}
-	env := filters.Env{"source.service": filters.String("koito"), "original.artist": filters.String(artist), "original.album": filters.String(title), "original.title": filters.String(""), "display.artist": filters.String(artist), "display.album": filters.String(title), "display.title": filters.String(""), "catalog.album_id": filters.Integer(releaseID)}
-	label, explicit, _, err := programs.Resolve(ctx, env)
+	env, err := NativeAlbumGroupingEnvironment(releaseID, title, artist, credits, various)
 	if err != nil {
 		return err
+	}
+	result, issues, err := programs.ResolveValues(ctx, env)
+	label, explicit := result.Album, result.AlbumAssigned
+	if err == nil && result.VariousAssigned {
+		_, err = db.ExecContext(ctx, `INSERT INTO album_classification(album_id,various_artists) VALUES(?,?) ON CONFLICT(album_id) DO UPDATE SET various_artists=excluded.various_artists`, releaseID, result.VariousArtists)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = db.ExecContext(ctx, `DELETE FROM album_classification_issues WHERE album_id=?`, releaseID); err != nil {
+		return err
+	}
+	relevant := []IdentityIssue{}
+	for _, issue := range issues {
+		if programs.WritesClassification(issue.ID) {
+			relevant = append(relevant, issue)
+		}
+	}
+	if len(relevant) > 0 {
+		raw, e := json.Marshal(relevant)
+		if e != nil {
+			return e
+		}
+		if _, err = db.ExecContext(ctx, `INSERT INTO album_classification_issues(album_id,issues_json) VALUES(?,?)`, releaseID, string(raw)); err != nil {
+			return err
+		}
 	}
 	if !explicit {
 		label = title
@@ -350,18 +472,21 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	}
 	// When a deluxe edition creates a group, an already captured base release
 	// can join immediately. Evaluate it too so explicit exceptions still win.
-	rows, err := db.QueryContext(ctx, `SELECT r.id FROM releases_with_title r WHERE r.title=? AND COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),'')=? ORDER BY r.id`, label, credits)
+	rows, err := db.QueryContext(ctx, `SELECT r.id,r.various_artists FROM releases_with_title r WHERE r.title=? AND COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),'')=? ORDER BY r.id`, label, credits)
 	if err != nil {
 		return err
 	}
 	candidates := []int64{}
+	candidateFlags := map[int64]bool{}
 	for rows.Next() {
 		var candidate int64
-		if err = rows.Scan(&candidate); err != nil {
+		var flag bool
+		if err = rows.Scan(&candidate, &flag); err != nil {
 			rows.Close()
 			return err
 		}
 		candidates = append(candidates, candidate)
+		candidateFlags[candidate] = flag
 	}
 	err = rows.Err()
 	rows.Close()
@@ -370,6 +495,9 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	}
 	var canonical int64
 	for _, candidate := range candidates {
+		env["catalog.id"] = filters.Integer(candidate)
+		env["original.various_artists"] = filters.Bool(candidateFlags[candidate])
+		env["group.various_artists"] = filters.Bool(candidateFlags[candidate])
 		env["catalog.album_id"], env["original.album"], env["display.album"] = filters.Integer(candidate), filters.String(label), filters.String(label)
 		target, assigned, _, e := programs.Resolve(ctx, env)
 		if e != nil {

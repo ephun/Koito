@@ -95,17 +95,19 @@ func previewGrouping(ctx context.Context, reader sqlReader, plan matchPlan, befo
 	type release struct {
 		id            int64
 		title, artist string
+		various       bool
+		credits       string
 	}
 	catalog := []release{}
 	byName := map[[2]string]int64{}
-	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.title,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]') FROM releases_with_title r ORDER BY r.id`)
+	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.title,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]'),r.various_artists,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),'') FROM releases_with_title r ORDER BY r.id`)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var r release
 		var raw string
-		if err = rows.Scan(&r.id, &r.title, &raw); err != nil {
+		if err = rows.Scan(&r.id, &r.title, &raw, &r.various, &r.credits); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -195,7 +197,10 @@ func previewGrouping(ctx context.Context, reader sqlReader, plan matchPlan, befo
 	}
 	if len(examples) < 12 {
 		for _, r := range catalog {
-			env := filters.Env{"original.artist": filters.String(r.artist), "original.album": filters.String(r.title), "original.title": filters.String(""), "display.artist": filters.String(r.artist), "display.album": filters.String(r.title), "display.title": filters.String(""), "source.service": filters.String("koito"), "catalog.album_id": filters.Integer(r.id)}
+			env, e := music.NativeAlbumGroupingEnvironment(r.id, r.title, r.artist, r.credits, r.various)
+			if e != nil {
+				return nil, e
+			}
 			left, assigned, _, e := old.Resolve(ctx, env)
 			if e != nil {
 				return nil, e
