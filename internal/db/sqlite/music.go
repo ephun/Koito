@@ -19,7 +19,7 @@ func (s *Sqlite) trackHistory(ctx context.Context, t *models.Track) error {
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT a.id,a.title,COALESCE(SUM(c.amount),0)
+	rows, err := s.db.QueryContext(ctx, `SELECT a.id,COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=a.id),a.title),COALESCE(SUM(c.amount),0)
 	    FROM tracks p JOIN releases_with_title a ON a.id=p.release_id
 	    LEFT JOIN listening_counts c ON c.track_id=p.id
 	    WHERE `+historyPredicate("p.id")+` GROUP BY a.id,a.title ORDER BY SUM(c.amount) DESC,a.title,a.id`, t.ID)

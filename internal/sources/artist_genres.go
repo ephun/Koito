@@ -36,7 +36,7 @@ func resolveArtistGenres(ctx context.Context, programs []namingProgram, artistID
 	for _, label := range source {
 		values = append(values, filters.String(label))
 	}
-	env := filters.Env{"catalog.artist_id": filters.Integer(artistID), "original.artist": filters.String(name), "display.artist": filters.String(name), "source.genres": filters.Values(values...), "source.genre_records": filters.Values(evidence...), "artist.genres": filters.Values(values...)}
+	env := filters.Env{"catalog.kind": filters.String("artist"), "catalog.id": filters.Integer(artistID), "catalog.artist_id": filters.Integer(artistID), "original.artist": filters.String(name), "display.artist": filters.String(name), "source.genres": filters.Values(values...), "source.genre_records": filters.Values(evidence...), "artist.genres": filters.Values(values...)}
 	current := append([]string{}, source...)
 	issues := []FilterIssue{}
 	for _, program := range programs {

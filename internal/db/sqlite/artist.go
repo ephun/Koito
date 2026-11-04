@@ -108,19 +108,37 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	if err != nil {
 		return nil, err
 	}
+	displayName, err := s.catalogName(ctx, "artist", opts.ID, name.String)
+	if err != nil {
+		return nil, err
+	}
+	nameIssues, err := s.catalogNameIssues(ctx, "artist", opts.ID)
+	if err != nil {
+		return nil, err
+	}
+	correctedIdentifier, err := s.catalogIdentifier(ctx, "artist", opts.ID, parseNullableUUID(mbzID))
+	if err != nil {
+		return nil, err
+	}
+	identifierIssues, err := s.catalogIdentifierIssues(ctx, "artist", opts.ID)
+	if err != nil {
+		return nil, err
+	}
 	return &models.Artist{
-		GenreIssues:   genreIssues,
-		GenreEvidence: genres,
-		Genres:        resolvedGenres,
-		ID:            opts.ID,
-		MbzID:         parseNullableUUID(mbzID),
-		Name:          name.String,
-		Aliases:       aliases,
-		Image:         catalog.BuildImageList(parseNullableUUID(image)),
-		ListenCount:   listenCount,
-		TimeListened:  timeListened,
-		FirstListen:   firstListenUnix,
-		AllTimeRank:   rank,
+		NameIssues:       nameIssues,
+		IdentifierIssues: identifierIssues,
+		GenreIssues:      genreIssues,
+		GenreEvidence:    genres,
+		Genres:           resolvedGenres,
+		ID:               opts.ID,
+		MbzID:            correctedIdentifier,
+		Name:             displayName,
+		Aliases:          aliases,
+		Image:            catalog.BuildImageList(parseNullableUUID(image)),
+		ListenCount:      listenCount,
+		TimeListened:     timeListened,
+		FirstListen:      firstListenUnix,
+		AllTimeRank:      rank,
 	}, nil
 }
 
@@ -325,7 +343,7 @@ func (s *Sqlite) SetPrimaryArtistAlias(ctx context.Context, id int32, alias stri
 
 func (s *Sqlite) GetArtistsForAlbum(ctx context.Context, id int32) ([]*models.Artist, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.id, awn.name, a.musicbrainz_id, a.image, ar.is_primary
+		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=a.id),awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image, ar.is_primary
 		FROM artist_releases ar
 		JOIN artists_with_name awn ON awn.id = ar.artist_id
 		JOIN artists a ON a.id = ar.artist_id
@@ -354,7 +372,7 @@ func (s *Sqlite) GetArtistsForAlbum(ctx context.Context, id int32) ([]*models.Ar
 
 func (s *Sqlite) GetArtistsForTrack(ctx context.Context, id int32) ([]*models.Artist, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.id, awn.name, a.musicbrainz_id, a.image, at2.is_primary
+		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=a.id),awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image, at2.is_primary
 		FROM artist_tracks at2
 		JOIN artists_with_name awn ON awn.id = at2.artist_id
 		JOIN artists a ON a.id = at2.artist_id
@@ -406,7 +424,7 @@ func (s *Sqlite) GetTopArtistsPaginated(ctx context.Context, opts db.GetItemsOpt
 			ORDER BY listen_count DESC, artist_id
 			LIMIT ? OFFSET ?
 		)
-		SELECT r.artist_id, awn.name, a.musicbrainz_id, a.image, r.listen_count, r.rank, r.total_count
+		SELECT r.artist_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image, r.listen_count, r.rank, r.total_count
 		FROM RankedArtists r
 		JOIN artists a ON a.id = r.artist_id
 		JOIN artists_with_name awn ON awn.id = r.artist_id

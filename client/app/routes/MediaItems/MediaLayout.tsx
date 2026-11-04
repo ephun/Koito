@@ -14,6 +14,7 @@ import { Link } from "react-router";
 import useWindowWidth from "~/hooks/useWindowWidth";
 
 interface Props {
+  filterIssues?: {filter_id: string; name: string; reason: string}[];
   grouped?: boolean;
   type: "Track" | "Album" | "Artist";
   title: string;
@@ -131,7 +132,7 @@ export default function MediaLayout(props: Props) {
               <Link
                 title="View on MusicBrainz"
                 target="_blank"
-                to={`https://musicbrainz.org/${props.type.toLowerCase()}/${
+                to={`https://musicbrainz.org/${props.type === "Track" ? "recording" : props.type === "Album" ? "release" : "artist"}/${
                   props.musicbrainzId
                 }`}
               >
@@ -216,6 +217,10 @@ export default function MediaLayout(props: Props) {
             )}
           </div>
         </div>
+        {!!props.filterIssues?.length && <details className="mt-6 rounded border border-(--color-bg-tertiary) p-3">
+          <summary className="cursor-pointer text-sm">Unresolved filters</summary>
+          <ul className="mt-2 space-y-2 text-sm">{props.filterIssues.map((issue,index) => <li key={index}><Link className="underline" to="/filters">{issue.name || "Filter"}</Link>: {issue.reason}</li>)}</ul>
+        </details>}
         {props.children}
       </div>
     </main>

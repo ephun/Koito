@@ -56,6 +56,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		return result, err
 	}
 	for _, query := range []string{
+		`DELETE FROM source_play_tags`,
 		`DELETE FROM track_history_overrides`,
 		`DELETE FROM source_aggregate_records`,
 		`DELETE FROM source_aggregates`,
@@ -217,6 +218,15 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		if _, err = tx.ExecContext(ctx, `INSERT INTO source_plays(policy,play_key,source_id,representative_record,track_id,listened_at,disposition,version_id) VALUES(?,?,?,?,?,?,?,?)`, Policy, play.Key, r.SourceID, r.ID, track, unix, disposition, versionID); err != nil {
 			return result, err
 		}
+		if len(v.Tags) > 0 {
+			raw, e := json.Marshal(v.Tags)
+			if e != nil {
+				return result, e
+			}
+			if _, err = tx.ExecContext(ctx, `INSERT INTO source_play_tags(play_key,tags_json) VALUES(?,?)`, play.Key, string(raw)); err != nil {
+				return result, err
+			}
+		}
 	}
 	for _, aggregate := range plan.Aggregates {
 		r := byID[aggregate.Representative]
@@ -287,8 +297,17 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = json.Unmarshal([]byte(rawConfig), &config); err != nil {
 		return result, err
 	}
+	if err = publishCatalogIdentifiers(ctx, tx, config); err != nil {
+		return result, err
+	}
+	if err = publishCatalogNames(ctx, tx, config); err != nil {
+		return result, err
+	}
 	musicRule, _ := config.matchingRules()
 	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
+		return result, err
+	}
+	if err = publishAlbumClassification(ctx, tx, config); err != nil {
 		return result, err
 	}
 	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {

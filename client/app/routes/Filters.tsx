@@ -13,6 +13,9 @@ export default function Filters() {
   const [params] = useSearchParams();
   const recordID = params.get("record");
   const artistID = Number(params.get("artist")) || 0;
+  const catalogKind = params.get("catalog") || "";
+  const catalogID = Number(params.get("id")) || 0;
+  const catalogEdit = params.get("edit") || "name";
   const [saved, setSaved] = useState<FilterState>();
   const [draft, setDraft] = useState<RuleConfig>();
   const [loading, setLoading] = useState(true);
@@ -21,11 +24,16 @@ export default function Filters() {
   const [stale, setStale] = useState(false);
   const [message, setMessage] = useState("");
   const [focusedFilter, setFocusedFilter] = useState<string>();
+  const [focusedMatching, setFocusedMatching] = useState(false);
+  const [focusedGrouping, setFocusedGrouping] = useState(false);
 
   async function load() {
     setLoading(true);
     setError("");
     setStale(false);
+    setFocusedMatching(false);
+    setFocusedGrouping(false);
+    setFocusedFilter(undefined);
     try {
       const state = await filterRequest<FilterState>();
       state.current.config.rules = state.current.config.rules.map(rule => state.blocks?.legacy?.[rule.id] || rule);
@@ -45,6 +53,24 @@ export default function Filters() {
         }
       }
 
+      if (["artist", "album", "track"].includes(catalogKind) && catalogID > 0) {
+        const identifier = catalogEdit === "identifier";
+        const classification = catalogKind === "album" && catalogEdit === "classification";
+        const id = `catalog-${classification ? "classification" : identifier ? "identifier" : "name"}-${catalogKind}-${catalogID}`;
+        setFocusedMatching(identifier);
+        setFocusedGrouping(classification);
+        const existing = next.rules.find(rule => rule.id === id);
+        if (!existing) {
+          const response = await fetch(`/apis/web/v1/${catalogKind}/${catalogID}`);
+          if (!response.ok) throw new Error("Could not load music.");
+          const item = await response.json();
+          const field = catalogKind === "track" ? "title" : catalogKind;
+          const name = catalogKind === "artist" ? item.name : item.title;
+          next.rules.push({id, name: `${classification ? "Various Artists" : identifier ? "MusicBrainz identifier" : "Name"} for ${name}`.slice(0,200), type:identifier ? "matching" : "presentation", subtype:classification ? "grouping" : identifier ? "music" : "naming", enabled:true, scope:{}, settings:{...defaultRuleSettings}, program:{steps:[{if:{op:"and",args:[{op:"eq",args:[{op:"field",field:"catalog.kind"},{op:"literal",value:catalogKind}]},{op:"eq",args:[{op:"field",field:"catalog.id"},{op:"literal",value:catalogID}]}]},then:[{set:classification ? "group.various_artists" : identifier ? "music.identifier" : `display.${field}`,value:{op:"literal",value:classification ? item.is_various_artists : identifier ? item.musicbrainz_id || "" : name}}]}]}});
+        }
+        setFocusedFilter(id);
+      }
+
       setDraft(next);
     } catch (error) {
       setError(errorMessage(error));
@@ -53,7 +79,7 @@ export default function Filters() {
 
   useEffect(() => {
     if (user?.role === "admin" && !recordID) void load();
-  }, [user?.role, recordID, artistID]);
+  }, [user?.role, recordID, artistID, catalogKind, catalogID, catalogEdit]);
 
   function upsert(rule: Rule) {
     setDraft(previous => previous && ({ rules: previous.rules.some(existing => existing.id === rule.id)
@@ -125,7 +151,7 @@ export default function Filters() {
     {saved && draft && <>
       <section aria-labelledby="matching-title" className="space-y-3">
         <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
-        {["music", "play"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="matching" subtype={subtype} embedded onChange={upsert} onRemove={remove} />)}
+        {["music", "play"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="matching" subtype={subtype} embedded onChange={upsert} onRemove={remove} focusId={subtype === "music" && focusedMatching ? focusedFilter : undefined} />)}
       </section>
       <section aria-labelledby="inference-title" className="space-y-3">
         <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
@@ -139,7 +165,7 @@ export default function Filters() {
     </>}
     {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
-      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={subtype === "naming" ? focusedFilter : undefined} />)}
+      {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={(subtype === "grouping" ? focusedGrouping : !focusedMatching && !focusedGrouping) ? focusedFilter : undefined} />)}
     </section>}
   </main>;
 }

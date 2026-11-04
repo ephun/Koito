@@ -14,10 +14,13 @@ import (
 // listen's release remain independent of these derived links.
 func GroupingSchema() filters.Schema {
 	s := MatchingSchema()
-	s.Targets = map[string]filters.Type{"group.album": filters.Text}
-	s.Labels = map[string]string{"group.album": "Album group", "catalog.album_id": "Album identifier"}
+	s.Targets = map[string]filters.Type{"group.album": filters.Text, "group.various_artists": filters.Boolean}
+	s.Fields["original.various_artists"] = filters.Boolean
+	s.Labels = map[string]string{"group.various_artists": "Various Artists", "original.various_artists": "Original Various Artists classification", "group.album": "Album group", "catalog.album_id": "Album identifier"}
 	s.Help = map[string]string{"group.album": "Choose a reporting name for editions by the same artists. Empty text keeps this contribution separate."}
 	s.Fields["catalog.album_id"] = filters.Number
+	s.Fields["catalog.artist_ids"] = filters.List
+	s.Fields["original.artists"] = filters.List
 	for _, key := range []string{"display.artist", "display.album", "display.title"} {
 		s.Fields[key] = filters.Text
 	}

@@ -102,6 +102,22 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 		return nil, err
 	}
 
+	track.Title, err = s.catalogName(ctx, "track", id, track.Title)
+	if err != nil {
+		return nil, err
+	}
+	track.NameIssues, err = s.catalogNameIssues(ctx, "track", id)
+	if err != nil {
+		return nil, err
+	}
+	track.MbzID, err = s.catalogIdentifier(ctx, "track", id, track.MbzID)
+	if err != nil {
+		return nil, err
+	}
+	track.IdentifierIssues, err = s.catalogIdentifierIssues(ctx, "track", id)
+	if err != nil {
+		return nil, err
+	}
 	return &track, nil
 }
 
@@ -476,7 +492,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 				ORDER BY listen_count DESC, track_id
 				LIMIT ? OFFSET ?
 			)
-			SELECT r.track_id, twt.title, twt.musicbrainz_id, r.album_id, rls.image, r.listen_count, r.rank, r.total_count
+			SELECT r.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=twt.id),twt.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='track' AND ci.item_id=twt.id),twt.musicbrainz_id),''), r.album_id, rls.image, r.listen_count, r.rank, r.total_count
 			FROM RankedTracks r
 			JOIN tracks_with_title twt ON twt.id = r.track_id
 			JOIN releases rls ON r.album_id = rls.id
@@ -510,7 +526,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 				ORDER BY listen_count DESC, track_id
 				LIMIT ? OFFSET ?
 			)
-			SELECT r.track_id, twt.title, twt.musicbrainz_id, twt.release_id, rls.image, r.listen_count, r.rank, r.total_count
+			SELECT r.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=twt.id),twt.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='track' AND ci.item_id=twt.id),twt.musicbrainz_id),''), twt.release_id, rls.image, r.listen_count, r.rank, r.total_count
 			FROM RankedTracks r
 			JOIN tracks_with_title twt ON twt.id = r.track_id
 			JOIN releases rls ON twt.release_id = rls.id
@@ -534,7 +550,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 				ORDER BY listen_count DESC, track_id
 				LIMIT ? OFFSET ?
 			)
-			SELECT r.track_id, twt.title, twt.musicbrainz_id, twt.release_id, rls.image, r.listen_count, r.rank, r.total_count
+			SELECT r.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=twt.id),twt.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='track' AND ci.item_id=twt.id),twt.musicbrainz_id),''), twt.release_id, rls.image, r.listen_count, r.rank, r.total_count
 			FROM RankedTracks r
 			JOIN tracks_with_title twt ON twt.id = r.track_id
 			JOIN releases rls ON twt.release_id = rls.id
@@ -615,14 +631,16 @@ func (s *Sqlite) CountNewTracks(ctx context.Context, timeframe db.Timeframe) (in
 
 func (s *Sqlite) SearchTracks(ctx context.Context, q string) ([]*models.Track, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT t.id, t.title, t.musicbrainz_id, t.release_id, r.image
+		SELECT DISTINCT t.id, COALESCE(canonical_name.display_name,t.title), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='track' AND ci.item_id=t.id),t.musicbrainz_id),''), t.release_id, r.image
 		FROM track_aliases ta
 		JOIN track_history_members h ON h.track_id=ta.track_id
 		JOIN tracks_with_title t ON h.canonical_track_id = t.id
 		JOIN releases r ON t.release_id = r.id
-		WHERE ta.alias LIKE ? OR ta.alias LIKE ?
+ LEFT JOIN catalog_names canonical_name ON canonical_name.kind='track' AND canonical_name.item_id=t.id
+ LEFT JOIN catalog_names cn ON cn.kind='track' AND cn.item_id=ta.track_id
+		WHERE ta.alias LIKE ? OR ta.alias LIKE ? OR cn.display_name LIKE ?
 		LIMIT 50`,
-		q+"%", "%"+q+"%",
+		q+"%", "%"+q+"%", "%"+q+"%",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("SearchTracks: %w", err)

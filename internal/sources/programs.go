@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/gabehf/koito/internal/filters"
@@ -27,15 +28,15 @@ func namingSchema() filters.Schema {
 	return filters.Schema{
 		RawFields: true,
 		Fields: map[string]filters.Type{
-			"catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
+			"original.artists": filters.List, "catalog.artist_ids": filters.List, "catalog.kind": filters.Text, "catalog.id": filters.Number, "catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
 			"record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text,
 			"library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
-		Targets: map[string]filters.Type{"display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List},
-		Help:    map[string]string{"artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
-		Labels:  map[string]string{"artist.genres": "Artist genres", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
+		Targets: map[string]filters.Type{"display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
+		Help:    map[string]string{"display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
+		Labels:  map[string]string{"original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	}
 }
 
@@ -94,7 +95,9 @@ func previewNaming(ctx context.Context, plan matchPlan, before, after RuleConfig
 		if err != nil {
 			return nil, err
 		}
-		for _, change := range [][3]string{{"Artist", old.Artist, next.Artist}, {"Album", old.Album, next.Album}, {"Track", old.Title, next.Title}} {
+		oldTags, _ := json.Marshal(append([]string{}, old.Tags...))
+		newTags, _ := json.Marshal(append([]string{}, next.Tags...))
+		for _, change := range [][3]string{{"Artist", old.Artist, next.Artist}, {"Album", old.Album, next.Album}, {"Track", old.Title, next.Title}, {"Listening tags", string(oldTags), string(newTags)}} {
 			if change[1] == change[2] || shown[change] {
 				continue
 			}
@@ -163,9 +166,13 @@ func compileNamingDomain(config RuleConfig, genres bool) ([]namingProgram, error
 
 func recordEnvironment(r matchingRecord) filters.Env {
 	env := filters.Env{
+		"catalog.kind":    filters.String("record"),
 		"original.artist": filters.String(r.Values.Artist), "original.album": filters.String(r.Values.Album), "original.title": filters.String(r.Values.Title),
 		"source.service": filters.String(r.Service), "source.id": filters.Integer(r.SourceID), "file.hash": filters.String(r.FileHash), "record.id": filters.Integer(r.ID),
 		"display.artist": filters.String(r.Values.Artist), "display.album": filters.String(r.Values.Album), "display.title": filters.String(r.Values.Title),
+	}
+	if r.Values.Artist != "" {
+		env["original.artists"] = filters.Values(filters.String(r.Values.Artist))
 	}
 	for key, value := range r.RawFields {
 		env[key] = value
@@ -193,6 +200,11 @@ func applyNaming(ctx context.Context, programs []namingProgram, r matchingRecord
 		return v, nil
 	}
 	env := recordEnvironment(r)
+	tagValues := []filters.Value{}
+	for _, tag := range v.Tags {
+		tagValues = append(tagValues, filters.String(tag))
+	}
+	env["display.tags"] = filters.Values(tagValues...)
 	for _, program := range programs {
 		from, until := recordInterval(r)
 		if !scopeContains(program.rule.Scope, r, from, until) {
@@ -208,6 +220,22 @@ func applyNaming(ctx context.Context, programs []namingProgram, r matchingRecord
 		// Validate the complete change before allowing later filters to read it.
 		candidate := v
 		for key, value := range result.Values {
+			if key == "display.tags" {
+				items, ok := value.Items()
+				if !ok {
+					return v, fmt.Errorf("Listening tags require a list of text labels.")
+				}
+				tags := []string{}
+				for _, item := range items {
+					text, valid := item.Text()
+					if !valid || text == "" {
+						return v, fmt.Errorf("Listening tags require nonempty text labels.")
+					}
+					tags = append(tags, text)
+				}
+				candidate.Tags = tags
+				continue
+			}
 			if key == "artist.genres" {
 				continue
 			}

@@ -168,14 +168,29 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.NamingExamples = append(preview.NamingExamples, genres...)
+	catalog, err := previewCatalogNames(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.NamingExamples = append(preview.NamingExamples, catalog...)
 	preview.MusicExamples, err = previewMusic(ctx, tx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err
 	}
+	identifiers, err := previewCatalogIdentifiers(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.MusicExamples = append(preview.MusicExamples, identifiers...)
 	preview.GroupingExamples, err = previewGrouping(ctx, tx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err
 	}
+	classifications, err := previewAlbumClassification(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.GroupingExamples = append(preview.GroupingExamples, classifications...)
 	preview.BaseVersion = current.ID
 	preview.After = len(plan.Plays)
 	preview.Records = len(records)

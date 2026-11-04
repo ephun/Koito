@@ -20,14 +20,15 @@ type ProjectionResult struct {
 	Undated    int64  `json:"undated"`
 }
 type spotifyItem struct {
-	Timestamp   string `json:"ts"`
-	Title       string `json:"master_metadata_track_name"`
-	Artist      string `json:"master_metadata_album_artist_name"`
-	Album       string `json:"master_metadata_album_album_name"`
-	URI         string `json:"spotify_track_uri"`
-	RecordingID string `json:"recording_id,omitempty"`
-	ReasonEnd   string `json:"reason_end"`
-	Played      int64  `json:"ms_played"`
+	Tags        []string `json:"-"`
+	Timestamp   string   `json:"ts"`
+	Title       string   `json:"master_metadata_track_name"`
+	Artist      string   `json:"master_metadata_album_artist_name"`
+	Album       string   `json:"master_metadata_album_album_name"`
+	URI         string   `json:"spotify_track_uri"`
+	RecordingID string   `json:"recording_id,omitempty"`
+	ReasonEnd   string   `json:"reason_end"`
+	Played      int64    `json:"ms_played"`
 }
 
 func insertID(ctx context.Context, tx *sql.Tx, query string, args ...any) (int64, error) {

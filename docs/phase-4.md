@@ -555,3 +555,90 @@ The full Go suite, frontend type checking, and production build pass.
 Contextual-editor browser verification passed at 390 and 320 pixels, including draft discard and no page errors.
 The main application rebuilt in 63.11 seconds, preserving 191,473 records, 168,424 plays, and all three original-file hashes.
 Optional listening tags and replacement of destructive catalog edits remain required Phase 4 work.
+
+## Optional listening tags
+
+Naming filters can SET Listening tags to a list of text labels.
+Labels can use original fields, source names, device information, arbitrary imported metadata, and expressions.
+The Source tags starting filter supplies readable service labels and starts disabled.
+Tag actions share each record's naming evaluation and its conditional branches.
+Invalid tag values prevent a partial naming change from being published.
+
+Migration 15 stores derived tag lists by play key.
+The replacement view publishes those lists in the same transaction as plays and filters.
+Different plays of the same track can therefore carry different labels.
+Listening responses include tags, and listening rows render them only when assigned.
+Before-and-after tag examples appear in Check changes.
+Removing or disabling the filter removes its derived labels during rebuilding.
+
+Regression tests cover per-play metadata, previews, disabling, unchanged records, and failed-save rollback.
+The full Go suite, frontend type checking, and production build pass.
+Actual-import testing produced six distinct tag examples and verified source/platform labels against their representative records.
+Mobile diagnostics identified the chart period selector as the remaining overflow source at 320 pixels.
+Its controls now wrap. Tag labels also support wrapping long imported values.
+The completed rerun verified 100 actual listening rows at 390 and 320 pixels without page errors.
+It preserved record and play fingerprints, restored the original configuration, and removed all temporary tags.
+Main-application activation is pending.
+
+## Contextual catalog names
+
+Naming filters can explicitly select an artist, album, or track catalog context.
+Source record naming retains its separate record context.
+Migration 16 stores corrected names and unresolved conditions in derived tables.
+Publication leaves original catalog aliases and source payloads unchanged.
+Disabling a correction restores the original name.
+
+Catalog contexts expose complete artist credit lists and identifiers for conditions and exceptions.
+Multiple credits retain their separate identities. Commas inside a supplied artist name remain part of that name.
+Corrected names appear in details, album appearances, listening rows, charts, and linked artist labels.
+Native search recognizes corrected names and retains searches through original aliases.
+Raw catalog views and export alias reads continue to retain their original values.
+Item pages expose unresolved name conditions behind a collapsed details section.
+
+Edit name prepares or reopens a scoped Naming filter in the shared editor.
+Check changes shows original and corrected catalog names before publication.
+Actual-import acceptance changed Ra Ra Riot's displayed case, verified its preview and native search result,
+and checked unchanged record, play, and artist-alias fingerprints.
+Restoring the original configuration restored the original name.
+The browser reported no page errors.
+
+The full source/database suites and contextual display/search regression tests pass.
+The remaining alias, identifier, artist-association, various-artists, and deletion controls still require reversible replacements.
+Those remaining operations prevent Phase 4 completion.
+
+## Catalog identifier correction progress
+
+Music matching supports contextual artist, album, and track MusicBrainz identifier corrections.
+Migration 17 keeps corrected identifiers separate from original catalog values.
+Item pages prepare or reopen the correction in the shared filter editor.
+The displayed MusicBrainz link uses the corrected identifier.
+Empty text clears the displayed identifier. Disabling the filter restores the original value.
+Invalid identifiers produce inspectable filter issues.
+
+Actual-import browser acceptance assigned Ra Ra Riot's identifier from its MusicBrainz artist page.
+It verified the preview, displayed identifier, and external link without page errors.
+Record, play, and artist-alias fingerprints stayed unchanged.
+Restoring the original configuration restored the original absent identifier.
+This corrects catalog presentation. It does not yet reinterpret original recording identities during source matching.
+
+## Various Artists correction progress
+
+Migration 18 stores derived album classifications separately from the original release flag.
+Album detail reads now use the derived classification when present.
+A database regression saves and disables a Grouping filter and checks that original flags and artist credits remain unchanged.
+Edit Various Artists now opens a contextual Grouping filter in the shared editor.
+Check changes includes before-and-after classification values.
+Album credit lists and identifiers are available to conditions.
+Unresolved conditions appear with other item filter issues.
+The old direct-toggle control has been replaced in Edit Item.
+Regression tests verify previews, disabling, unchanged flags and credits, and unavailable-condition diagnostics.
+Actual-import browser testing verified a false-to-true correction and preview without page errors at 390 and 320 pixels.
+Record, play, alias, original-classification, and album-credit fingerprints stayed unchanged.
+Restoring the original configuration restored the original classification and preserved all checked fingerprints.
+Mixed Grouping actions, broader reporting consistency, and remaining destructive endpoints still require audit.
+
+The reporting audit corrected identifier reads in native search, artist credit responses, and artist, album, and track charts.
+Album search and charts now use reversible Various Artists classifications.
+Explicitly cleared identifiers remain absent in search rather than falling back to original values.
+A cross-surface database regression verifies these responses against the same derived corrections.
+Original identifier lookup for ingestion continues to use original catalog values.

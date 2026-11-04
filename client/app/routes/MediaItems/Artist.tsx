@@ -31,6 +31,7 @@ export default function Artist() {
 
   return (
     <MediaLayout
+      filterIssues={[...(artist.name_issues || []), ...(artist.identifier_issues || [])]}
       type="Artist"
       title={artist.name}
       img={artist.image}

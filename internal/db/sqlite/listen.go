@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -47,6 +48,7 @@ func (s *Sqlite) DeleteListen(ctx context.Context, trackId int32, listenedAt tim
 // both the count query and the artistsForTrack call would deadlock if
 // executed while the outer *sql.Rows is still holding the only connection.
 type listenRow struct {
+	tagsJSON         string
 	albumID          int32
 	album            string
 	evidence         string
@@ -101,7 +103,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	switch {
 	case opts.TrackID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND `+historyPredicate("t.id")+`
@@ -110,7 +112,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	case opts.AlbumGroupID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM album_report_events l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND l.album_group_id = ?
@@ -119,7 +121,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	case opts.AlbumID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ? AND t.release_id = ?
@@ -128,7 +130,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	case opts.ArtistID > 0:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			JOIN artist_tracks at2 ON t.id = at2.track_id
@@ -138,7 +140,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		)
 	default:
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT l.listened_at, l.track_id, t.title, t.release_id, COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),''), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),'')
+			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
 			WHERE l.listened_at BETWEEN ? AND ?
@@ -153,7 +155,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	var raw []listenRow
 	for rows.Next() {
 		var r listenRow
-		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title, &r.albumID, &r.album, &r.playKey, &r.recordID, &r.evidence, &r.attributionBasis); err != nil {
+		if err := rows.Scan(&r.listenedAt, &r.trackID, &r.title, &r.albumID, &r.album, &r.playKey, &r.recordID, &r.evidence, &r.attributionBasis, &r.tagsJSON); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -181,6 +183,9 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 				ID:    r.trackID,
 				Title: r.title,
 			},
+		}
+		if err = json.Unmarshal([]byte(r.tagsJSON), &l.Tags); err != nil {
+			return nil, err
 		}
 		l.Track.Artists, err = s.artistsForTrack(ctx, r.trackID)
 		if err != nil {

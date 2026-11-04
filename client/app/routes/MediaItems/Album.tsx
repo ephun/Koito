@@ -22,6 +22,7 @@ export default function Album() {
 
   return (
     <MediaLayout
+      filterIssues={[...(album.name_issues || []), ...(album.identifier_issues || []), ...(album.classification_issues || [])]}
       grouped={!!album.album_group_id}
       type="Album"
       title={album.title}

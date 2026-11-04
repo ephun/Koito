@@ -20,6 +20,7 @@ export default function Track() {
 
   return (
     <MediaLayout
+      filterIssues={[...(track.name_issues || []), ...(track.identifier_issues || [])]}
       type="Track"
       title={track.title}
       img={track.image}

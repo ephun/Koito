@@ -100,6 +100,7 @@ export default function ListensTable({
                 {item.evidence === "last_played" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Last played<FieldHelp label="Last-played evidence">Reported as the library's most recent play.</FieldHelp></span>}
                 {item.attribution_basis === "heuristic" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Heuristic<FieldHelp label="Heuristic attribution">Assigned to you using the enabled heuristic.</FieldHelp></span>}
               </div>
+              {!!item.tags?.length && <ul aria-label="Listening tags" className="mt-1 flex min-w-0 max-w-full flex-wrap gap-1">{item.tags.map((tag,index) => <li key={index} className="min-w-0 max-w-full [overflow-wrap:anywhere] rounded border border-(--color-bg-tertiary) px-1.5 py-0.5 text-xs text-(--color-fg-secondary)">{tag}</li>)}</ul>}
               {showAlbums && item.album_id && <Link className="mt-1 block truncate text-xs text-(--color-fg-secondary) hover:underline" to={`/album/${item.album_id}`}>{item.album}</Link>}
             </td>
             <td

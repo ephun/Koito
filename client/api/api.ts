@@ -298,6 +298,8 @@ type ImageList = {
   xl: string;
 };
 type Track = {
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;
   music_track_id?: number;
   albums?: { id: number; title: string; listen_count: number }[];
@@ -319,6 +321,8 @@ type SimpleTrack = {
   image: ImageList;
 };
 type Artist = {
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   genres?: string[];
   genre_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;
@@ -337,6 +341,9 @@ export function albumPath(album: Pick<Album, "id" | "album_group_id">) {
 }
 
 type Album = {
+  classification_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
  album_group_id?: number;
  editions?: { id: number; title: string; listen_count: number }[];
   id: number;
@@ -357,6 +364,7 @@ type Alias = {
   is_primary: boolean;
 };
 type Listen = {
+  tags?: string[];
   album_id?: number;
   album?: string;
   play_key?: string;

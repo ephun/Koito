@@ -73,6 +73,10 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 	ret.MbzID = parseNullableUUID(mbzID)
 	ret.Image = catalog.BuildImageList(parseNullableUUID(image))
 	ret.VariousArtists = variousArtists == 1
+	ret.VariousArtists, err = s.albumClassification(ctx, id, ret.VariousArtists)
+	if err != nil {
+		return nil, err
+	}
 
 	artists, err := s.artistsForRelease(ctx, id)
 	if err != nil {
@@ -111,7 +115,26 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 			GROUP BY t.release_id
 		) WHERE release_id = ?`, db.Timeframe{Period: db.PeriodAllTime}), id).Scan(&rank)
 	ret.AllTimeRank = rank
-
+	ret.Title, err = s.catalogName(ctx, "album", id, ret.Title)
+	if err != nil {
+		return nil, err
+	}
+	ret.NameIssues, err = s.catalogNameIssues(ctx, "album", id)
+	if err != nil {
+		return nil, err
+	}
+	ret.MbzID, err = s.catalogIdentifier(ctx, "album", id, ret.MbzID)
+	if err != nil {
+		return nil, err
+	}
+	ret.IdentifierIssues, err = s.catalogIdentifierIssues(ctx, "album", id)
+	if err != nil {
+		return nil, err
+	}
+	ret.ClassificationIssues, err = s.albumClassificationIssues(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	return &ret, nil
 }
 

@@ -38,9 +38,9 @@ type IdentityPrograms struct{ programs []identityProgram }
 
 func MatchingSchema() filters.Schema {
 	return filters.Schema{RawFields: true, Fields: map[string]filters.Type{
-		"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
+		"catalog.kind": filters.Text, "catalog.id": filters.Number, "original.identifier": filters.Text, "original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 		"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text, "record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text, "library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
-	}, Targets: map[string]filters.Type{"music.artist": filters.Text, "music.album": filters.Text, "music.title": filters.Text, "music.missing_album": filters.Boolean}, Labels: map[string]string{"music.artist": "Artist used for matching", "music.album": "Album used for matching", "music.title": "Track title used for matching", "music.missing_album": "Match an empty album"}, Help: map[string]string{"music.artist": "Choose a comparison name while keeping original and displayed artist names separate.", "music.title": "Choose a comparison title while keeping original and displayed track titles separate.", "music.album": "Choose a comparison album while retaining each play's reported album.", "music.missing_album": "Allow this record's empty album to match a supplied album."}}
+	}, Targets: map[string]filters.Type{"music.identifier": filters.Text, "music.artist": filters.Text, "music.album": filters.Text, "music.title": filters.Text, "music.missing_album": filters.Boolean}, Labels: map[string]string{"catalog.kind": "Item type", "catalog.id": "Item identifier", "original.identifier": "Original MusicBrainz identifier", "music.identifier": "MusicBrainz identifier", "music.artist": "Artist used for matching", "music.album": "Album used for matching", "music.title": "Track title used for matching", "music.missing_album": "Match an empty album"}, Help: map[string]string{"music.identifier": "Choose a MusicBrainz identifier for this item. Empty text clears its displayed identifier.", "music.artist": "Choose a comparison name while keeping original and displayed artist names separate.", "music.title": "Choose a comparison title while keeping original and displayed track titles separate.", "music.album": "Choose a comparison album while retaining each play's reported album.", "music.missing_album": "Allow this record's empty album to match a supplied album."}}
 }
 
 func CompileIdentityPrograms(rules []IdentityFilter) (IdentityPrograms, error) {
@@ -88,6 +88,10 @@ func (p IdentityPrograms) Resolve(ctx context.Context, env filters.Env, original
 			issues = append(issues, IdentityIssue{program.rule.ID, program.rule.Name, issue})
 		}
 		if len(outcome.Issues) > 0 {
+			continue
+		}
+		if _, assigned := outcome.Values["music.identifier"]; assigned {
+			issues = append(issues, IdentityIssue{program.rule.ID, program.rule.Name, filters.Issue{Path: "music.identifier", Reason: "Catalog identifiers require an artist, album, or track context."}})
 			continue
 		}
 		next := current

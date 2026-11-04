@@ -50,7 +50,7 @@ func (s *Sqlite) topAlbumReports(ctx context.Context, opts db.GetItemsOpts) (*db
  SELECT `+albumReportKey+` AS report_key,l.album_group_id,MIN(l.release_id) AS release_id,SUM(l.amount) AS listen_count
  FROM album_report_counts l WHERE `+dates+artist+` GROUP BY report_key
  ),ranked AS (SELECT *,RANK() OVER(ORDER BY listen_count DESC) AS rank,COUNT(*) OVER() AS total_count FROM counts ORDER BY listen_count DESC,report_key LIMIT ? OFFSET ?)
- SELECT COALESCE(g.canonical_release_id,c.release_id),COALESCE(g.title,r.title),r.musicbrainz_id,r.image,r.various_artists,c.listen_count,c.rank,c.total_count,c.album_group_id
+ SELECT COALESCE(g.canonical_release_id,c.release_id),COALESCE(g.title,(SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=r.id),r.title),NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='album' AND ci.item_id=r.id),r.musicbrainz_id),''),r.image,COALESCE((SELECT various_artists FROM album_classification ac WHERE ac.album_id=r.id),r.various_artists),c.listen_count,c.rank,c.total_count,c.album_group_id
  FROM ranked c LEFT JOIN album_groups g ON g.id=c.album_group_id
  JOIN releases_with_title r ON r.id=COALESCE(g.canonical_release_id,c.release_id) ORDER BY c.rank,c.report_key`, args...)
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *Sqlite) GetAlbumGroup(ctx context.Context, id int32) (*models.Album, er
 	if err = s.db.QueryRowContext(ctx, `SELECT rank FROM (SELECT album_group_id,RANK() OVER(ORDER BY SUM(amount) DESC) AS rank FROM album_report_counts l GROUP BY `+albumReportKey+`) WHERE album_group_id=?`, id).Scan(&album.AllTimeRank); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT r.id,r.title,COALESCE((SELECT SUM(l.amount) FROM album_report_counts l WHERE l.album_group_id=m.group_id AND l.release_id=m.release_id),0) FROM album_group_members m JOIN releases_with_title r ON r.id=m.release_id WHERE m.group_id=? ORDER BY r.title,r.id`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id,COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=r.id),r.title),COALESCE((SELECT SUM(l.amount) FROM album_report_counts l WHERE l.album_group_id=m.group_id AND l.release_id=m.release_id),0) FROM album_group_members m JOIN releases_with_title r ON r.id=m.release_id WHERE m.group_id=? ORDER BY r.title,r.id`, id)
 	if err != nil {
 		return nil, err
 	}
