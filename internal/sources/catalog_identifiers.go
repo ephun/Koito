@@ -98,22 +98,30 @@ func resolveCatalogIdentifier(ctx context.Context, programs []catalogIdentifierP
 	return current, assigned, issues, nil
 }
 
-func publishCatalogIdentifiers(ctx context.Context, tx *sql.Tx, config RuleConfig) error {
+func publishCatalogIdentifiers(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...catalogIdentifierItem) error {
 	programs, err := compileCatalogIdentifiers(config)
 	if err != nil {
 		return err
 	}
 	for _, q := range []string{`DELETE FROM catalog_identifiers`, `DELETE FROM catalog_identifier_issues`} {
-		if _, err = tx.ExecContext(ctx, q); err != nil {
+		args := []any{}
+		if len(targets) > 0 {
+			q += " WHERE kind=? AND item_id=?"
+			args = []any{targets[0].kind, targets[0].id}
+		}
+		if _, err = tx.ExecContext(ctx, q, args...); err != nil {
 			return err
 		}
 	}
 	if len(programs) == 0 {
 		return nil
 	}
-	items, err := catalogIdentifierItems(ctx, tx)
-	if err != nil {
-		return err
+	items := targets
+	if len(items) == 0 {
+		items, err = catalogIdentifierItems(ctx, tx)
+		if err != nil {
+			return err
+		}
 	}
 	for _, item := range items {
 		value, assigned, issues, e := resolveCatalogIdentifier(ctx, programs, item.kind, item.id, item.original)

@@ -913,3 +913,29 @@ The actual displayed total returned to 168,424.
 Stable play fields and physical listens also matched the main database.
 The first restoration assertion compared projection version stamps, which correctly change during Save.
 The corrected verification compares stable play content while Preview checks still include version stamps.
+
+## Native catalog corrections during capture
+
+New artists, albums, and tracks evaluate saved catalog Naming and identifier corrections within their capture transaction.
+Additional native aliases also refresh the affected item's corrections.
+The targeted refresh reuses the same evaluators and publication code as Rebuild.
+It replaces only that item's derived names, aliases, artist credits, identifiers, and issues.
+Original canonical names, aliases, credits, and identifiers remain source data.
+Track inclusion evaluates after these corrections are available.
+
+Regression coverage checks incoming names across all three catalog kinds, artist names containing commas,
+track album and artist conditions, aliases, artist-credit replacements, identifier corrections, and preserved originals.
+It verifies unrelated corrected items remain intact, rebuild consistency, disabling corrections,
+and rollback when an alias-dependent correction fails to publish.
+A source-level test compares native evaluation inputs with bulk-rebuild inputs.
+
+Existing-item metadata enrichment, artist-credit association updates, incoming genre assignments,
+catalog-read coverage, mixed Naming/genre actions, and the final requirement audit remain open.
+
+The full Go suite passes with native-capture and input-consistency regressions.
+Main activation passed after a database backup.
+The actual-import rebuild completed in 67.563 seconds with 191,473 records and 168,424 plays.
+There were zero collisions or estimates.
+Original fingerprints and all three file hashes passed.
+Track 271 retained its 521 plays and album associations.
+Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.

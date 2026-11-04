@@ -11,6 +11,7 @@ import (
 	"github.com/gabehf/koito/internal/catalog"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -173,6 +174,9 @@ func (s *Sqlite) SaveArtist(ctx context.Context, opts db.SaveArtistOpts) (*model
 		return nil, fmt.Errorf("SaveArtist: canonical alias: %w", err)
 	}
 
+	if err := sources.RefreshNativeCatalog(ctx, tx, "artist", int64(id)); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("SaveArtist: commit: %w", err)
 	}
@@ -228,6 +232,9 @@ func (s *Sqlite) SaveArtistAliases(ctx context.Context, id int32, aliases []stri
 			id, alias, source); err != nil {
 			return fmt.Errorf("SaveArtistAliases: insert: %w", err)
 		}
+	}
+	if err := sources.RefreshNativeCatalog(ctx, tx, "artist", int64(id)); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

@@ -222,7 +222,7 @@ func resolveCatalogNaming(ctx context.Context, programs []namingProgram, kind st
 	return current, issues, nil
 }
 
-func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig) error {
+func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...catalogNameItem) error {
 	programs, err := compileNaming(config)
 	if err != nil {
 		return err
@@ -234,16 +234,24 @@ func publishCatalogNames(ctx context.Context, tx *sql.Tx, config RuleConfig) err
 		}
 	}
 	for _, query := range []string{`DELETE FROM catalog_aliases`, `DELETE FROM catalog_alias_sets`, `DELETE FROM catalog_names`, `DELETE FROM catalog_name_issues`, `DELETE FROM catalog_credits`, `DELETE FROM catalog_credit_sets`} {
-		if _, err = tx.ExecContext(ctx, query); err != nil {
+		args := []any{}
+		if len(targets) > 0 {
+			query += " WHERE kind=? AND item_id=?"
+			args = []any{targets[0].kind, targets[0].id}
+		}
+		if _, err = tx.ExecContext(ctx, query, args...); err != nil {
 			return err
 		}
 	}
 	if len(selected) == 0 {
 		return nil
 	}
-	items, err := catalogNameItems(ctx, tx)
-	if err != nil {
-		return err
+	items := targets
+	if len(items) == 0 {
+		items, err = catalogNameItems(ctx, tx)
+		if err != nil {
+			return err
+		}
 	}
 	for _, item := range items {
 		resolved, issues, e := resolveCatalogNaming(ctx, selected, item.kind, item.id, item.name, item.metadata)

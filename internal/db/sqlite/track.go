@@ -12,6 +12,7 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -217,6 +218,9 @@ func (s *Sqlite) SaveTrack(ctx context.Context, opts db.SaveTrackOpts) (*models.
 		return nil, err
 	}
 
+	if err := sources.RefreshNativeCatalog(ctx, tx, "track", int64(id)); err != nil {
+		return nil, err
+	}
 	if err = music.RefreshScope(ctx, tx, id64); err != nil {
 		return nil, err
 	}
@@ -269,6 +273,9 @@ func (s *Sqlite) SaveTrackAliases(ctx context.Context, id int32, aliases []strin
 			id, alias, source); err != nil {
 			return fmt.Errorf("SaveTrackAliases: insert: %w", err)
 		}
+	}
+	if err := sources.RefreshNativeCatalog(ctx, tx, "track", int64(id)); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

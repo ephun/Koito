@@ -12,6 +12,7 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -229,6 +230,9 @@ func (s *Sqlite) SaveAlbum(ctx context.Context, opts db.SaveAlbumOpts) (*models.
 	if err := music.AssignAlbumGroup(ctx, tx, id64); err != nil {
 		return nil, fmt.Errorf("SaveAlbum: grouping: %w", err)
 	}
+	if err := sources.RefreshNativeCatalog(ctx, tx, "album", int64(id)); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("SaveAlbum: commit: %w", err)
 	}
@@ -285,6 +289,9 @@ func (s *Sqlite) SaveAlbumAliases(ctx context.Context, id int32, aliases []strin
 			id, alias, source); err != nil {
 			return fmt.Errorf("SaveAlbumAliases: insert: %w", err)
 		}
+	}
+	if err := sources.RefreshNativeCatalog(ctx, tx, "album", int64(id)); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
