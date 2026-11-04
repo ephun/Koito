@@ -125,10 +125,35 @@ Original source records and recording identifiers remain preserved.
 Disabling a naming filter restores its original names on rebuild.
 Invalid changes roll back the saved version and replacement view together.
 
-The filter manager still requires its block editor.
+The naming filter manager and block editor are implemented.
 Other filter types still use their previous configurations pending equivalent program migration.
-Raw source field discovery, affected naming examples, and visible unresolved explanations remain outstanding.
+Raw source field discovery and visible unresolved explanations remain outstanding.
 The display and artwork changes discussed separately remain deferred at the user's request.
 
 Regression tests cover branching, all Boolean truth tables, incomplete data, atomic actions, exact numbers, timestamp precision, and invalid programs.
 Source integration tests cover applying naming programs, disabling them, repeat rebuilding, unchanged source payloads, and failed-save rollback.
+
+## Naming manager and block editor
+
+The Filters page now includes Presentation, Naming with a filter manager.
+Rows summarize IF conditions and THEN actions beside the filter's enabled state.
+The editor supports nested expressions, nested IF blocks, ELSE IF, ELSE, and ordered SET actions.
+Filters support names, duplication, removal, and draft discard.
+Source and file comparisons offer choices from the actual imported sources and filenames.
+The operator and field registry comes from the backend's validation schema.
+Number conversion blocks accept exact numeric text for large constants.
+
+Check changes shows actual before-and-after naming examples beside the editor.
+Examples compare the saved configuration with the draft for represented plays and count contributions.
+Examples become stale when the draft or saved version changes.
+Saving publishes the configuration and derived view together through the existing version checks.
+
+Browser acceptance used a separate copy of the existing imported database.
+A conditional uppercase naming filter produced the expected examples and saved through the interface.
+Disabling it restored original names and a verified track's 521-play history.
+Both saves preserved 191,473 records and 168,424 plays.
+Desktop, 390-pixel, and 320-pixel checks passed without browser errors.
+Additional checks verified source choices and draft discard at 320 pixels.
+
+The local application exposes the editor with the existing configuration unchanged.
+Remaining work includes migrating the older filter controls into the same manager and completing the other Phase 4 requirements.

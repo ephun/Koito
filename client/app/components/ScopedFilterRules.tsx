@@ -59,7 +59,7 @@ export function ScopedRule({ rule, state, busy, blocked = false, onChange, onRem
       </Option>}
       <ScopeEditor rule={rule} state={state} disabled={disabled} onChange={scope => onChange({ ...rule, scope })} />
     </div>
-    {onRemove && <button type="button" className="text-sm text-(--color-fg-secondary) underline disabled:opacity-50" disabled={busy} onClick={onRemove}>Remove rule</button>}
+    {onRemove && <button type="button" className="text-sm text-(--color-fg-secondary) underline disabled:opacity-50" disabled={busy} onClick={onRemove}>Remove filter</button>}
   </section>;
 }
 
@@ -83,8 +83,8 @@ export function AddScopedRule({ state, type, subtype, busy, onAdd }: { state: Fi
     onAdd(rule); setOpen(false);
   }
 
-  if (!open) return <button type="button" className="m-4 text-sm underline disabled:opacity-50 sm:m-5" disabled={busy} onClick={() => setOpen(true)}>Add rule</button>;
-  return <div aria-label={`Add ${type} rule`} className="space-y-3 p-4 sm:p-5">
+  if (!open) return <button type="button" className="m-4 text-sm underline disabled:opacity-50 sm:m-5" disabled={busy} onClick={() => setOpen(true)}>Add filter</button>;
+  return <div aria-label={`Add ${type} filter`} className="space-y-3 p-4 sm:p-5">
     {type === "attribution" && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-type`}>Type</label><select id={`${id}-type`} className={input} disabled={busy} value={choice} onChange={event => setChoice(event.target.value)}>
       <option value="direct">Direct</option>{observed.length > 0 && <option value="heuristic">Heuristic</option>}{state.sources.some(source => source.service === "itunes" && source.records > 0) && <option value="aggregate">Aggregate</option>}
     </select></div>}
@@ -94,10 +94,10 @@ export function AddScopedRule({ state, type, subtype, busy, onAdd }: { state: Fi
 }
 
 const conditions: { key: keyof RuleScope; label: string; help: string }[] = [
-  { key: "file_hash", label: "File", help: "Apply the rule to records from this file." },
-  { key: "library_id", label: "Library", help: "Apply the rule to this library and corroborated converted copies." },
+  { key: "file_hash", label: "File", help: "Apply the filter to records from this file." },
+  { key: "library_id", label: "Library", help: "Apply the filter to this library and corroborated converted copies." },
   { key: "track_id", label: "Persistent track ID", help: "Use the track identity supplied by the library." },
-  { key: "record_id", label: "Record", help: "Apply the rule to one preserved record." },
+  { key: "record_id", label: "Record", help: "Apply the filter to one preserved record." },
   { key: "artist", label: "Artist", help: "Match the exact artist field supplied by the source." },
   { key: "device", label: "Device", help: "Match the supplied device name or Spotify platform." },
   { key: "from", label: "From", help: "Include listening from this ISO timestamp. Include a timezone." },
@@ -120,7 +120,7 @@ function ScopeEditor({ rule, state, disabled, onChange }: { rule: Rule; state: F
   return <details>
     <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Conditions</summary>
     <div className="mt-4 space-y-4">
-      {!libraryOnly && <Option label="Source" id={`${id}-source`} help="Choose which imported source this rule interprets.">
+      {!libraryOnly && <Option label="Source" id={`${id}-source`} help="Choose which imported source this filter interprets.">
         <select id={`${id}-source`} className={input} disabled={disabled} value={rule.scope.source_id || `service:${rule.scope.service || ""}`} onChange={event => {
           const source = sources.find(source => source.id === Number(event.target.value));
           if (source) onChange({ service: source.service, source_id: source.id });

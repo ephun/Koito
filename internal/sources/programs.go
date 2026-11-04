@@ -31,6 +31,70 @@ type namingProgram struct {
 	program *filters.CompiledProgram
 }
 
+type NamingExample struct {
+	RecordID int64  `json:"record_id"`
+	Field    string `json:"field"`
+	Before   string `json:"before"`
+	After    string `json:"after"`
+}
+
+func previewNaming(ctx context.Context, plan matchPlan, before, after RuleConfig) ([]NamingExample, error) {
+	oldPrograms, err := compileNaming(before)
+	if err != nil {
+		return nil, err
+	}
+	newPrograms, err := compileNaming(after)
+	if err != nil {
+		return nil, err
+	}
+	examples := []NamingExample{}
+	if len(oldPrograms) == 0 && len(newPrograms) == 0 {
+		return examples, nil
+	}
+	records := map[int64]matchingRecord{}
+	for _, r := range plan.Records {
+		records[r.ID] = r
+	}
+	seen := map[int64]bool{}
+	shown := map[[3]string]bool{}
+	ids := []int64{}
+	for _, p := range plan.Plays {
+		ids = append(ids, p.Representative)
+	}
+	for _, a := range plan.Aggregates {
+		if a.Attributed > 0 {
+			ids = append(ids, a.Representative)
+		}
+	}
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		r := records[id]
+		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+		old, err := applyNaming(ctx, oldPrograms, r, v)
+		if err != nil {
+			return nil, err
+		}
+		next, err := applyNaming(ctx, newPrograms, r, v)
+		if err != nil {
+			return nil, err
+		}
+		for _, change := range [][3]string{{"Artist", old.Artist, next.Artist}, {"Album", old.Album, next.Album}, {"Track", old.Title, next.Title}} {
+			if change[1] == change[2] || shown[change] {
+				continue
+			}
+			shown[change] = true
+			examples = append(examples, NamingExample{id, change[0], change[1], change[2]})
+			if len(examples) == 12 {
+				return examples, nil
+			}
+		}
+	}
+	return examples, nil
+}
+
 func compileNaming(config RuleConfig) ([]namingProgram, error) {
 	var programs []namingProgram
 	for _, rule := range config.Rules {

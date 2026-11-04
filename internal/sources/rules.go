@@ -254,7 +254,26 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		}
 		state.Libraries = append(state.Libraries, library)
 	}
-	return state, rows.Err()
+	if err = rows.Err(); err != nil {
+		return state, err
+	}
+	rows.Close()
+	schema := state.Blocks.Schemas["presentation:naming"]
+	schema.Choices = map[string][]filters.Choice{}
+	for _, source := range state.Sources {
+		if source.Records > 0 {
+			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes"}[source.Service]
+			if name == "" {
+				name = source.Service
+			}
+			schema.Choices["source.service"] = append(schema.Choices["source.service"], filters.Choice{Label: name, Value: source.Service})
+		}
+	}
+	for _, file := range state.Files {
+		schema.Choices["file.hash"] = append(schema.Choices["file.hash"], filters.Choice{Label: file.Filename, Value: file.Hash})
+	}
+	state.Blocks.Schemas["presentation:naming"] = schema
+	return state, nil
 }
 
 func validateRules(config RuleConfig) error {

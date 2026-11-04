@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import FieldHelp from "~/components/FieldHelp";
+import ProgramFilterManager from "~/components/ProgramFilterManager";
 import { useAppContext } from "~/providers/AppProvider";
 import { Option, Switch, filterButton as button, filterInput as input, filterCard as card } from "~/components/FilterControls";
 import { AddScopedRule, ScopedRule, libraryRule, subtypeName } from "~/components/ScopedFilterRules";
@@ -122,9 +123,10 @@ export default function Filters() {
       <p>{error}</p>
       {(stale || !saved) && <button type="button" className="mt-2 underline" onClick={load}>Reload</button>}
     </div>}
-    {loading && <p role="status">Loading rules...</p>}
+    {loading && <p role="status">Loading filters...</p>}
     {message && <p role="status" className="text-sm text-(--color-fg-secondary)">{message}</p>}
 
+    {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
     {music && plays && <section aria-labelledby="matching-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
       <div className={card}>
@@ -208,7 +210,7 @@ function RuleGroup({ title, label, rule, busy, onToggle, children }: { title: st
   </section>;
 }
 
-function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Could not save rules."; }
+function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Could not save filters."; }
 
 function TimezoneSelect({ id, label, value, disabled, inherit = false, onChange }: { id?: string; label: string; value: string; disabled: boolean; inherit?: boolean; onChange: (value: string) => void }) {
   const available = (Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") || ["America/Denver", "America/New_York", "America/Los_Angeles"];

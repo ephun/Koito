@@ -32,15 +32,16 @@ type PreviewExample struct {
 	Artist string    `json:"artist"`
 }
 type FilterPreview struct {
-	Token       string           `json:"token"`
-	BaseVersion int64            `json:"base_version"`
-	Before      int              `json:"before"`
-	After       int              `json:"after"`
-	Records     int              `json:"records"`
-	Unresolved  int              `json:"unresolved"`
-	Ambiguous   int              `json:"ambiguous"`
-	Changed     int              `json:"changed"`
-	Examples    []PreviewExample `json:"examples"`
+	NamingExamples []NamingExample  `json:"naming_examples"`
+	Token          string           `json:"token"`
+	BaseVersion    int64            `json:"base_version"`
+	Before         int              `json:"before"`
+	After          int              `json:"after"`
+	Records        int              `json:"records"`
+	Unresolved     int              `json:"unresolved"`
+	Ambiguous      int              `json:"ambiguous"`
+	Changed        int              `json:"changed"`
+	Examples       []PreviewExample `json:"examples"`
 }
 
 func resolveChange(ctx context.Context, tx *sql.Tx, change FilterChange) (RuleVersion, RuleConfig, []MatchDecision, *MatchDecision, error) {
@@ -153,6 +154,10 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, matchPlan{}, config, added, err
 	}
 	plan, err := calculateView(ctx, tx, records, config, decisions)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.NamingExamples, err = previewNaming(ctx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err
 	}

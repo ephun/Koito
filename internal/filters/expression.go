@@ -38,8 +38,14 @@ var Operators = []Operator{
 }
 
 type Schema struct {
-	Fields  map[string]Type `json:"fields"`
-	Targets map[string]Type `json:"targets"`
+	Choices map[string][]Choice `json:"choices,omitempty"`
+	Fields  map[string]Type     `json:"fields"`
+	Targets map[string]Type     `json:"targets"`
+}
+
+type Choice struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 type Expression struct {

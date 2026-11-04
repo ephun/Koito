@@ -35,7 +35,21 @@ func TestNamingProgramPublishesAndReversesWithoutChangingRecords(t *testing.T) {
 		if !found {
 			change.Config.Rules = append(change.Config.Rules, Rule{ID: "names", Name: "Album editions", Type: "presentation", Subtype: "naming", Enabled: enabled, Program: program})
 		}
-		_, err := s.Save(ctx, change)
+		preview, err := s.Preview(ctx, change)
+		require.NoError(t, err)
+		require.Len(t, preview.NamingExamples, 2)
+		var titleChange NamingExample
+		for _, example := range preview.NamingExamples {
+			if example.Field == "Track" {
+				titleChange = example
+			}
+		}
+		if enabled {
+			require.Equal(t, "SONG", titleChange.After)
+		} else {
+			require.Equal(t, "Song", titleChange.After)
+		}
+		_, err = s.Save(ctx, change)
 		require.NoError(t, err)
 		var title, album, payload, key string
 		require.NoError(t, s.DB.QueryRow(`SELECT t.title,a.title,r.payload,p.play_key FROM source_plays p JOIN tracks_with_title t ON t.id=p.track_id JOIN releases_with_title a ON a.id=t.release_id JOIN source_records r ON r.id=p.representative_record`).Scan(&title, &album, &payload, &key))

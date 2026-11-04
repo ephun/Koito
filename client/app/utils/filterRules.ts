@@ -15,6 +15,8 @@ export type RuleSettings = {
 };
 
 export type Rule = {
+  name?: string;
+  program?: FilterProgram;
   id: string;
   type: string;
   subtype: string;
@@ -31,12 +33,19 @@ export type RuleScope = {
 export type FilterSource = { id: number; service: string; records: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
+  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema> };
   current: RuleVersion;
   time_files: { hash: string; filename: string; source_id: number; records: number }[];
   sources: FilterSource[];
   files: { hash: string; source_id: number; service: string; filename: string }[];
   libraries: { id: string; source_id: number; filename: string }[];
 };
+
+export type Expression = { op: string; field?: string; value?: unknown; args?: Expression[] };
+export type FilterStatement = { if?: Expression; then?: FilterStatement[]; else_if?: { if: Expression; then: FilterStatement[] }[]; else?: FilterStatement[]; set?: string; value?: Expression };
+export type FilterProgram = { steps: FilterStatement[] };
+export type BlockOperator = { id: string; label: string; min_args: number; max_args: number };
+export type BlockSchema = { fields: Record<string, string>; targets: Record<string, string>; choices?: Record<string, { label: string; value: string }[]> };
 
 export function sourceName(service: string) {
   return ({ spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes" } as Record<string, string>)[service] || service;
@@ -62,8 +71,8 @@ export async function filterRequest<T>(path = "", change?: FilterChange): Promis
   let data;
   try { data = await response.json(); } catch { throw new Error("Koito returned an invalid response."); }
   if (!response.ok) {
-    const message = response.status === 409 ? "Rules changed. Reload and try again."
-      : response.status === 401 ? "Sign in to edit rules."
+    const message = response.status === 409 ? "Filters changed. Reload and try again."
+      : response.status === 401 ? "Sign in to edit filters."
       : response.status >= 500 ? "Could not update the view."
       : data.error || "Could not load data.";
     throw new FilterRequestError(message, response.status);
