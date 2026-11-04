@@ -35,7 +35,7 @@ type FilterIssue struct {
 // Diagnostic checks evaluate enabled programs against this record. Naming
 // filters see earlier naming changes. Direct attribution reads original fields.
 func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex) ([]FilterIssue, error) {
-	issues := append([]FilterIssue{}, r.TimeIssues...)
+	issues := append(append([]FilterIssue{}, r.TimeIssues...), r.MusicIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
 	for _, rule := range config.Rules {
@@ -91,6 +91,10 @@ const inspectedColumns = `r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.par
 const inspectedTables = ` FROM source_records r JOIN source_accounts a ON a.id=r.source_id LEFT JOIN source_interpretations i ON i.record_id=r.id AND i.policy='filters-v1' `
 
 func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, where string, args ...any) ([]InspectedRecord, error) {
+	musicPrograms, err := compileMusicPrograms(config)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT `+inspectedColumns+inspectedTables+where, args...)
 	if err != nil {
 		return nil, err
@@ -107,6 +111,9 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 			return nil, err
 		}
 		interpretMatchingRecord(&r.matchingRecord, config)
+		if err = applyMusicPrograms(ctx, &r.matchingRecord, musicPrograms); err != nil {
+			return nil, err
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()

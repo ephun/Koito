@@ -26,15 +26,15 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
   const rules = config.rules.filter(rule => rule.type === type && rule.subtype === subtype);
   const templates = state.blocks.templates?.[`${type}:${subtype}`] || [];
   const template = templates.find(item => item.name === templateName) || templates[0];
-  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : type === "inference" && subtype === "count" ? "Count" : type === "inference" && subtype === "time" ? "Time" : type === "matching" ? "Play matching" : "Naming";
-  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : type === "inference" && subtype === "count" ? "Choose how iTunes library export records contribute to totals." : type === "inference" && subtype === "time" ? "Determine when plays happened using each source's dates, durations, and timezone." : type === "matching" ? "Compare two records to determine whether they describe the same play. Left is the earlier record identifier." : "Choose displayed names using original metadata and source information.";
+  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : type === "inference" && subtype === "count" ? "Count" : type === "inference" && subtype === "time" ? "Time" : type === "matching" ? subtype === "music" ? "Music matching" : "Play matching" : "Naming";
+  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : type === "inference" && subtype === "count" ? "Choose how iTunes library export records contribute to totals." : type === "inference" && subtype === "time" ? "Determine when plays happened using each source's dates, durations, and timezone." : type === "matching" ? subtype === "music" ? "Choose comparison names and aliases for matching music and collecting track histories." : "Compare two records to determine whether they describe the same play. Left is the earlier record identifier." : "Choose displayed names using original metadata and source information.";
   const current = rules.find(rule => rule.id === expanded);
   const freshExamples = checkedVersion === state.current.id && checkedConfig === JSON.stringify(config) ? examples : undefined;
   async function check() {
     setChecking(true); setError("");
     try {
-      const result = await filterRequest<{ naming_examples: NamingExample[] }>("/preview", { base_version: state.current.id, config });
-      setExamples(result.naming_examples || []); setCheckedConfig(JSON.stringify(config)); setCheckedVersion(state.current.id);
+      const result = await filterRequest<{ naming_examples: NamingExample[]; music_examples: NamingExample[] }>("/preview", { base_version: state.current.id, config });
+      setExamples((type === "matching" ? result.music_examples : result.naming_examples) || []); setCheckedConfig(JSON.stringify(config)); setCheckedVersion(state.current.id);
     } catch (error) { setError(error instanceof Error ? error.message : "Could not check changes."); }
     finally { setChecking(false); }
   }
@@ -63,13 +63,13 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
           <FilterBlockEditor program={current.program} schema={schema} sources={state.sources} operators={state.blocks.operators} disabled={busy} onChange={program => onChange({ ...current, program })} />
         </fieldset>
         <div className="flex flex-wrap gap-4 text-sm">
-          {type === "presentation" && <button type="button" className={button} disabled={busy || checking} onClick={check}>{checking ? "Checking..." : "Check changes"}</button>}
+          {(type === "presentation" || type === "matching" && subtype === "music") && <button type="button" className={button} disabled={busy || checking} onClick={check}>{checking ? "Checking..." : "Check changes"}</button>}
           <button type="button" className="underline" disabled={busy} onClick={() => { const copy = { ...structuredClone(current), id: crypto.randomUUID(), name: `${current.name || `${title} filter`} copy` }; onChange(copy); setExpanded(copy.id); }}>Duplicate filter</button>
           <button type="button" className="underline" disabled={busy} onClick={() => { onRemove(current.id); setExpanded(undefined); }}>Remove filter</button>
         </div>
         {error && <p role="alert" className="text-sm text-(--color-error)">{error}</p>}
         {freshExamples && <div role="status" className="overflow-x-auto text-sm">
-          {freshExamples.length === 0 ? <p>No displayed names change.</p> : <table className="w-full text-left"><thead><tr><th className="p-2">Field</th><th className="p-2">Before</th><th className="p-2">After</th></tr></thead><tbody>{freshExamples.map((example, i) => <tr key={i} className="border-t border-(--color-bg-tertiary)"><td className="p-2">{example.field}</td><td className="p-2">{example.before}</td><td className="p-2">{example.after}</td></tr>)}</tbody></table>}
+          {freshExamples.length === 0 ? <p>{type === "matching" ? "No comparison values change." : "No displayed names change."}</p> : <table className="w-full text-left"><thead><tr><th className="p-2">Field</th><th className="p-2">Before</th><th className="p-2">After</th></tr></thead><tbody>{freshExamples.map((example, i) => <tr key={i} className="border-t border-(--color-bg-tertiary)"><td className="p-2">{example.field}</td><td className="p-2">{example.before}</td><td className="p-2">{example.after}</td></tr>)}</tbody></table>}
         </div>}
       </div>}
       <div className="flex flex-wrap gap-2">

@@ -82,7 +82,7 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
         <h3 className="font-medium">Count</h3>
         <dl className="grid grid-cols-[1fr_auto] gap-x-5 gap-y-2 text-sm">
           <dt className="flex items-center gap-1">Reported<FieldHelp label="Reported count">The largest valid cumulative count in the source records.</FieldHelp></dt><dd>{contribution.reported?.toLocaleString() ?? "Unknown"}</dd>
-          <dt className="flex items-center gap-1">Interpreted<FieldHelp label="Interpreted count">The amount produced by the selected Count rule.</FieldHelp></dt><dd>{contribution.available.toLocaleString()}</dd>
+          <dt className="flex items-center gap-1">Interpreted<FieldHelp label="Interpreted count">The amount produced by the selected Count filter.</FieldHelp></dt><dd>{contribution.available.toLocaleString()}</dd>
           <dt>Assigned to me</dt><dd>{contribution.attributed.toLocaleString()}</dd>
           {!!contribution.observed && <><dt>Observed</dt><dd>{contribution.observed.toLocaleString()}</dd></>}
           {!!contribution.overlap && <><dt>Matched endpoints</dt><dd>{contribution.overlap.toLocaleString()}</dd></>}
@@ -105,7 +105,7 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2">Other record<input className="w-28 rounded border border-(--color-bg-tertiary) bg-(--color-bg) p-2" type="number" min="1" value={target} disabled={busy} onChange={event => { setTarget(event.target.value); setPair(undefined); }} /></label>
           <button type="button" className={button} disabled={busy || !Number(target) || Number(target) === id} onClick={compare}>Compare</button>
-          {[["match", "Match"], ["split", "Split"], ["clear", "Use rules"]].map(([action, label]) => <button type="button" className={button} key={action} disabled={busy || !Number(target) || Number(target) === id} onClick={() => decide(action)}>{label}</button>)}
+          {[["match", "Match"], ["split", "Split"], ["clear", "Use filters"]].map(([action, label]) => <button type="button" className={button} key={action} disabled={busy || !Number(target) || Number(target) === id} onClick={() => decide(action)}>{label}</button>)}
         </div>
         {pair && <div className="mt-3 space-y-2 text-sm" role="status"><p>Music matching: {pair.music ? "TRUE" : "FALSE"}</p><p>Play matching: {pair.play ? "TRUE" : "FALSE"}</p>{pair.issues.map((issue,index) => <p key={index} className="break-words">{issue.name || "Filter"}: {issue.reason}</p>)}</div>}
       </details>}

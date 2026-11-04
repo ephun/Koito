@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/gabehf/koito/internal/filters"
 )
 
 type Database interface {
@@ -41,18 +43,38 @@ func fold(value string) string {
 // RefreshHistories assigns the name-based track history separately from
 // recording identity. Matching names can share a page while their recordings
 // and album appearances remain independently addressable.
-func RefreshHistories(ctx context.Context, db Database, caseSensitive bool) error {
-	return histories(ctx, db, caseSensitive, 0)
+func RefreshHistories(ctx context.Context, db Database, caseSensitive bool, config ...string) error {
+	return histories(ctx, db, caseSensitive, 0, config...)
 }
 
 func AssignHistory(ctx context.Context, db Database, trackID int64, caseSensitive bool) error {
 	return histories(ctx, db, caseSensitive, trackID)
 }
 
-func histories(ctx context.Context, db Database, caseSensitive bool, trackID int64) error {
+func histories(ctx context.Context, db Database, caseSensitive bool, trackID int64, config ...string) error {
+	var raw string
+	if len(config) > 0 {
+		raw = config[0]
+	} else {
+		err := db.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&raw)
+		if err != nil {
+			return err
+		}
+	}
+	var settings struct {
+		Rules []IdentityFilter `json:"rules"`
+	}
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		return err
+	}
+	programs, err := CompileIdentityPrograms(settings.Rules)
+	if err != nil {
+		return err
+	}
 	query := `SELECT t.id,t.title,COALESCE((SELECT group_concat(artist_id,',') FROM
 	    (SELECT artist_id FROM artist_tracks WHERE track_id=t.id ORDER BY artist_id)),'')
-	    FROM tracks_with_title t`
+	    ,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_tracks ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.track_id=t.id ORDER BY ar.artist_id)),'[]'),COALESCE(r.title,''),COALESCE(o.comparison_key,'')
+	    FROM tracks_with_title t LEFT JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_history_overrides o ON o.track_id=t.id`
 	var args []any
 	if trackID != 0 {
 		query += ` WHERE t.id=?`
@@ -64,13 +86,14 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 		return err
 	}
 	type item struct {
-		id             int64
-		title, artists string
+		id                     int64
+		title, artists         string
+		names, album, override string
 	}
 	var items []item
 	for rows.Next() {
 		var v item
-		if err = rows.Scan(&v.id, &v.title, &v.artists); err != nil {
+		if err = rows.Scan(&v.id, &v.title, &v.artists, &v.names, &v.album, &v.override); err != nil {
 			rows.Close()
 			return err
 		}
@@ -87,6 +110,29 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 			title = fold(title)
 		}
 		key, _ := json.Marshal([]string{v.artists, title})
+		if programs.Active() {
+			var names []string
+			if err := json.Unmarshal([]byte(v.names), &names); err != nil {
+				return err
+			}
+			artist := strings.Join(names, " & ")
+			album := v.album
+			if album == "Unknown Album" {
+				album = ""
+			}
+			env := filters.Env{"original.artist": filters.String(artist), "original.album": filters.String(album), "original.title": filters.String(v.title), "source.service": filters.String("koito")}
+			value, _, err := programs.Resolve(ctx, env, MatchIdentity{Artist: artist, Album: album, Title: v.title})
+			if err != nil {
+				return err
+			}
+			key, _ = json.Marshal([]string{"matching", value.Artist, value.Title})
+			if strings.Contains(v.artists, ",") {
+				key, _ = json.Marshal([]string{"matching-multi", v.artists, value.Artist, value.Title})
+			}
+		}
+		if v.override != "" {
+			key = []byte(v.override)
+		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO music_tracks(identity_key) VALUES(?) ON CONFLICT DO NOTHING`, string(key)); err != nil {
 			return err
 		}

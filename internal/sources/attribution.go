@@ -192,13 +192,8 @@ type personalEvidence struct {
 }
 
 func evidenceMusicKeys(v recordValues, rule Rule) []string {
-	normalize := func(s string) string {
-		if rule.Enabled && !rule.Settings.CaseSensitive {
-			return foldedName(s)
-		}
-		return s
-	}
-	out := []string{"text:" + normalize(v.Artist) + "\x00" + normalize(v.Title)}
+	identity := comparisonMusic(v, rule)
+	out := []string{"text:" + identity.Artist + "\x00" + identity.Title}
 	if v.URI != "" {
 		out = append(out, "uri:"+v.URI)
 	}

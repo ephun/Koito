@@ -1,6 +1,6 @@
 # Phase 4: implementation progress
 
-Status: **in progress**. Updated November 3, 2026.
+Status: **in progress**. Updated November 4, 2026.
 
 The [phase plan](development-plan.md#phase-4-music-matching-album-distinctions-and-bulk-cleanup) defines the complete scope.
 The [filter design](filters-interface.md#agreed-next-layout) defines the agreed atomic builder.
@@ -99,15 +99,12 @@ They are excluded from Git.
 
 ## Remaining Phase 4 work
 
-1. Extend the implemented atomic evaluator across the remaining filter types and source metadata fields.
-2. Migrate existing configurations while retaining their behavior and disabled settings.
-3. Replace the mixed filter controls with the consistent IF/THEN/ELSE builder and manager.
-4. Add reversible music aliases, source-specific naming, edition grouping, and bulk cleanup.
-5. Show affected examples for pattern edits and preserve explicit exceptions and undo.
-6. Add source and manual genres with artist genre assignment and chart filtering.
-7. Add optional source and metadata tags to listening rows.
-8. Integrate contextual corrections with native search and audit the remaining legacy editing operations.
-9. Verify every Phase 4 acceptance criterion against the completed implementation.
+1. Add edition grouping while retaining individual release identities and album associations.
+2. Add source and manual genres with artist genre assignment and chart filtering.
+3. Add optional source and metadata tags to listening rows.
+4. Integrate contextual corrections with native search and replace the remaining destructive cleanup operations.
+5. Extend previews, exceptions, and undo checks to those remaining actions.
+6. Verify every Phase 4 acceptance criterion against the completed implementation.
 
 ## Atomic engine and first integration
 
@@ -352,6 +349,8 @@ Actual-import acceptance selected Rock records through the editor and applied a 
 It checked genre selection on 1,777 entries and whole-play rounding for 741 shares.
 The test configuration displayed 170,818 plays. All 191,473 source records retained identical fingerprints.
 Desktop, 390-pixel, and 320-pixel checks passed without page errors.
+
+
 Restoring the original configuration returned 168,424 plays in 60.94 seconds.
 The updated main application retains the baseline totals and all three original-file hashes.
 
@@ -418,3 +417,49 @@ The exception changed 168,424 plays to 168,425 and returned FALSE in record comp
 Restoring the original configuration restored 168,424 plays and the complete play fingerprint.
 All 191,473 source records retained identical fingerprints.
 Desktop, 390-pixel, and 320-pixel checks passed without page errors.
+
+## Music comparison names and unified editor
+
+Music matching now uses the shared conditional editor.
+Filters assign artist, album, and track names used for comparison, plus explicit handling of an empty album.
+Original names, comparison names, and displayed names remain separate.
+Source, file, artist, device, record, and arbitrary raw metadata can select corrections.
+Text operations support case normalization, aliases, regex cleanup, whitespace, and punctuation changes.
+Higher-priority corrections run after lower-priority corrections. Equal priorities retain their saved order.
+
+Comparison names feed play matching, personal evidence matching, count-overlap checks, and shared track histories.
+Conflicting reliable recording identifiers continue to retain separate recording identities.
+Album appearances and their original reported associations remain independently addressable.
+Comparison changes do not rename catalog aliases.
+
+When source-specific comparisons differ for equal displayed names, derived album appearances retain separate history links.
+Their artist credits, recording links, album, and duration are copied from the existing appearance.
+Original catalog rows remain unchanged. Undo reuses the original appearance identifiers.
+The variant mapping and history overrides are derived data.
+Native catalog histories also evaluate applicable comparison programs while retaining multiple artist credits.
+
+Music matching shows actual before-and-after comparison examples through Check changes.
+Examples load the prior configuration's record interpretation separately from the proposed configuration.
+Unknown conditions and invalid empty comparison names discard the complete filter and appear in record inspection.
+Migration retains disabled settings and the earlier case/missing-album behavior.
+
+All existing filter subtypes now use the same manager and IF/THEN/ELSE editor.
+The old scoped controls, fixed matching switches, and their unused client component have been removed.
+The configuration can explicitly contain zero filters, remain empty after rebuilding, and restore a previous version.
+Legacy configurations remain readable and execute their original paths until converted and saved.
+
+Tests cover every case/missing-album/enabled combination, comparison aliases, source-specific histories,
+unchanged display names, recording distinctions, multiple artist credits, preview examples, incomplete metadata,
+empty configurations, repeat rebuilding, and restoration of original appearance identifiers.
+The full Go suite, frontend type checking, and production build pass.
+
+Actual-import acceptance previewed twelve comparison changes and enabled case-insensitive matching.
+The temporary configuration displayed 167,717 plays, compared with 168,424 before the change.
+All 191,473 records and the existing 24,450 catalog titles remained unchanged.
+Restoring the original configuration returned 168,424 plays and the original play fingerprint.
+The preview and editor passed desktop, 390-pixel, and 320-pixel checks without page errors.
+Converting the saved configuration alone preserved play, record, and contributor fingerprints across all 168,424 plays.
+Restoring its original representation reproduced those fingerprints again.
+The main application rebuilt in 61.375 seconds and retained all three original-file hashes.
+
+Edition grouping, genres, optional tags, and contextual corrections remain outstanding.

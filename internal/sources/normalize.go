@@ -7,22 +7,25 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gabehf/koito/internal/music"
 )
 
 type recordValues struct {
-	Title       string    `json:"title"`
-	Artist      string    `json:"artist"`
-	Album       string    `json:"album"`
-	URI         string    `json:"uri,omitempty"`
-	RecordingID string    `json:"recording_id,omitempty"`
-	TimeText    string    `json:"time_text"`
-	TimeMeaning string    `json:"time_meaning"`
-	Precision   int64     `json:"precision_ns"`
-	Time        time.Time `json:"-"`
-	PlayedMS    int64     `json:"played_ms,omitempty"`
-	Reason      string    `json:"reason"`
-	Origin      string    `json:"origin"`
-	NowPlaying  bool      `json:"now_playing,omitempty"`
+	Music       *music.MatchIdentity `json:"music,omitempty"`
+	Title       string               `json:"title"`
+	Artist      string               `json:"artist"`
+	Album       string               `json:"album"`
+	URI         string               `json:"uri,omitempty"`
+	RecordingID string               `json:"recording_id,omitempty"`
+	TimeText    string               `json:"time_text"`
+	TimeMeaning string               `json:"time_meaning"`
+	Precision   int64                `json:"precision_ns"`
+	Time        time.Time            `json:"-"`
+	PlayedMS    int64                `json:"played_ms,omitempty"`
+	Reason      string               `json:"reason"`
+	Origin      string               `json:"origin"`
+	NowPlaying  bool                 `json:"now_playing,omitempty"`
 }
 
 func rawString(raw json.RawMessage) string {

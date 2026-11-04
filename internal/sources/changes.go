@@ -32,6 +32,7 @@ type PreviewExample struct {
 	Artist string    `json:"artist"`
 }
 type FilterPreview struct {
+	MusicExamples  []NamingExample  `json:"music_examples"`
 	NamingExamples []NamingExample  `json:"naming_examples"`
 	Token          string           `json:"token"`
 	BaseVersion    int64            `json:"base_version"`
@@ -60,7 +61,7 @@ func resolveChange(ctx context.Context, tx *sql.Tx, change FilterChange) (RuleVe
 		}
 		config = v.Config
 	}
-	if len(config.Rules) == 0 {
+	if config.Rules == nil {
 		config = current.Config
 	}
 	if err = validateRules(config); err != nil {
@@ -158,6 +159,10 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.NamingExamples, err = previewNaming(ctx, plan, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.MusicExamples, err = previewMusic(ctx, tx, plan, current.Config, config)
 	if err != nil {
 		return preview, plan, config, added, err
 	}

@@ -132,6 +132,13 @@ func recordEnvironment(r matchingRecord) filters.Env {
 	for key, value := range r.RawFields {
 		env[key] = value
 	}
+	if r.Values.Music != nil {
+		value := r.Values.Music
+		env["music.artist"] = filters.String(value.Artist)
+		env["music.album"] = filters.String(value.Album)
+		env["music.title"] = filters.String(value.Title)
+		env["music.missing_album"] = filters.Bool(value.MissingAlbum)
+	}
 	if !r.Start.IsZero() {
 		env["record.time"] = filters.Timestamp(r.Start)
 	}

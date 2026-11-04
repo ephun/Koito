@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/gabehf/koito/internal/mbz"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +28,50 @@ func musicStore(t *testing.T) *sqlite.Sqlite {
 	    INSERT INTO release_aliases VALUES(1,'Single','test',1),(2,'Compilation','test',1),(3,'Unknown Album','test',1);
 	    INSERT INTO artist_releases VALUES(1,1,1),(1,2,1),(1,3,1);`))
 	return s
+}
+
+func TestNativeHistoriesUseMusicProgramsAndPreserveMultipleArtistCredits(t *testing.T) {
+	s := musicStore(t)
+	ctx := context.Background()
+	a := musicAppearance(t, s, "Song", 1, uuid.Nil)
+	b := musicAppearance(t, s, "song", 2, uuid.Nil)
+	for i, track := range []*models.Track{a, b} {
+		require.NoError(t, s.SaveListen(ctx, db.SaveListenOpts{TrackID: track.ID, Time: time.Unix(1577934065+int64(i), 0), UserID: 1, Client: "test"}))
+	}
+	store := sources.Store{DB: s.SourceDatabase(), Root: t.TempDir()}
+	state, err := store.Filters(ctx)
+	require.NoError(t, err)
+	rule := &state.Current.Config.Rules[0]
+	require.NoError(t, json.Unmarshal([]byte(`{"steps":[{"set":"music.title","value":{"op":"casefold","args":[{"op":"field","field":"original.title"}]}}]}`), &rule.Program))
+	_, err = store.Save(ctx, sources.FilterChange{BaseVersion: state.Current.ID, Config: state.Current.Config})
+	require.NoError(t, err)
+	track, err := s.GetTrack(ctx, db.GetTrackOpts{ID: a.ID})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, track.ListenCount)
+	require.Equal(t, "Song", track.Title)
+	require.NoError(t, s.Exec(`INSERT INTO artists(id) VALUES(2),(3); INSERT INTO artist_aliases VALUES(2,'Other','test',1),(3,'Artist & Other','test',1);`))
+	duo, err := s.SaveTrack(ctx, db.SaveTrackOpts{Title: "SONG", AlbumID: 1, ArtistIDs: []int32{1, 2}})
+	require.NoError(t, err)
+	solo, err := s.SaveTrack(ctx, db.SaveTrackOpts{Title: "SONG", AlbumID: 1, ArtistIDs: []int32{3}})
+	require.NoError(t, err)
+	var duoHistory, soloHistory int64
+	require.NoError(t, s.SourceDatabase().QueryRow(`SELECT music_track_id FROM track_histories WHERE track_id=?`, duo.ID).Scan(&duoHistory))
+	require.NoError(t, s.SourceDatabase().QueryRow(`SELECT music_track_id FROM track_histories WHERE track_id=?`, solo.ID).Scan(&soloHistory))
+	require.NotEqual(t, duoHistory, soloHistory)
+	var credits int
+	require.NoError(t, s.SourceDatabase().QueryRow(`SELECT COUNT(*) FROM artist_tracks WHERE track_id=?`, duo.ID).Scan(&credits))
+	require.Equal(t, 2, credits)
+	_, err = s.SourceDatabase().ExecContext(ctx, `INSERT INTO artists(id) VALUES(4)`)
+	require.NoError(t, err)
+	_, err = s.SourceDatabase().ExecContext(ctx, `INSERT INTO artist_aliases(artist_id,alias,source,is_primary) VALUES(4,?,'test',1)`, "A\x1fB")
+	require.NoError(t, err)
+	separatorName, err := s.SaveTrack(ctx, db.SaveTrackOpts{Title: "SONG", AlbumID: 1, ArtistIDs: []int32{4}})
+	require.NoError(t, err)
+	var identityKey string
+	require.NoError(t, s.SourceDatabase().QueryRow(`SELECT m.identity_key FROM track_histories h JOIN music_tracks m ON m.id=h.music_track_id WHERE h.track_id=?`, separatorName.ID).Scan(&identityKey))
+	var parts []string
+	require.NoError(t, json.Unmarshal([]byte(identityKey), &parts))
+	require.Equal(t, "A\x1fB", parts[1])
 }
 
 func musicAppearance(t *testing.T, s *sqlite.Sqlite, title string, album int32, recording uuid.UUID) *models.Track {

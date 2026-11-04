@@ -235,48 +235,46 @@ Our ELSE branches, additional operators, and music-specific actions are this for
 
 ## Current layout
 
-| Type | Subtype | Controls |
-|---|---|---|
-| Matching | Music matching | Case comparison and missing albums |
-| Matching | Play matching | Time tolerance |
-| Inference | Count | Library totals, latest counts, and explicit reset interpretation |
-| Inference | Time | Spotify timestamps, Last.fm timezones, and library timing |
-| Attribution | Direct | Personal, other, or unknown listening |
-| Attribution | Heuristic | Explicit personal evidence and minimum matching plays |
-| Attribution | Aggregate | A selected share of cumulative counts |
+Every implemented subtype uses the shared filter manager and conditional editor.
 
-Each matching section has one On/Off switch.
-Its settings become disabled and muted when switched off.
-Stored settings remain available when the section is enabled again.
+| Type | Subtype | Actions |
+|---|---|---|
+| Matching | Music matching | Assign comparison names and empty-album handling |
+| Matching | Play matching | Compare two records and assign Same play |
+| Inference | Count | Select supporting library records and calculate cumulative counts |
+| Inference | Time | Interpret timezones, Spotify endpoints, adjustments, and library play dates |
+| Attribution | Direct | Assign Me, Someone else, or Unknown |
+| Attribution | Heuristic | Assign listening using explicit personal-play collections |
+| Attribution | Aggregate | Assign a percentage of cumulative counts |
+| Presentation | Naming | Assign displayed artist, album, and track names |
+
+Each filter has a name, an enabled state, IF/THEN summaries, and an expandable editor.
+Nested IF, THEN, ELSE IF, ELSE, and SET blocks compose the filter.
+Conditions use typed fields, values, comparisons, arithmetic, and logical operators.
+WHERE, MAP, GET, and collection aggregates support compound calculations.
+The metadata field menu loads fields from actual imported records.
+
+Starting filters supply editable examples. Their parameters remain part of the same block editor.
+Disabled filters keep their settings and remain editable with a muted appearance.
+Priority is available for matching, attribution, and inference.
+Music comparison corrections run in ascending priority and saved order.
 
 Question marks provide hover and keyboard-focus help.
-Help text uses simple sentences with twenty words at most.
-Escape dismisses the tooltip.
-Tooltips stay within the viewport.
-Source headings keep their help icons on the same row.
+Help sentences contain twenty words at most.
+Last.fm timezone values use a dropdown. New timezone filters start with UTC.
+Saved unknown timezones retain their original meaning.
+File exceptions use ordinary IF conditions.
 
-Last.fm timezone uses a dropdown.
-The current export uses UTC, corroborated by matching Spotify timestamps.
-Unknown remains available for unidentified exports.
-The timezone setting has no On/Off control.
-Timezones by file appears with multiple relevant files or enabled exceptions.
-Its optional exceptions default to using the Last.fm timezone.
-iTunes count help explicitly refers to iTunes library export records.
-Its time controls use last-played dates and estimated play dates as their visible language.
+Check changes shows actual before-and-after Music matching or Naming examples.
+Save changes publishes the filters and view together using the current version check.
+Discard restores the loaded configuration. Removing every filter leaves an explicit empty configuration.
+Saved history stays available for restoring earlier versions.
 
-Save changes publishes the rules and view together.
-Discard restores the currently loaded settings before saving.
-The server checks the active version when saving.
-Saved versions and manual decisions remain available for later controls.
-
-Imports and listening history provide record inspection.
-Koito's existing search locates music.
-Record inspection contains supporting records and contextual matching actions.
-Library inspection also shows count contributions and attribution.
-Library timing controls depend on Count rules.
-Scope conditions are added individually inside Scope.
-Context labels summarize selected artist, device, track, and date conditions.
-The source preference design remains separate from attribution controls.
+Imports and listening history provide record inspection and source downloads.
+Inspection shows unresolved conditions, count contributions, attribution, and record-pair comparisons.
+Manual matching decisions remain separate from automatic comparisons.
+Koito's native search remains the music lookup interface.
+Contextual catalog corrections and the remaining Grouping actions are still being implemented.
 
 ## Source preference
 
@@ -323,7 +321,9 @@ Keep recording identity and release information distinct.
 Audit automatic catalog matching, manual edits, aliases, deletion, and live submissions before adding their replacements.
 Include existing legacy data in the migration design.
 
-## Heading and condition refinements
+## Earlier heading and condition refinements
+
+These refinements preceded the shared editor described in Current layout.
 
 Type headings include their purpose in hover and keyboard help.
 Attribution subheadings sit inside their cards, matching the other filter types.

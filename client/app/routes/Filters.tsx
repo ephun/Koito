@@ -1,12 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import FieldHelp from "~/components/FieldHelp";
 import ProgramFilterManager from "~/components/ProgramFilterManager";
 import { useAppContext } from "~/providers/AppProvider";
-import { Option, Switch, filterButton as button, filterInput as input, filterCard as card } from "~/components/FilterControls";
-import { AddScopedRule, ScopedRule, libraryRule, subtypeName } from "~/components/ScopedFilterRules";
-import { filterRequest, FilterRequestError, type FilterState, type Rule, type RuleConfig, type RuleSettings, type RuleVersion } from "~/utils/filterRules";
+import { filterButton as button } from "~/components/FilterControls";
+import { filterRequest, FilterRequestError, type FilterState, type Rule, type RuleConfig, type RuleVersion } from "~/utils/filterRules";
 
 export default function Filters() {
   const { user } = useAppContext();
@@ -43,14 +42,6 @@ export default function Filters() {
     if (user?.role === "admin" && !recordID) void load();
   }, [user?.role, recordID]);
 
-  function edit(id: string, update: Partial<RuleSettings> | { enabled: boolean }) {
-    setDraft(previous => previous && ({ rules: previous.rules.map(rule => {
-      if (rule.id !== id) return rule;
-      return "enabled" in update ? { ...rule, enabled: update.enabled } : { ...rule, settings: { ...rule.settings, ...update } };
-    }) }));
-    setMessage("");
-  }
-
   function upsert(rule: Rule) {
     setDraft(previous => previous && ({ rules: previous.rules.some(existing => existing.id === rule.id)
       ? previous.rules.map(existing => existing.id === rule.id ? rule : existing)
@@ -64,10 +55,6 @@ export default function Filters() {
 
   async function save() {
     if (!saved || !draft || saving) return;
-    if (draft.rules.some(rule => rule.enabled && Object.entries(rule.scope).some(([key, value]) => key !== "service" && key !== "source_id" && (value === "" || value === 0)))) {
-      setError("Complete or remove empty scope conditions.");
-      return;
-    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -84,29 +71,7 @@ export default function Filters() {
     } finally { setSaving(false); }
   }
 
-  const music = draft?.rules.find(rule => rule.type === "matching" && rule.subtype === "music");
-  const plays = draft?.rules.find(rule => rule.type === "matching" && rule.subtype === "play");
-  const time = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && !rule.scope.file_hash && !rule.scope.source_id);
-  const librarySources = saved?.sources.filter(source => source.service === "itunes" && source.records > 0) || [];
-  const countRules = draft?.rules.filter(rule => rule.type === "inference" && rule.subtype === "count") || [];
-  const libraryTimes = visibleLibraryRules("time");
-  function visibleLibraryRules(subtype: "count" | "time") {
-    const rules = draft?.rules.filter(rule => rule.type === "inference" && rule.subtype === subtype && rule.scope.service === "itunes") || [];
-    return rules.length ? rules : librarySources.map(source => libraryRule(source, subtype));
-  }
-  const countEnabled = (timeRule: Rule) => countRules.some(rule => rule.enabled && (rule.program ||
-    (["source_id", "file_hash", "library_id", "track_id", "record_id", "artist"] as const).every(key => !rule.scope[key] || !timeRule.scope[key] || rule.scope[key] === timeRule.scope[key])));
   const dirty = !!saved && !!draft && JSON.stringify(saved.current.config) !== JSON.stringify(draft);
-
-  function fileTimezone(file: FilterState["time_files"][number], zone: string) {
-    if (!draft || !time) return;
-    const existing = draft.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
-    if (zone === "inherit") {
-      if (existing) upsert({ ...existing, enabled: false });
-      return;
-    }
-    upsert({ ...(existing || { id: `time-${file.source_id}-${file.hash}`, type: "inference", subtype: "time", scope: { service: "lastfm", source_id: file.source_id, file_hash: file.hash }, settings: { ...time.settings } }), enabled: true, settings: { ...(existing?.settings || time.settings), timezone: zone } });
-  }
 
   if (recordID) return <Navigate replace to={`/imports?record=${encodeURIComponent(recordID)}`} />;
   if (user?.role !== "admin") return <main className="p-6"><h1>Filters</h1><p>Administrator login required.</p></main>;
@@ -128,98 +93,24 @@ export default function Filters() {
     {loading && <p role="status">Loading filters...</p>}
     {message && <p role="status" className="text-sm text-(--color-fg-secondary)">{message}</p>}
 
-    {music && <section aria-labelledby="matching-title" className="space-y-3">
-      <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
-      <div className={card}>
-        <RuleGroup title="Music matching" label="Music matching" rule={music} busy={saving} onToggle={enabled => edit(music.id, { enabled })}>
-          <Option label="Case" id="music-case" help="Choose how capitalization affects music matching.">
-            <select id="music-case" className={input} disabled={saving || !music.enabled} value={music.settings.case_sensitive ? "exact" : "ignore"} onChange={event => edit(music.id, { case_sensitive: event.target.value === "exact" })}>
-              <option value="exact">Match exact case</option>
-              <option value="ignore">Ignore case</option>
-            </select>
-          </Option>
-          <Option label="Missing albums" id="missing-albums" help="Allow matches when one record has an empty album.">
-            <Switch id="missing-albums" label="Match missing albums" checked={music.settings.match_missing_album} disabled={saving || !music.enabled} onChange={match_missing_album => edit(music.id, { match_missing_album })} />
-          </Option>
-        </RuleGroup>
-        {plays && !saved?.blocks?.schemas["matching:play"] && <RuleGroup title="Play matching" label="Play matching" rule={plays} busy={saving} onToggle={enabled => edit(plays.id, { enabled })}>
-          <Option label="Time tolerance" id="play-tolerance" help="Allow extra seconds between matching timestamps.">
-            <span className="flex items-center gap-2"><input id="play-tolerance" aria-label="Time tolerance in seconds" className={`${input} w-24`} type="number" min="0" max="3600" step="1" disabled={saving || !plays.enabled} value={plays.settings.tolerance_seconds} onChange={event => edit(plays.id, { tolerance_seconds: Number(event.target.value) })} /><span className="text-sm text-(--color-fg-secondary)">seconds</span></span>
-          </Option>
-        </RuleGroup>}
-      </div>
-      {saved && draft && saved.blocks?.schemas["matching:play"] && <ProgramFilterManager state={saved} config={draft} busy={saving} type="matching" subtype="play" embedded onChange={upsert} onRemove={remove} />}
-    </section>}
-
-    {saved && <section aria-labelledby="inference-title" className="space-y-3">
-      <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
-      <div className={saved?.blocks?.schemas["inference:count"] ? "space-y-4" : card}>
-        {!!librarySources.length && saved && <div>
-          {draft && saved.blocks?.schemas["inference:count"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} /> : <><h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>{countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}<AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} /></>}
-        </div>}
-        {saved && draft && saved.blocks?.schemas["inference:time"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} /> : plays && <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
-          <div className="flex items-center gap-1"><h3 className="text-lg font-medium normal-case tracking-normal">Time</h3><FieldHelp label="Time inference">Determine when plays happened using the dates and durations supplied by each source.</FieldHelp></div>
-          <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
-            <select id="spotify-time" className={input} disabled={saving} value={plays.settings.spotify_time} onChange={event => edit(plays.id, { spotify_time: event.target.value })}>
-              <option value="estimated_start">Estimated start</option><option value="end">Reported end</option>
-            </select>
-          </Option>
-          {!!saved?.time_files.length && time && <div className="space-y-3 border-t border-(--color-bg-tertiary) pt-4">
-            <Option label="Last.fm timezone" id="lastfm-timezone" help="Choose the timezone used by Last.fm export dates.">
-              <TimezoneSelect id="lastfm-timezone" label="Last.fm timezone" disabled={saving} value={time.enabled ? time.settings.timezone : ""} onChange={timezone => upsert({ ...time, enabled: true, settings: { ...time.settings, timezone } })} />
-            </Option>
-            {(saved.time_files.length > 1 || draft?.rules.some(rule => rule.type === "inference" && rule.scope.service === "lastfm" && rule.scope.file_hash && rule.enabled)) && <details>
-              <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Timezones by file</summary>
-              <div className="mt-3 divide-y divide-(--color-bg-tertiary)">{saved.time_files.map(file => {
-                const rule = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
-                return <div key={`${file.source_id}-${file.hash}`} className="space-y-3 py-4">
-                  <p className="break-all text-sm font-medium">{file.filename}</p>
-                  <Option label="Timezone" help="Use a different timezone when this file needs one.">
-                    <TimezoneSelect label={`Timezone for ${file.filename}`} disabled={saving} inherit value={rule?.enabled ? rule.settings.timezone : "inherit"} onChange={zone => fileTimezone(file, zone)} />
-                  </Option>
-                </div>;
-              })}</div>
-            </details>}
-          </div>}
-          {!!librarySources.length && saved && <div className="divide-y divide-(--color-bg-tertiary) border-t border-(--color-bg-tertiary)">
-            {libraryTimes.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} blocked={!countEnabled(rule)} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
-            <AddScopedRule state={saved} type="inference" subtype="time" busy={saving} onAdd={upsert} />
-          </div>}
-        </section>}
-      </div>
-    </section>}
-
-    {saved?.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
-      <div className="flex items-center gap-2"><h2 id="attribution-title">Attribution</h2><FieldHelp label="Attribution">Determine which listening belongs to you.</FieldHelp></div>
-      {["direct", "heuristic", "aggregate"].map(subtype => {
-        if (draft && saved.blocks?.schemas[`attribution:${subtype}`]) return <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="attribution" subtype={subtype} embedded onChange={upsert} onRemove={remove} />;
-        const rules = draft?.rules.filter(rule => rule.type === "attribution" && rule.subtype === subtype) || [];
-        return !!rules.length && <div key={subtype} className={card}><div>
-          <div className="flex items-center gap-1 px-4 pt-4 sm:px-5 sm:pt-5"><h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3><FieldHelp label={`${subtypeName(subtype)} attribution`}>{subtype === "direct" ? "Choose who listened using information you know." : subtype === "heuristic" ? "Estimate who listened using supporting listening evidence." : "Assign your share of a cumulative listening total."}</FieldHelp></div>
-          {rules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}
-        </div></div>;
-      })}
-      {["direct", "heuristic", "aggregate"].some(subtype => !saved.blocks?.schemas[`attribution:${subtype}`] && saved.sources.some(source => source.records > 0 && (subtype === "direct" || (subtype === "aggregate" ? source.service === "itunes" : source.service !== "itunes")))) && <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>}
-    </section>}
+    {saved && draft && <>
+      <section aria-labelledby="matching-title" className="space-y-3">
+        <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
+        {["music", "play"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="matching" subtype={subtype} embedded onChange={upsert} onRemove={remove} />)}
+      </section>
+      <section aria-labelledby="inference-title" className="space-y-3">
+        <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
+        {saved.sources.some(source => source.service === "itunes" && source.records > 0) && <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} />}
+        <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} />
+      </section>
+      {saved.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
+        <div className="flex items-center gap-2"><h2 id="attribution-title">Attribution</h2><FieldHelp label="Attribution">Determine which listening belongs to you.</FieldHelp></div>
+        {["direct", "heuristic", "aggregate"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="attribution" subtype={subtype} embedded onChange={upsert} onRemove={remove} />)}
+      </section>}
+    </>}
     {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
   </main>;
 }
 
-function RuleGroup({ title, label, rule, busy, onToggle, children }: { title: string; label: string; rule: Rule; busy: boolean; onToggle: (enabled: boolean) => void; children: ReactNode }) {
-  return <section className="space-y-4 p-4 sm:p-5" aria-label={label}>
-    <div className="flex items-center justify-between gap-4"><h3 className="text-lg font-medium normal-case tracking-normal">{title}</h3><Switch label={label} checked={rule.enabled} disabled={busy} onChange={onToggle} /></div>
-    <div className={`${rule.enabled ? "" : "opacity-50"} space-y-4`}>{children}</div>
-  </section>;
-}
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Could not save filters."; }
-
-function TimezoneSelect({ id, label, value, disabled, inherit = false, onChange }: { id?: string; label: string; value: string; disabled: boolean; inherit?: boolean; onChange: (value: string) => void }) {
-  const available = (Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") || ["America/Denver", "America/New_York", "America/Los_Angeles"];
-  const zones = [...new Set(["UTC", ...available, ...(value && value !== "inherit" ? [value] : [])])];
-  return <select id={id} aria-label={label} className={`${input} w-full sm:w-64`} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}>
-    {inherit && <option value="inherit">Use Last.fm timezone</option>}
-    <option value="">Unknown</option>
-    {zones.map(zone => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
-  </select>;
-}

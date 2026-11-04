@@ -1,6 +1,6 @@
 # Koito fork: development phases
 
-Updated November 3, 2026.
+Updated November 4, 2026.
 
 This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
@@ -387,7 +387,7 @@ options, and the default treatment of uncertain shared listening.
 original spelling, identifiers, or album association.
 
 **Status: in progress.** Track histories across albums are implemented and verified.
-The atomic evaluator, Naming, attribution, Count, Time, Play matching, and imported fields are implemented.
+The shared evaluator and builder now cover Matching, Naming, attribution, Count, Time, and imported fields.
 Remaining filter migrations, metadata cleanup, genres, and optional tags remain in this phase.
 Implementation and acceptance evidence: [Phase 4](phase-4.md).
 

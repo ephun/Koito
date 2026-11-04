@@ -10,26 +10,28 @@ import (
 	"unicode"
 
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 )
 
 type matchingRecord struct {
-	TimeIssues []FilterIssue `json:"-"`
-	timeOffset *time.Duration
-	ID         int64        `json:"id"`
-	SourceID   int64        `json:"source_id"`
-	Service    string       `json:"service"`
-	FileHash   string       `json:"file_hash"`
-	Ordinal    int          `json:"ordinal"`
-	Parser     string       `json:"parser"`
-	Payload    string       `json:"payload,omitempty"`
-	UserID     int32        `json:"-"`
-	Values     recordValues `json:"values"`
-	Start      time.Time    `json:"time"`
-	Basis      string       `json:"time_basis"`
-	Device     string       `json:"device,omitempty"`
-	LibraryID  string       `json:"library_id,omitempty"`
-	TrackID    string       `json:"track_id,omitempty"`
-	RawFields  filters.Env  `json:"-"`
+	MusicIssues []FilterIssue `json:"-"`
+	TimeIssues  []FilterIssue `json:"-"`
+	timeOffset  *time.Duration
+	ID          int64        `json:"id"`
+	SourceID    int64        `json:"source_id"`
+	Service     string       `json:"service"`
+	FileHash    string       `json:"file_hash"`
+	Ordinal     int          `json:"ordinal"`
+	Parser      string       `json:"parser"`
+	Payload     string       `json:"payload,omitempty"`
+	UserID      int32        `json:"-"`
+	Values      recordValues `json:"values"`
+	Start       time.Time    `json:"time"`
+	Basis       string       `json:"time_basis"`
+	Device      string       `json:"device,omitempty"`
+	LibraryID   string       `json:"library_id,omitempty"`
+	TrackID     string       `json:"track_id,omitempty"`
+	RawFields   filters.Env  `json:"-"`
 }
 
 type MatchDecision struct {
@@ -81,6 +83,10 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err := preparePlayPrograms(config); err != nil {
 		return nil, err
 	}
+	musicPrograms, err := compileMusicPrograms(config)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err
@@ -102,6 +108,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 			return nil, fmt.Errorf("Read source fields for record %d: %w", r.ID, err)
 		}
 		interpretMatchingRecord(&r, config)
+		if err = applyMusicPrograms(ctx, &r, musicPrograms); err != nil {
+			return nil, err
+		}
 		if countPrograms && r.Service == "itunes" {
 			if err = retainCountRaw(&r); err != nil {
 				return nil, err
@@ -207,6 +216,10 @@ func musicCompatible(a, b recordValues, rule Rule) bool {
 	if (a.URI != "" && b.URI != "") || (a.RecordingID != "" && b.RecordingID != "") {
 		return true
 	}
+	if a.Music != nil || b.Music != nil {
+		left, right := comparisonMusic(a, rule), comparisonMusic(b, rule)
+		return left.Artist == right.Artist && left.Title == right.Title && (left.Album == right.Album || left.Album == "" && left.MissingAlbum || right.Album == "" && right.MissingAlbum)
+	}
 	equal := func(a, b string) bool {
 		if rule.Enabled && !rule.Settings.CaseSensitive {
 			return strings.EqualFold(a, b)
@@ -220,6 +233,19 @@ func musicCompatible(a, b recordValues, rule Rule) bool {
 		return true
 	}
 	return rule.Enabled && rule.Settings.MatchMissingAlbum && (a.Album == "" || b.Album == "")
+}
+
+func comparisonMusic(v recordValues, rule Rule) music.MatchIdentity {
+	if v.Music != nil {
+		return *v.Music
+	}
+	identity := music.MatchIdentity{Artist: v.Artist, Album: v.Album, Title: v.Title, MissingAlbum: rule.Program == nil && rule.Enabled && rule.Settings.MatchMissingAlbum}
+	if rule.Program == nil && rule.Enabled && !rule.Settings.CaseSensitive {
+		identity.Artist = foldedName(identity.Artist)
+		identity.Album = foldedName(identity.Album)
+		identity.Title = foldedName(identity.Title)
+	}
+	return identity
 }
 
 func timeCompatible(a, b matchingRecord, tolerance time.Duration) bool {
@@ -376,12 +402,8 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 			if r.Values.Reason != "counted" {
 				continue
 			}
-			name := []string{r.Values.Artist, r.Values.Title}
-			if musicRule.Enabled && !musicRule.Settings.CaseSensitive {
-				for j := range name {
-					name[j] = foldedName(name[j])
-				}
-			}
+			identity := comparisonMusic(r.Values, musicRule)
+			name := []string{identity.Artist, identity.Title}
 			raw, _ := json.Marshal(name)
 			keys := []string{"name:" + string(raw)}
 			if r.Values.URI != "" {

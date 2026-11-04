@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/gabehf/koito/internal/music"
@@ -55,6 +56,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		return result, err
 	}
 	for _, query := range []string{
+		`DELETE FROM track_history_overrides`,
 		`DELETE FROM source_aggregate_records`,
 		`DELETE FROM source_aggregates`,
 		`DELETE FROM source_play_records`,
@@ -96,6 +98,52 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		byID[r.ID] = r
 	}
 	tracks := map[string]int64{}
+	historyAssignments := map[int64]string{}
+	// Reserve unchanged appearances before source-scoped comparison variants.
+	// Disabling an alias can then reuse the original appearance identifiers.
+	warm := []*matchingRecord{}
+	for _, play := range plan.Plays {
+		if r := byID[play.Representative]; r.Values.Music != nil {
+			warm = append(warm, r)
+		}
+	}
+	for _, aggregate := range plan.Aggregates {
+		if aggregate.Attributed > 0 {
+			if r := byID[aggregate.Representative]; r.Values.Music != nil {
+				warm = append(warm, r)
+			}
+		}
+	}
+	unchanged := func(r *matchingRecord) bool {
+		return r.Values.Music.Artist == r.Values.Artist && r.Values.Music.Title == r.Values.Title
+	}
+	sort.SliceStable(warm, func(i, j int) bool {
+		if unchanged(warm[i]) != unchanged(warm[j]) {
+			return unchanged(warm[i])
+		}
+		return warm[i].ID < warm[j].ID
+	})
+	for _, r := range warm {
+		v, err := applyNaming(ctx, naming, *r, spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID})
+		if err != nil {
+			return result, err
+		}
+		comparisonKey := historyComparisonKey(*r)
+		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID, comparisonKey})
+		key := string(raw)
+		if _, exists := tracks[key]; exists {
+			continue
+		}
+		base, err := projectTrack(ctx, tx, v)
+		if err != nil {
+			return result, err
+		}
+		appearance, err := historyVariant(ctx, tx, base, comparisonKey, historyAssignments)
+		if err != nil {
+			return result, err
+		}
+		tracks[key] = appearance
+	}
 	for key, attribution := range plan.Attributions {
 		raw, err := json.Marshal(attribution)
 		if err != nil {
@@ -119,12 +167,17 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		if err != nil {
 			return result, err
 		}
-		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID})
+		comparisonKey := historyComparisonKey(*r)
+		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID, comparisonKey})
 		cacheKey := string(raw)
 		track, ok := tracks[cacheKey]
 		var err error
 		if !ok {
 			track, err = projectTrack(ctx, tx, v)
+			if err != nil {
+				return result, err
+			}
+			track, err = historyVariant(ctx, tx, track, comparisonKey, historyAssignments)
 			if err != nil {
 				return result, err
 			}
@@ -175,6 +228,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 				return result, err
 			}
 			id, err := projectTrack(ctx, tx, v)
+			if err != nil {
+				return result, err
+			}
+			id, err = historyVariant(ctx, tx, id, historyComparisonKey(*r), historyAssignments)
 			if err != nil {
 				return result, err
 			}
@@ -231,7 +288,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		return result, err
 	}
 	musicRule, _ := config.matchingRules()
-	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive); err != nil {
+	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
 		return result, err
 	}
 	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {

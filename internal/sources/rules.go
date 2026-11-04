@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 )
 
 type RuleScope struct {
@@ -129,9 +130,11 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
 	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema(), "inference:time": timeSchema()}}
 	state.Blocks.Schemas["matching:play"] = playSchema()
+	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
 	state.Blocks.Templates["matching:play"] = []ProgramTemplate{{"overlap", "Overlapping timestamp ranges", defaultPlayProgram(0)}, {"tolerance", "Timestamp ranges within 30 seconds", defaultPlayProgram(30)}}
+	state.Blocks.Templates["matching:music"] = []ProgramTemplate{{"exact", "Exact comparison names", defaultMusicProgram(true, true)}, {"case", "Case-insensitive comparison names", defaultMusicProgram(false, true)}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
@@ -139,6 +142,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	}
 	migrated := migrateTimePrograms(migrateCountPrograms(migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config)))))
 	migrated = migratePlayPrograms(migrated)
+	migrated = migrateMusicPrograms(migrated)
 	state.Blocks.Legacy = map[string]Rule{}
 	for i, rule := range migrated.Rules {
 		if i >= len(state.Current.Config.Rules) {
@@ -339,8 +343,8 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 }
 
 func validateRules(config RuleConfig) error {
-	if len(config.Rules) < 2 || len(config.Rules) > 64 {
-		return errors.New("Expected 2–64 rules.")
+	if len(config.Rules) > 64 {
+		return errors.New("At most 64 filters can be saved.")
 	}
 	ids := map[string]bool{}
 	music, plays := 0, 0
@@ -357,7 +361,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && rule.Subtype == "play") {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -410,6 +414,15 @@ func validateRules(config RuleConfig) error {
 			}
 		case rule.Type == "matching" && rule.Subtype == "music":
 			music++
+			if rule.Program != nil {
+				if rule.Scope != (RuleScope{}) {
+					return errors.New("Move Music matching conditions into IF blocks.")
+				}
+				if _, err := filters.CompileProgram(*rule.Program, musicSchema()); err != nil {
+					return err
+				}
+				continue
+			}
 			if rule.Scope != (RuleScope{}) {
 				return errors.New("Music matching currently applies to all imports.")
 			}
@@ -530,8 +543,16 @@ func validateRules(config RuleConfig) error {
 			return errors.New("Unsupported rule type.")
 		}
 	}
-	if music != 1 {
-		return errors.New("Exactly one Music matching filter is required until its migration is complete.")
+	if music > 1 {
+		legacy := 0
+		for _, rule := range config.Rules {
+			if rule.Type == "matching" && rule.Subtype == "music" && rule.Program == nil {
+				legacy++
+			}
+		}
+		if legacy > 0 {
+			return errors.New("Convert legacy Music matching settings before adding more filters.")
+		}
 	}
 	return nil
 }
