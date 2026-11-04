@@ -25,6 +25,14 @@ func FiltersHandler(store *sources.Store) http.HandlerFunc {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters":
 			value, err = store.Filters(r.Context())
+		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/fields":
+			id, e := strconv.ParseInt(r.URL.Query().Get("source"), 10, 64)
+			if e != nil || id <= 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Choose a source."})
+				return
+			}
+			value, err = store.SourceFields(r.Context(), id)
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/plays":
 			after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 			afterKey := ""

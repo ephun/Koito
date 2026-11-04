@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -26,6 +27,7 @@ type Operator struct {
 }
 
 var Operators = []Operator{
+	{"get", "GET", 2, 2}, {"keys", "KEYS", 1, 1},
 	{"and", "AND", 2, 64}, {"or", "OR", 2, 64}, {"not", "NOT", 1, 1}, {"nor", "NOR", 2, 64}, {"nand", "NAND", 2, 64}, {"xor", "XOR", 2, 2}, {"xnor", "XNOR", 2, 2},
 	{"eq", "=", 2, 2}, {"ne", "!=", 2, 2}, {"lt", "<", 2, 2}, {"le", "<=", 2, 2}, {"gt", ">", 2, 2}, {"ge", ">=", 2, 2},
 	{"missing", "IS MISSING", 1, 1}, {"present", "IS PRESENT", 1, 1}, {"null", "IS NULL", 1, 1}, {"empty", "IS EMPTY", 1, 1},
@@ -38,9 +40,10 @@ var Operators = []Operator{
 }
 
 type Schema struct {
-	Choices map[string][]Choice `json:"choices,omitempty"`
-	Fields  map[string]Type     `json:"fields"`
-	Targets map[string]Type     `json:"targets"`
+	RawFields bool                `json:"raw_fields,omitempty"`
+	Choices   map[string][]Choice `json:"choices,omitempty"`
+	Fields    map[string]Type     `json:"fields"`
+	Targets   map[string]Type     `json:"targets"`
 }
 
 type Choice struct {
@@ -72,6 +75,9 @@ func compile(e Expr, s Schema, depth int, n *int) (*Expression, error) {
 		kind, ok := s.Fields[e.Field]
 		if !ok {
 			kind, ok = s.Targets[e.Field]
+		}
+		if !ok && s.RawFields && ValidRawField(e.Field) {
+			kind, ok = Any, true
 		}
 		if !ok {
 			return nil, fmt.Errorf("Unknown field %q.", e.Field)
@@ -149,6 +155,13 @@ func (x *Expression) resultType() (Type, error) {
 		return nil
 	}
 	switch x.op {
+	case "get":
+		if x.args[0].kind != Any && x.args[0].kind != Object && x.args[0].kind != List {
+			return "", fmt.Errorf("GET requires an object or list.")
+		}
+		return Any, nil
+	case "keys":
+		return List, accept(Object)
 	case "and", "or", "not", "nor", "nand", "xor", "xnor":
 		return Boolean, accept(Boolean)
 	case "eq", "ne", "lt", "le", "gt", "ge":
@@ -269,6 +282,42 @@ func (x *Expression) Eval(ctx context.Context, env Env) Value {
 		}
 	}
 	switch x.op {
+	case "get":
+		if v[0].Type == Object {
+			key, ok := v[1].Text()
+			if !ok {
+				return Unknown("Object keys require text.")
+			}
+			if value, ok := v[0].data.(map[string]Value)[key]; ok {
+				return value
+			}
+			return Absent(key)
+		}
+		if list, ok := v[0].Items(); ok {
+			index, valid := v[1].Int64()
+			if !valid {
+				return Unknown("List indexes require whole numbers.")
+			}
+			if index < 0 || index >= int64(len(list)) {
+				return Absent("list index")
+			}
+			return list[index]
+		}
+		return Unknown("GET requires an object or list.")
+	case "keys":
+		if v[0].Type != Object {
+			return Unknown("KEYS requires an object.")
+		}
+		keys := []string{}
+		for key := range v[0].data.(map[string]Value) {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		out := []Value{}
+		for _, key := range keys {
+			out = append(out, String(key))
+		}
+		return Values(out...)
 	case "eq", "ne", "lt", "le", "gt", "ge":
 		return compare(x.op, v[0], v[1])
 	case "in":
@@ -428,6 +477,28 @@ func compare(op string, a, b Value) Value {
 		} else {
 			for i := range left {
 				r := compare("eq", left[i], right[i])
+				equal, known := r.Bool()
+				if !known {
+					return r
+				}
+				if !equal {
+					order = 1
+					break
+				}
+			}
+		}
+	case Object:
+		left, right := a.data.(map[string]Value), b.data.(map[string]Value)
+		if len(left) != len(right) {
+			order = 1
+		} else {
+			for key, value := range left {
+				other, exists := right[key]
+				if !exists {
+					order = 1
+					break
+				}
+				r := compare("eq", value, other)
 				equal, known := r.Bool()
 				if !known {
 					return r

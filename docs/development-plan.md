@@ -186,7 +186,7 @@ must remain attached to stable records or music identities across rebuilds.
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
 | 2 | Last.fm imports and the first matching rules in Filters | Complete |
 | 3 | iTunes counts, inference, and shared-history attribution | Complete |
-| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories implemented |
+| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories, Naming, Direct attribution, imported fields implemented |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
 | 7 | Concert and gameplay data | After 3-4; uses 6 where relevant |
@@ -749,13 +749,12 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Phase 3 is implemented and verified. See [the Phase 3 notes](phase-3.md) for
-behavior, decisions, source acceptance, and the requirement audit.
+Phase 4 is in progress. See [the Phase 4 notes](phase-4.md) for completed
+milestones, actual-import checks, and remaining requirements.
 
-Begin Phase 4 with recording and release distinctions in the existing schema.
-Audit manual edits, aliases, deletion, automatic matching, and live submissions.
-Replace routine catalog corrections with reversible Music matching, Naming,
-and Grouping rules from the established taxonomy.
+Continue migrating existing filter controls to the shared conditional editor.
+Complete reversible music aliases, edition grouping, genres, contextual corrections,
+and optional metadata tags. Audit the remaining destructive catalog endpoints.
 
 Field-specific source preference also needs concrete examples before controls
 return to Filters. Keep original music identities and source album associations

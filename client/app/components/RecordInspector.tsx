@@ -20,7 +20,7 @@ type Contribution = {
   overlap: number; last_played: number; estimated: number; undated: number;
   attribution: Attribution; reason: string; from: string; until: string; records: number[];
 };
-type Inspection = { record: SourceRecord; contributors: SourceRecord[]; candidates: SourceRecord[]; attribution?: Attribution; contributions: Contribution[] };
+type Inspection = { record: SourceRecord; contributors: SourceRecord[]; candidates: SourceRecord[]; attribution?: Attribution; contributions: Contribution[]; filter_issues?: { filter_id: string; name: string; path: string; reason: string }[] };
 const button = "rounded border border-(--color-bg-tertiary) px-3 py-2 hover:bg-(--color-bg-tertiary) disabled:opacity-50";
 
 export default function RecordInspector({ id, onClose, onSaved }: { id: number; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -63,6 +63,10 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
     {error && <p role="alert" className="text-(--color-error)">{error}</p>}
     {!inspection && !error && <p role="status">Loading records...</p>}
     {inspection && <>
+      {!!inspection.filter_issues?.length && <details className="rounded border border-(--color-bg-tertiary) p-3">
+        <summary className="cursor-pointer text-sm">Unresolved filters<FieldHelp label="Unresolved filters">Check enabled filters using this record's fields.</FieldHelp></summary>
+        <ul className="mt-2 space-y-2 text-sm">{inspection.filter_issues.map((issue, index) => <li key={`${issue.filter_id}:${index}`} className="break-words"><a className="underline" href="/filters">{issue.name || "Filter"}</a>: {issue.reason}</li>)}</ul>
+      </details>}
       {inspection.attribution && <p className="text-sm">Listener: {listenerName(inspection.attribution)}{inspection.attribution.basis === "heuristic" && " (Heuristic)"}</p>}
       {!!inspection.contributions?.length && <div className="space-y-3">{inspection.contributions.map(contribution => <div key={contribution.key} className="space-y-3 rounded border border-(--color-bg-tertiary) p-3">
         <h3 className="font-medium">Count</h3>

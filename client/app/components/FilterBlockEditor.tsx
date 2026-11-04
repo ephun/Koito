@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
+import FieldHelp from "./FieldHelp";
 import { filterButton as button, filterInput as input } from "./FilterControls";
-import type { BlockOperator, BlockSchema, Expression, FilterProgram, FilterStatement } from "~/utils/filterRules";
+import { sourceName, type BlockOperator, type BlockSchema, type Expression, type FilterProgram, type FilterStatement, type FilterSource, type SourceField } from "~/utils/filterRules";
 
 const value = (v: unknown = ""): Expression => ({ op: "literal", value: v });
 const number = (): Expression => ({ op: "number", args: [value("0")] });
@@ -27,10 +29,59 @@ export function statementSummary(step: FilterStatement): string {
   return step.if ? `IF ${expressionSummary(step.if)}` : `SET ${label(step.set || "")} TO ${expressionSummary(step.value)}`;
 }
 
-export default function FilterBlockEditor({ program, schema, operators, disabled, onChange }: {
-  program: FilterProgram; schema: BlockSchema; operators: BlockOperator[]; disabled: boolean; onChange: (program: FilterProgram) => void;
+export default function FilterBlockEditor({ program, schema, operators, disabled, sources = [], onChange }: {
+  program: FilterProgram; schema: BlockSchema; operators: BlockOperator[]; disabled: boolean; sources?: FilterSource[]; onChange: (program: FilterProgram) => void;
 }) {
-  return <Statements steps={program.steps} schema={schema} operators={operators} disabled={disabled} onChange={steps => onChange({ steps })} />;
+  const [source, setSource] = useState("");
+  const [fields, setFields] = useState<SourceField[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!source) return;
+    const controller = new AbortController();
+    setLoading(true); setError("");
+    async function load() {
+      try {
+        const response = await fetch(`/apis/web/v1/filters/fields?source=${encodeURIComponent(source)}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load source fields.");
+        setFields(existing => [...existing, ...data]);
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Could not load source fields.");
+      } finally { if (!controller.signal.aborted) setLoading(false); }
+    }
+    load();
+    return () => controller.abort();
+  }, [source]);
+  const editingSchema = useMemo(() => {
+    const next = { ...schema, fields: { ...schema.fields }, labels: { ...schema.labels } };
+    for (const field of fields) {
+      next.fields[field.path] = "any";
+      next.labels[field.path] = field.label;
+    }
+    // Keep saved references selectable before their source catalog is loaded.
+    function visit(value: unknown) {
+      if (!value || typeof value !== "object") return;
+      const item = value as Record<string, unknown>;
+      if (item.op === "field" && typeof item.field === "string" && /^(raw:|column:)/.test(item.field)) next.fields[item.field] = "any";
+      for (const child of Object.values(item)) visit(child);
+    }
+    visit(program);
+    return next;
+  }, [schema, fields, program]);
+  return <div className="min-w-0 space-y-3">
+    {schema.raw_fields && sources.length > 0 && <details>
+      <summary className="cursor-pointer text-sm">Source fields</summary>
+      <label className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-sm">Source<FieldHelp label="Source fields">Choose a source to add its imported metadata to the field menu.</FieldHelp>
+        <select aria-label="Source fields" className={`${input} max-w-full`} value={source} disabled={disabled || loading} onChange={event => setSource(event.target.value)}>
+          <option value="">Choose source</option>{sources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service)}</option>)}
+        </select>
+      </label>
+      {loading && <p role="status" className="mt-2 text-sm">Loading fields...</p>}
+      {error && <p role="alert" className="mt-2 text-sm">{error}</p>}
+    </details>}
+    <Statements steps={program.steps} schema={editingSchema} operators={operators} disabled={disabled} onChange={steps => onChange({ steps })} />
+  </div>;
 }
 
 type Common = { schema: BlockSchema; operators: BlockOperator[]; disabled: boolean };
@@ -52,7 +103,7 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
         {operators.map(op => <option key={op.id} value={op.id}>{op.label}</option>)}
       </select>
       {expression.op === "field" && <select aria-label="Field" className={`${input} flex-1 text-sm`} disabled={disabled} value={expression.field} onChange={event => onChange(reference(event.target.value))}>
-        {Object.keys({ ...schema.fields, ...schema.targets }).map(field => <option key={field} value={field}>{label(field)}</option>)}
+        {Object.keys({ ...schema.fields, ...schema.targets }).map(field => <option key={field} value={field}>{schema.labels?.[field] || label(field)}</option>)}
       </select>}
       {expression.op === "literal" && choices?.length ? <select aria-label="Value" className={`${input} min-w-0 flex-1 text-sm`} disabled={disabled} value={String(expression.value ?? "")} onChange={event => onChange(value(event.target.value))}>
         {!choices.some(choice => choice.value === expression.value) && <option value={String(expression.value ?? "")}>{expression.value ? String(expression.value) : "Choose value"}</option>}

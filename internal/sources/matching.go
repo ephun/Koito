@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/gabehf/koito/internal/filters"
 )
 
 type matchingRecord struct {
@@ -25,6 +27,7 @@ type matchingRecord struct {
 	Device    string       `json:"device,omitempty"`
 	LibraryID string       `json:"library_id,omitempty"`
 	TrackID   string       `json:"track_id,omitempty"`
+	RawFields filters.Env  `json:"-"`
 }
 
 type MatchDecision struct {
@@ -57,7 +60,7 @@ type matchPlan struct {
 	Attributions map[string]Attribution
 }
 
-func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig) ([]matchingRecord, error) {
+func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig, extra ...RuleConfig) ([]matchingRecord, error) {
 	if err := prepareDirectPrograms(config); err != nil {
 		return nil, err
 	}
@@ -66,6 +69,11 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		return nil, err
 	}
 	defer rows.Close()
+	fieldConfig := RuleConfig{Rules: append([]Rule(nil), config.Rules...)}
+	for _, additional := range extra {
+		fieldConfig.Rules = append(fieldConfig.Rules, additional.Rules...)
+	}
+	rawFields := requestedRawFields(fieldConfig)
 	out := []matchingRecord{}
 	for rows.Next() {
 		var r matchingRecord
@@ -73,6 +81,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 			return nil, err
 		}
 		interpretMatchingRecord(&r, config)
+		if err = retainRawFields(&r, rawFields); err != nil {
+			return nil, fmt.Errorf("Read source fields for record %d: %w", r.ID, err)
+		}
 		// Matching needs interpreted values; inspection reads the original payload
 		// separately. Avoid retaining a second full copy of large history exports.
 		r.Payload = ""

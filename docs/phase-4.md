@@ -184,3 +184,36 @@ Disabling it restored 168,424 plays. All 191,473 records remained stored.
 The editor passed 390-pixel and 320-pixel checks without browser errors.
 
 Matching, inference, heuristic attribution, aggregate attribution, grouping, genres, and metadata controls remain in Phase 4.
+
+## Imported fields in filter programs
+
+Naming and Direct attribution programs can read arbitrary preserved source fields.
+The editor's Source fields menu discovers fields from every record in a selected import source.
+Loading fields expands the menu. Source conditions remain explicit IF expressions.
+
+Discovery found 106 iTunes fields, including Genre, and 24 distinct Spotify fields in the actual imports.
+Some Spotify fields have multiple observed types, yielding 31 field/type entries.
+The imported Last.fm records retain their column and value lists.
+Named CSV columns also receive readable field entries.
+Object keys use JSON Pointer escaping internally. GET and KEYS handle nested objects and lists.
+Array indexes remain accessible through GET without adding every array member to the menu.
+
+Values preserve missing fields, nulls, empty strings, zero, false, and exact large numbers separately.
+Rebuilding retains only the raw fields referenced by enabled programs.
+Naming examples load fields needed by both the current and proposed configurations.
+The source field catalog is a derived cache. New records invalidate its cached discovery.
+Original files and record payloads stay authoritative.
+
+Record inspection includes collapsed explanations for unresolved program conditions and values.
+These checks evaluate enabled programs against the inspected record's own fields.
+They are diagnostics rather than a claim that the record represents a published play.
+
+Tests cover pointer escaping, CSV columns, nested objects and lists, exact numbers,
+cache refresh, missing-field explanations, reversible naming and attribution, and unchanged original payloads.
+The full Go suite, frontend type checking, and production build pass.
+The source-field editor passed actual-import checks at desktop, 390 pixels, and 320 pixels.
+Actual-import acceptance saved a raw-field naming filter and displayed an unresolved iTunes-field condition on a Spotify record.
+Disabling the test filters restored 168,424 plays. All 191,473 source records retained identical fingerprints.
+The main configuration remains unchanged.
+
+Genre assignment, genre charts, and optional metadata on listen rows still need implementation.

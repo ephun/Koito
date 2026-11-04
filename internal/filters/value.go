@@ -24,6 +24,7 @@ const (
 	Date       Type = "date"
 	Duration   Type = "duration"
 	List       Type = "list"
+	Object     Type = "object"
 )
 
 // Value keeps absence, null, false, empty text, and zero distinct. Numbers use
@@ -133,6 +134,16 @@ func From(v any) (Value, error) {
 			items[i] = converted
 		}
 		return Values(items...), nil
+	case map[string]any:
+		fields := map[string]Value{}
+		for key, item := range x {
+			converted, err := From(item)
+			if err != nil {
+				return Value{}, err
+			}
+			fields[key] = converted
+		}
+		return Value{Type: Object, data: fields}, nil
 	default:
 		return Value{}, fmt.Errorf("Unsupported value type %T.", v)
 	}

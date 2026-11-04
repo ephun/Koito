@@ -146,7 +146,7 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 	if err != nil {
 		return preview, matchPlan{}, config, added, err
 	}
-	records, err := loadMatchingRecords(ctx, tx, config)
+	records, err := loadMatchingRecords(ctx, tx, config, current.Config)
 	if err != nil {
 		return preview, matchPlan{}, config, added, err
 	}

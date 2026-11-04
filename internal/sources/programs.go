@@ -17,6 +17,7 @@ type ProgramSchema struct {
 
 func namingSchema() filters.Schema {
 	return filters.Schema{
+		RawFields: true,
 		Fields: map[string]filters.Type{
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
@@ -119,6 +120,9 @@ func recordEnvironment(r matchingRecord) filters.Env {
 		"original.artist": filters.String(r.Values.Artist), "original.album": filters.String(r.Values.Album), "original.title": filters.String(r.Values.Title),
 		"source.service": filters.String(r.Service), "source.id": filters.Integer(r.SourceID), "file.hash": filters.String(r.FileHash), "record.id": filters.Integer(r.ID),
 		"display.artist": filters.String(r.Values.Artist), "display.album": filters.String(r.Values.Album), "display.title": filters.String(r.Values.Title),
+	}
+	for key, value := range r.RawFields {
+		env[key] = value
 	}
 	if !r.Start.IsZero() {
 		env["record.time"] = filters.Timestamp(r.Start)

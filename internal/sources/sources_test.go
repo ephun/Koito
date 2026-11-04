@@ -398,7 +398,7 @@ func TestMigrationRollbackDoesNotCollapsePlays(t *testing.T) {
 	if _, err := s.Rebuild(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	err := goose.Down(s.DB, ".")
+	err := goose.DownTo(s.DB, ".", 7)
 	if err == nil || !strings.Contains(err.Error(), "Restore a pre-migration backup") {
 		t.Fatal("unsafe rollback was not rejected", err)
 	}

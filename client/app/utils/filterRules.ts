@@ -46,7 +46,8 @@ export type Expression = { op: string; field?: string; value?: unknown; args?: E
 export type FilterStatement = { if?: Expression; then?: FilterStatement[]; else_if?: { if: Expression; then: FilterStatement[] }[]; else?: FilterStatement[]; set?: string; value?: Expression };
 export type FilterProgram = { steps: FilterStatement[] };
 export type BlockOperator = { id: string; label: string; min_args: number; max_args: number };
-export type BlockSchema = { fields: Record<string, string>; targets: Record<string, string>; choices?: Record<string, { label: string; value: string }[]> };
+export type SourceField = { path: string; type: string; label: string };
+export type BlockSchema = { raw_fields?: boolean; labels?: Record<string, string>; fields: Record<string, string>; targets: Record<string, string>; choices?: Record<string, { label: string; value: string }[]> };
 
 export function sourceName(service: string) {
   return ({ spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes" } as Record<string, string>)[service] || service;

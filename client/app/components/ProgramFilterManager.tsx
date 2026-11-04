@@ -49,7 +49,7 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
         <label className="block space-y-1 text-sm"><span>Name</span><input className={`${input} w-full`} value={current.name || ""} disabled={busy} maxLength={200} onChange={event => onChange({ ...current, name: event.target.value })} /></label>
         <details><summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Priority</summary><label className="mt-2 flex items-center gap-2 text-sm">Priority<FieldHelp label="Filter priority">Higher priority wins when filters assign conflicting values.</FieldHelp><input type="number" min={0} max={100000} className={`${input} w-28`} disabled={busy} value={current.priority || 0} onChange={event => onChange({ ...current, priority: Number(event.target.value) })} /></label></details>
         <fieldset disabled={busy} className={`min-w-0 space-y-3 ${current.enabled ? "" : "opacity-50"}`}>
-          <FilterBlockEditor program={current.program} schema={schema} operators={state.blocks.operators} disabled={busy} onChange={program => onChange({ ...current, program })} />
+          <FilterBlockEditor program={current.program} schema={schema} sources={state.sources} operators={state.blocks.operators} disabled={busy} onChange={program => onChange({ ...current, program })} />
         </fieldset>
         <div className="flex flex-wrap gap-4 text-sm">
           {type === "presentation" && <button type="button" className={button} disabled={busy || checking} onClick={check}>{checking ? "Checking..." : "Check changes"}</button>}

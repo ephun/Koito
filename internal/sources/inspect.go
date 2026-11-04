@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/gabehf/koito/internal/filters"
 )
 
 type InspectedRecord struct {
@@ -21,6 +23,62 @@ type RecordInspection struct {
 	Candidates    []InspectedRecord       `json:"candidates"`
 	Attribution   *Attribution            `json:"attribution,omitempty"`
 	Contributions []AggregateContribution `json:"contributions"`
+	FilterIssues  []FilterIssue           `json:"filter_issues"`
+}
+
+type FilterIssue struct {
+	FilterID string `json:"filter_id"`
+	Name     string `json:"name"`
+	filters.Issue
+}
+
+// Diagnostic checks evaluate enabled programs against this record. Naming
+// filters see earlier naming changes. Direct attribution reads original fields.
+func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig) ([]FilterIssue, error) {
+	issues := []FilterIssue{}
+	namingEnv := recordEnvironment(r)
+	from, until := recordInterval(r)
+	for _, rule := range config.Rules {
+		if !rule.Enabled || rule.Program == nil {
+			continue
+		}
+		var schema filters.Schema
+		var env filters.Env
+		switch {
+		case rule.Type == "presentation" && rule.Subtype == "naming":
+			if !scopeContains(rule.Scope, r, from, until) {
+				continue
+			}
+			schema, env = namingSchema(), namingEnv
+		case rule.Type == "attribution" && rule.Subtype == "direct":
+			schema, env = directSchema(), recordEnvironment(r)
+			if !from.IsZero() {
+				env["range.from"] = filters.Timestamp(from)
+			}
+			if !until.IsZero() {
+				env["range.until"] = filters.Timestamp(until)
+			}
+		default:
+			continue
+		}
+		compiled, err := filters.CompileProgram(*rule.Program, schema)
+		if err != nil {
+			return nil, err
+		}
+		result, err := compiled.Run(ctx, env)
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range result.Issues {
+			issues = append(issues, FilterIssue{rule.ID, rule.Name, issue})
+		}
+		if rule.Type == "presentation" && len(result.Issues) == 0 {
+			for key, value := range result.Values {
+				namingEnv[key] = value
+			}
+		}
+	}
+	return issues, nil
 }
 
 const inspectedColumns = `r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id,COALESCE(i.reason,'not projected'),COALESCE(i.play_key,'')`
@@ -32,6 +90,7 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 		return nil, err
 	}
 	defer rows.Close()
+	rawFields := requestedRawFields(config)
 	out := []InspectedRecord{}
 	for rows.Next() {
 		var r InspectedRecord
@@ -39,6 +98,9 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 			return nil, err
 		}
 		interpretMatchingRecord(&r.matchingRecord, config)
+		if err = retainRawFields(&r.matchingRecord, rawFields); err != nil {
+			return nil, err
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -63,6 +125,10 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 		return result, fmt.Errorf("Unknown record.")
 	}
 	result.Record = rows[0]
+	result.FilterIssues, err = inspectFilterIssues(ctx, result.Record.matchingRecord, version.Config)
+	if err != nil {
+		return result, err
+	}
 	result.Contributions = []AggregateContribution{}
 	if result.Record.PlayKey != "" {
 		var raw string
