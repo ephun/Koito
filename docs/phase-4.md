@@ -99,7 +99,7 @@ They are excluded from Git.
 
 ## Remaining Phase 4 work
 
-1. Implement typed, atomic values, comparisons, operators, branches, and actions.
+1. Extend the implemented atomic evaluator across the remaining filter types and source metadata fields.
 2. Migrate existing configurations while retaining their behavior and disabled settings.
 3. Replace the mixed filter controls with the consistent IF/THEN/ELSE builder and manager.
 4. Add reversible music aliases, source-specific naming, edition grouping, and bulk cleanup.
@@ -108,3 +108,27 @@ They are excluded from Git.
 7. Add optional source and metadata tags to listening rows.
 8. Integrate contextual corrections with native search and audit the remaining legacy editing operations.
 9. Verify every Phase 4 acceptance criterion against the completed implementation.
+
+## Atomic engine and first integration
+
+The typed engine now implements nested IF, THEN, ELSE IF, ELSE, and SET blocks.
+Logical operators include AND, OR, NOT, NOR, NAND, XOR, and XNOR.
+Comparisons, text transformations, regular expressions, exact arithmetic, dates, durations, lists, and list aggregates compose as expressions.
+Missing values, explicit null, empty text, false, zero, and unresolved calculations retain their distinctions.
+Unknown conditions leave the complete filter unapplied, including earlier actions within that filter.
+Dates preserve sub-millisecond precision. Numeric calculations preserve integers larger than JavaScript's exact integer range.
+
+Presentation, Naming filters can now store and execute these programs through the existing save endpoint.
+Each filter compiles once before publication. Its actions change derived names after play matching.
+Conditions can inspect normalized music fields, source identity, file identity, device, timestamp, and supplied track identifiers.
+Original source records and recording identifiers remain preserved.
+Disabling a naming filter restores its original names on rebuild.
+Invalid changes roll back the saved version and replacement view together.
+
+The filter manager still requires its block editor.
+Other filter types still use their previous configurations pending equivalent program migration.
+Raw source field discovery, affected naming examples, and visible unresolved explanations remain outstanding.
+The display and artwork changes discussed separately remain deferred at the user's request.
+
+Regression tests cover branching, all Boolean truth tables, incomplete data, atomic actions, exact numbers, timestamp precision, and invalid programs.
+Source integration tests cover applying naming programs, disabling them, repeat rebuilding, unchanged source payloads, and failed-save rollback.

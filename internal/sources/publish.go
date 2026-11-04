@@ -46,6 +46,14 @@ func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 // It never updates source records, legacy aliases or unrelated live listens.
 func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int64) (ProjectionResult, error) {
 	result := ProjectionResult{Policy: Policy, Records: len(plan.Records), Plays: len(plan.Plays)}
+	version, err := readRuleVersion(ctx, tx, versionID)
+	if err != nil {
+		return result, err
+	}
+	naming, err := compileNaming(version.Config)
+	if err != nil {
+		return result, err
+	}
 	for _, query := range []string{
 		`DELETE FROM source_aggregate_records`,
 		`DELETE FROM source_aggregates`,
@@ -107,6 +115,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	for _, play := range plan.Plays {
 		r := byID[play.Representative]
 		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+		v, err = applyNaming(ctx, naming, *r, v)
+		if err != nil {
+			return result, err
+		}
 		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID})
 		cacheKey := string(raw)
 		track, ok := tracks[cacheKey]
@@ -158,6 +170,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		var track any
 		if aggregate.Attributed > 0 {
 			v := spotifyItem{Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+			v, err = applyNaming(ctx, naming, *r, v)
+			if err != nil {
+				return result, err
+			}
 			id, err := projectTrack(ctx, tx, v)
 			if err != nil {
 				return result, err

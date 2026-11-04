@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/gabehf/koito/internal/filters"
 )
 
 type RuleScope struct {
@@ -38,12 +40,14 @@ type RuleSettings struct {
 	EstimateTimes     bool   `json:"estimate_times,omitempty"`
 }
 type Rule struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Subtype  string       `json:"subtype"`
-	Enabled  bool         `json:"enabled"`
-	Scope    RuleScope    `json:"scope"`
-	Settings RuleSettings `json:"settings"`
+	Name     string           `json:"name,omitempty"`
+	Program  *filters.Program `json:"program,omitempty"`
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Subtype  string           `json:"subtype"`
+	Enabled  bool             `json:"enabled"`
+	Scope    RuleScope        `json:"scope"`
+	Settings RuleSettings     `json:"settings"`
 }
 type RuleConfig struct {
 	Rules []Rule `json:"rules"`
@@ -62,6 +66,7 @@ type TimeFile struct {
 	Records  int    `json:"records"`
 }
 type FilterState struct {
+	Blocks    ProgramSchema   `json:"blocks"`
 	Current   RuleVersion     `json:"current"`
 	History   []RuleVersion   `json:"history"`
 	TimeFiles []TimeFile      `json:"time_files"`
@@ -115,6 +120,7 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema()}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
@@ -259,6 +265,9 @@ func validateRules(config RuleConfig) error {
 	music, plays := 0, 0
 	timeScopes := map[string]bool{}
 	for _, rule := range config.Rules {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming") {
+			return errors.New("This filter type does not support blocks yet.")
+		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
 			return errors.New("Rule IDs must be unique.")
 		}
@@ -300,6 +309,13 @@ func validateRules(config RuleConfig) error {
 			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
+		case rule.Type == "presentation" && rule.Subtype == "naming":
+			if rule.Program == nil {
+				return errors.New("Naming filters need IF and SET blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, namingSchema()); err != nil {
+				return fmt.Errorf("Filter %s: %w", rule.ID, err)
+			}
 		case rule.Type == "matching" && rule.Subtype == "music":
 			music++
 			if rule.Scope != (RuleScope{}) {
