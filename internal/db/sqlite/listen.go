@@ -11,6 +11,7 @@ import (
 	"github.com/gabehf/koito/internal/catalog"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/music"
 	"github.com/google/uuid"
 )
 
@@ -25,11 +26,22 @@ func (s *Sqlite) SaveListen(ctx context.Context, opts db.SaveListenOpts) error {
 	if opts.Client != "" {
 		client = opts.Client
 	}
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx,
 		`INSERT OR IGNORE INTO listens (track_id, listened_at, user_id, client) VALUES (?,?,?,?)`,
 		opts.TrackID, opts.Time.Unix(), opts.UserID, client,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if err = music.RefreshListenScope(ctx, tx, int64(opts.TrackID), opts.Time.Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Sqlite) DeleteListen(ctx context.Context, trackId int32, listenedAt time.Time) error {

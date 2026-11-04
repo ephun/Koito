@@ -4,28 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/gabehf/koito/internal/filters"
 )
 
 func ScopeSchema() filters.Schema {
 	return filters.Schema{
-		Fields: map[string]filters.Type{
+		Fields: map[string]filters.Type{"play.key": filters.Text, "play.time": filters.Date, "play.client": filters.Text, "play.record_ids": filters.List,
 			"catalog.track_ids": filters.List, "catalog.track_id": filters.Number, "catalog.appearance_id": filters.Number, "catalog.album_id": filters.Number, "catalog.artist_ids": filters.List,
 			"original.title": filters.Text, "original.album": filters.Text, "original.artist": filters.Text, "original.artists": filters.List,
 			"display.title": filters.Text, "display.album": filters.Text, "display.artist": filters.Text, "display.artists": filters.List,
 		},
 		Targets: map[string]filters.Type{"view.include": filters.Boolean},
-		Labels: map[string]string{
+		Labels: map[string]string{"play.key": "Play identifier", "play.time": "Play time", "play.client": "Playback client", "play.record_ids": "Contributing record identifiers",
 			"catalog.track_ids": "Track appearance identifiers", "catalog.track_id": "Track identifier", "catalog.appearance_id": "Album appearance identifier", "catalog.album_id": "Album identifier", "catalog.artist_ids": "Artist identifiers",
 			"original.title": "Original track title", "original.album": "Original album", "original.artist": "Original artist", "original.artists": "Original artist credits",
 			"display.title": "Displayed track title", "display.album": "Displayed album", "display.artist": "Displayed artist", "display.artists": "Displayed artist credits", "view.include": "Include in the view",
 		},
-		Help: map[string]string{"view.include": "Choose whether matching music contributes to listening history and totals.", "catalog.track_id": "Identifies the shared track history across album appearances."},
+		Help: map[string]string{"play.key": "Identifies one play, including an inferred play.", "play.record_ids": "Original records supporting this play.", "play.time": "The timestamp used for this displayed play.", "play.client": "The client stored with this play.", "view.include": "Choose whether matching music or plays contribute to history and totals.", "catalog.track_id": "Identifies the shared track history across album appearances."},
 	}
 }
 
-type ScopePrograms struct{ programs []identityProgram }
+type scopeProgram struct {
+	identityProgram
+	perPlay bool
+}
+type ScopePrograms struct{ programs []scopeProgram }
 
 func CompileScopePrograms(rules []IdentityFilter) (ScopePrograms, error) {
 	result := ScopePrograms{}
@@ -40,12 +45,18 @@ func CompileScopePrograms(rules []IdentityFilter) (ScopePrograms, error) {
 		if err != nil {
 			return result, err
 		}
-		result.programs = append(result.programs, identityProgram{rule, compiled})
+		result.programs = append(result.programs, scopeProgram{identityProgram{rule, compiled}, scopeReadsPlay(rule.Program.Steps)})
 	}
 	return result, nil
 }
 
 func (p ScopePrograms) Resolve(ctx context.Context, input filters.Env) (bool, []IdentityIssue, error) {
+	return p.resolve(ctx, input, false)
+}
+func (p ScopePrograms) ResolveCatalog(ctx context.Context, input filters.Env) (bool, []IdentityIssue, error) {
+	return p.resolve(ctx, input, true)
+}
+func (p ScopePrograms) resolve(ctx context.Context, input filters.Env, catalogOnly bool) (bool, []IdentityIssue, error) {
 	env := filters.Env{}
 	for key, value := range input {
 		env[key] = value
@@ -59,6 +70,9 @@ func (p ScopePrograms) Resolve(ctx context.Context, input filters.Env) (bool, []
 			return included, issues, err
 		}
 		for _, issue := range out.Issues {
+			if catalogOnly && strings.Contains(issue.Reason, "Missing field: play.") {
+				continue
+			}
 			issues = append(issues, IdentityIssue{program.rule.ID, program.rule.Name, issue})
 		}
 		if len(out.Issues) > 0 {
@@ -271,7 +285,7 @@ func RefreshScope(ctx context.Context, db Database, trackID int64, config ...str
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"track_scope", "track_scope_issues"} {
+	for _, table := range []string{"listen_scope", "track_scope", "track_scope_issues"} {
 		query := `DELETE FROM ` + table
 		args := []any{}
 		if trackID != 0 {
@@ -290,7 +304,7 @@ func RefreshScope(ctx context.Context, db Database, trackID int64, config ...str
 		return err
 	}
 	for _, item := range items {
-		included, issues, e := programs.Resolve(ctx, item.Env)
+		included, issues, e := programs.ResolveCatalog(ctx, item.Env)
 		if e != nil {
 			return e
 		}
@@ -309,5 +323,5 @@ func RefreshScope(ctx context.Context, db Database, trackID int64, config ...str
 			}
 		}
 	}
-	return nil
+	return refreshListenScopes(ctx, db, programs, items, trackID)
 }

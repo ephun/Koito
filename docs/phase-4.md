@@ -791,3 +791,45 @@ The main rebuild completed in 63.61 seconds with 191,473 records, 168,424 plays,
 All three original-file hashes and preservation fingerprints passed.
 The checked track retained its 521 plays across the same album appearances.
 New generic Scope filters start disabled. Contextual exclusion drafts require Save changes before taking effect.
+
+## Reversible play exclusion
+
+Scope now exposes play time, playback client, play identifier, and contributing record identifiers.
+The same ordered filters evaluate catalog music and individual listening rows.
+A later play inclusion can override a broader music exclusion.
+Catalogue branches in mixed programs still apply to undated counts when their conditions resolve.
+Unavailable play fields do not invent dates for undated contributions.
+
+Migration 22 stores derived per-listen decisions separately from physical listens.
+The displayed event view uses a play decision when assigned and otherwise uses its catalog decision.
+Native capture inserts and evaluates a new listen in one transaction.
+Source rebuilding evaluates the final contributor links after music and play matching.
+Unresolved play conditions appear with other track filter issues.
+Preview includes individual listening changes and affected undated contributions.
+
+Edit play inclusion replaces row deletion in the listening table.
+Its contextual Scope filter uses a contributing record for observed imports.
+Inferred plays use their play identifier, since one cumulative record can support several inferred plays.
+Native listens use their album appearance and timestamp.
+The control is available on small screens and has a 24 pixel target.
+The old listen deletion route, client helper, and optimistic deletion callbacks were retired.
+
+Regression tests cover native exclusion, later inclusion exceptions, new native listens, disabling,
+rebuilding, renamed repeat imports, and record-bound exclusions through matching and splitting.
+They verify retained physical listens and source records.
+Authenticated integration testing verifies rejected legacy listen deletion and unchanged stored listens.
+The full Go suite and frontend checks pass, followed by additional matching/splitting regression coverage.
+
+Actual-import browser acceptance used a real listening row on track 271.
+Track plays changed from 521 to 520 and total plays changed from 168,424 to 168,423.
+Preview, the contextual editor, and listening layouts at 390 and 320 pixels passed without page errors.
+Raw record, play, alias, and physical-listen fingerprints stayed unchanged.
+Restoring the original configuration restored the original counts and retained all checked fingerprints.
+
+Combined Matching/Scope previews, previews involving new catalog creation, mixed-action Grouping consistency,
+incoming native metadata corrections, catalog-read coverage, and the full Phase 4 completion audit remain open.
+
+Main activation passed after a backup and migration 22.
+The main rebuild completed in 63.422 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and preservation fingerprints passed.
+The checked track retained its original 521 plays and album associations.

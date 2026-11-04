@@ -120,7 +120,6 @@ func bindRoutes(
 			r.Patch("/album/{id}/image", handlers.ReplaceAlbumImageHandler(db))
 
 			r.Post("/listens", handlers.SubmitListenWithIDHandler(db))
-			r.Delete("/listens", handlers.DeleteListenHandler(db))
 
 			r.Get("/user/apikeys", handlers.GetApiKeysHandler(db))
 			r.Post("/user/apikeys", handlers.GenerateApiKeyHandler(db))

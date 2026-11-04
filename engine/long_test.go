@@ -587,65 +587,18 @@ func TestAuth(t *testing.T) {
 	require.Equal(t, 401, resp.StatusCode)
 }
 
-func TestDeleteListen(t *testing.T) {
-	login(t)
-	getApiKey(t, session)
-
+func TestRetiredListenDeletionPreservesStoredListens(t *testing.T) {
 	truncateTestData(t)
-
-	body := `{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": 1749475719,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"80b3cb83-b7a3-4f79-ad42-8325cefb3626"
-						],
-						"artist_names": [
-							"キタニタツヤ"
-						],
-						"duration_ms": 197270,
-						"recording_mbid": "4e909c21-e7a8-404d-b75a-0c8c2926efb0",
-						"release_group_mbid": "89069d92-e495-462c-b189-3431551868ed",
-						"release_mbid": "e16a49d6-77f3-4d73-b93c-cac855ce6ad5",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "キタニタツヤ",
-					"release_name": "Where Our Blue Is",
-					"track_name": "Where Our Blue Is"
-				}
-			}
-		]
-	}`
-
-	req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(body))
+	t.Run("Submit Listens", doSubmitListens)
+	before, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-	resp, err := http.DefaultClient.Do(req)
+	response, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
 	require.NoError(t, err)
-	respBytes, err := io.ReadAll(resp.Body)
+	response.Body.Close()
+	require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+	after, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// deletes are idempotent
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// listen is deleted
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	var track models.Track
-	err = json.NewDecoder(resp.Body).Decode(&track)
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, track.ListenCount)
+	require.Equal(t, before, after)
 }
 
 func TestArtistReplaceImage(t *testing.T) {

@@ -1,4 +1,5 @@
 // ListensTable.tsx
+import { EyeOff } from "lucide-react";
 import ArtistLinks from "./ArtistLinks";
 import Image from "./primitives/Image";
 import { type Listen, type NowPlaying } from "api/api";
@@ -13,7 +14,6 @@ interface ListensTableProps {
   showNP?: boolean;
   hideArtists?: boolean;
   showAlbums?: boolean;
-  onDelete: (listen: Listen) => void;
 }
 
 export default function ListensTable({
@@ -22,7 +22,6 @@ export default function ListensTable({
   showNP,
   hideArtists,
   showAlbums,
-  onDelete,
 }: ListensTableProps) {
   const { user } = useAppContext();
   const imgColSizeClasses = "py-3 min-w-8 sm:min-w-11";
@@ -107,18 +106,13 @@ export default function ListensTable({
               className={`text-end whitespace-nowrap ${timeColClasses}`}
               title={new Date(item.time).toString()}
             >
+              <span className="inline-flex items-center justify-end gap-2">
               {timeSince(new Date(item.time))}
+              {user?.role === "admin" && <Link aria-label="Edit play inclusion" title="Edit play inclusion" to={`/filters?listen_track=${item.track.id}&listen_time=${encodeURIComponent(item.time)}&listen_key=${encodeURIComponent(item.play_key || "")}${item.record_id && (!item.evidence || item.evidence === "observed") ? `&play_record=${item.record_id}` : ""}`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"><EyeOff size={14} /></Link>}
+              </span>
             </td>
             <td className="hidden sm:table">
               {user?.role === "admin" && !!item.record_id && <Link className="text-sm underline" to={`/imports?record=${item.record_id}`}>Records</Link>}
-              <button
-                onClick={() => onDelete(item)}
-                className="absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-(--color-fg-tertiary) hover:text-(--color-error)"
-                aria-label="Delete"
-                hidden={!user || !!item.play_key}
-              >
-                ×
-              </button>
             </td>
           </tr>
         ))}

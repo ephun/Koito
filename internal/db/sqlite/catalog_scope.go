@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Sqlite) trackScopeIssues(ctx context.Context, id int32) ([]models.FilterIssue, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT issues_json FROM track_scope_issues WHERE `+historyPredicate("track_id")+` ORDER BY track_id`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT issues_json FROM track_scope_issues WHERE `+historyPredicate("track_id")+` UNION ALL SELECT issues_json FROM listen_scope WHERE json_array_length(issues_json)>0 AND `+historyPredicate("track_id"), id, id)
 	if err != nil {
 		return nil, err
 	}

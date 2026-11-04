@@ -1,9 +1,8 @@
 import ChartLayout from "./ChartLayout";
 import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
-import { deleteListen, type Listen, type PaginatedResponse } from "api/api";
+import { type Listen, type PaginatedResponse } from "api/api";
 import { timeSince } from "~/utils/utils";
 import ArtistLinks from "~/components/ArtistLinks";
-import { useState } from "react";
 import { useAppContext } from "~/providers/AppProvider";
 import ListensTable from "~/components/ListensTable";
 
@@ -28,27 +27,6 @@ export default function Listens() {
     listens: PaginatedResponse<Listen>;
   }>();
 
-  const [items, setItems] = useState<Listen[] | null>(null);
-  const { user } = useAppContext();
-
-  const handleDelete = async (listen: Listen) => {
-    if (!initialData) return;
-    try {
-      const res = await deleteListen(listen);
-      if (res.ok || (res.status >= 200 && res.status < 300)) {
-        setItems((prev) =>
-          (prev ?? initialData.items).filter((i) => i.time !== listen.time),
-        );
-      } else {
-        console.error("Failed to delete listen:", res.status);
-      }
-    } catch (err) {
-      console.error("Error deleting listen:", err);
-    }
-  };
-
-  const listens = items ?? initialData.items;
-
   return (
     <ChartLayout
       title="Last Played"
@@ -69,7 +47,7 @@ export default function Listens() {
             </button>
           </div>
           <div>
-            <ListensTable listens={data.items} onDelete={handleDelete} />
+            <ListensTable listens={data.items} />
           </div>
           <div className="flex gap-15 mx-auto">
             <button className="default" onClick={onPrev} disabled={page === 0}>

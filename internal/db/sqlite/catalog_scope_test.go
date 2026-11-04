@@ -87,7 +87,7 @@ func TestScopeExclusionPreservesUndatedLibraryCounts(t *testing.T) {
 	state, err := store.Filters(ctx)
 	require.NoError(t, err)
 	var program filters.Program
-	require.NoError(t, json.Unmarshal([]byte(`{"steps":[{"if":{"op":"literal","value":true},"then":[{"set":"view.include","value":{"op":"literal","value":false}}]}]}`), &program))
+	require.NoError(t, json.Unmarshal([]byte(`{"steps":[{"if":{"op":"eq","args":[{"op":"field","field":"original.title"},{"op":"literal","value":"Counted"}]},"then":[{"set":"view.include","value":{"op":"literal","value":false}}],"else_if":[{"if":{"op":"eq","args":[{"op":"field","field":"play.client"},{"op":"literal","value":"test"}]},"then":[{"set":"view.include","value":{"op":"literal","value":true}}]}]}]}`), &program))
 	state.Current.Config.Rules = append(state.Current.Config.Rules,
 		sources.Rule{ID: "count", Type: "inference", Subtype: "count", Enabled: true, Scope: sources.RuleScope{Service: "itunes"}, Settings: sources.RuleSettings{CountMode: "maximum"}},
 		sources.Rule{ID: "self", Type: "attribution", Subtype: "direct", Enabled: true, Scope: sources.RuleScope{Service: "itunes"}, Settings: sources.RuleSettings{Listener: "self"}},

@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   apiFetch,
-  deleteListen,
   type Listen,
   type NowPlaying,
   type PaginatedResponse,
@@ -59,24 +57,6 @@ export default function LastPlays(props: Props) {
 
   const header = "Last played";
 
-  const [items, setItems] = useState<Listen[] | null>(null);
-
-  const handleDelete = async (listen: Listen) => {
-    if (!data) return;
-    try {
-      const res = await deleteListen(listen);
-      if (res.ok || (res.status >= 200 && res.status < 300)) {
-        setItems((prev) =>
-          (prev ?? data.items).filter((i) => i.time !== listen.time),
-        );
-      } else {
-        console.error("Failed to delete listen:", res.status);
-      }
-    } catch (err) {
-      console.error("Error deleting listen:", err);
-    }
-  };
-
   const showNP = (): boolean => {
     if (!props.showNowPlaying || !npData?.currently_playing) return false;
 
@@ -109,7 +89,7 @@ export default function LastPlays(props: Props) {
     );
   }
 
-  const listens = items ?? data.items;
+  const listens = data.items;
 
   return (
     <div className={`text-[13px] sm:text-[15px] ${sizeClasses}`}>
@@ -124,7 +104,6 @@ export default function LastPlays(props: Props) {
           showNP={showNP()}
           hideArtists={props.hideArtists}
           showAlbums={props.showAlbums}
-          onDelete={handleDelete}
         />
       )}
       {props.showSeeMore && data.has_next_page && (

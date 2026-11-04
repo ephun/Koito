@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/gabehf/koito/internal/filters"
 	"github.com/gabehf/koito/internal/music"
@@ -82,12 +83,93 @@ func previewScope(ctx context.Context, tx *sql.Tx, before, after RuleConfig) ([]
 	if err != nil {
 		return nil, err
 	}
-	for i, item := range oldItems {
-		a, _, e := old.Resolve(ctx, item.Env)
+	if old.UsesPlays() || next.UsesPlays() {
+		oldEnvs := map[int64]music.ScopeItem{}
+		nextEnvs := map[int64]music.ScopeItem{}
+		for _, item := range oldItems {
+			oldEnvs[item.ID] = item
+		}
+		for _, item := range nextItems {
+			nextEnvs[item.ID] = item
+		}
+		plays, e := music.ScopePlays(ctx, tx, 0)
 		if e != nil {
 			return nil, e
 		}
-		b, _, e := next.Resolve(ctx, nextItems[i].Env)
+		for _, play := range plays {
+			a, _, e := old.Resolve(ctx, play.Environment(oldEnvs[play.TrackID].Env))
+			if e != nil {
+				return nil, e
+			}
+			b, _, e := next.Resolve(ctx, play.Environment(nextEnvs[play.TrackID].Env))
+			if e != nil {
+				return nil, e
+			}
+			if a == b {
+				continue
+			}
+			label := func(included bool) string {
+				if included {
+					return "Included"
+				}
+				return "Excluded"
+			}
+			examples = append(examples, NamingExample{Field: nextEnvs[play.TrackID].Title + " at " + time.Unix(play.Time, 0).UTC().Format(time.RFC3339), Before: label(a), After: label(b)})
+			if len(examples) == 12 {
+				break
+			}
+		}
+		if len(examples) < 12 {
+			rows, e := tx.QueryContext(ctx, `SELECT DISTINCT track_id FROM source_aggregates WHERE undated_count>0 AND track_id IS NOT NULL ORDER BY track_id`)
+			if e != nil {
+				return nil, e
+			}
+			ids := []int64{}
+			for rows.Next() {
+				var id int64
+				if e = rows.Scan(&id); e != nil {
+					rows.Close()
+					return nil, e
+				}
+				ids = append(ids, id)
+			}
+			e = rows.Err()
+			rows.Close()
+			if e != nil {
+				return nil, e
+			}
+			for _, id := range ids {
+				a, _, e := old.ResolveCatalog(ctx, oldEnvs[id].Env)
+				if e != nil {
+					return nil, e
+				}
+				b, _, e := next.ResolveCatalog(ctx, nextEnvs[id].Env)
+				if e != nil {
+					return nil, e
+				}
+				if a == b {
+					continue
+				}
+				label := func(included bool) string {
+					if included {
+						return "Included"
+					}
+					return "Excluded"
+				}
+				examples = append(examples, NamingExample{Field: "Undated counts: " + nextEnvs[id].Title, Before: label(a), After: label(b)})
+				if len(examples) == 12 {
+					break
+				}
+			}
+		}
+		return examples, nil
+	}
+	for i, item := range oldItems {
+		a, _, e := old.ResolveCatalog(ctx, item.Env)
+		if e != nil {
+			return nil, e
+		}
+		b, _, e := next.ResolveCatalog(ctx, nextItems[i].Env)
 		if e != nil {
 			return nil, e
 		}
