@@ -38,9 +38,13 @@ without publishing those files.
 | Record | One entry from a file or incoming submission, with its original fields and source position. |
 | Play | One listening event, supported by records or explicitly estimated. |
 | Source | Where the data came from: for example Spotify, Last.fm, or a family iTunes library. |
-| Rule | One saved setting or operation that interprets records. Rules have saved versions. |
-| View | The history, music metadata, collections, and statistics produced by the rules. |
-| Filters | The page where rules are managed, and the umbrella for the rule types below. |
+| Filter | One configurable instruction that interprets records or changes the view. |
+| View | The history, music metadata, collections, and statistics produced by the filters. |
+| Filters | The page where filters are managed, organized by the types below. |
+
+Use **filter** in the interface for each instruction. Existing code and older
+implementation notes use **rule** for the same instruction. These are not
+separate user concepts. Saved versions remain an implementation responsibility.
 
 There is one user of this fork. There is no account selector on Imports and no
 new multi-user workflow to build. Original service identities, device names,
@@ -181,8 +185,8 @@ must remain attached to stable records or music identities across rebuilds.
 |---|---|---|
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
 | 2 | Last.fm imports and the first matching rules in Filters | Complete |
-| 3 | iTunes counts, inference, and shared-history attribution | Next; builds on 2 |
-| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | After 2; uses 3 examples |
+| 3 | iTunes counts, inference, and shared-history attribution | Complete |
+| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | Next; builds on 2 and 3 |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
 | 7 | Concert and gameplay data | After 3-4; uses 6 where relevant |
@@ -381,6 +385,37 @@ options, and the default treatment of uncertain shared listening.
 
 **Outcome:** music can be matched, renamed, and grouped without destroying its
 original spelling, identifiers, or album association.
+
+### First milestone: track history across albums
+
+Start with the track and album relationship before expanding the filter editor.
+This milestone is the beginning of Phase 4. The remaining requirements below
+remain outstanding until implemented and verified.
+
+- One track page gathers its listens across album appearances.
+- Each play retains its selected album association, including an absent album.
+- Supporting records retain every supplied album field and identifier.
+- Album histories and totals follow each play's album association.
+- Music matching establishes shared music identity. Play matching establishes
+  which records describe the same listen.
+- Text equivalence can support a Last.fm-style track view. Recording identifiers
+  and explicit decisions must retain distinctions between different performances.
+- Naming and edition grouping remain separate from identifying one recording.
+
+Audit imported projection and existing live capture together. The current
+paths differ in their handling of recording identifiers and absent albums.
+Define an additive migration that retains existing track links and listens.
+Rebuilding must preserve play identities and contributor links.
+
+Verify the first milestone with real imported records spanning album names
+and absent albums. Check track histories, album histories, totals, and raw
+records together. Record actual results without inventing listening data.
+
+Then streamline Filters around **When** conditions and **Then** actions.
+Use the existing taxonomy to organize each filter. Simple global settings can
+remain compact controls. Source metadata determines which conditions are offered.
+The interface uses **filter**, including Add filter and Remove filter.
+Detailed interaction design follows the working track and album model.
 
 ### 4.1 Preserve recording and release distinctions
 

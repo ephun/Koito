@@ -5,8 +5,9 @@
 The taxonomy in [the development plan](development-plan.md#2-rules-and-their-types) is authoritative.
 Use its existing types and subtypes when adding controls.
 
-Files contain records. Rules interpret records into plays and the view.
-Filters manages those rules.
+Files contain records. Filters interpret records into plays and the view.
+Filters is also the page name. Each configurable instruction is a filter.
+Existing code calls these instructions rules. That distinction stays internal.
 
 | Type | Subtypes |
 |---|---|
@@ -21,6 +22,22 @@ Use type headings, then subtype sections, then individual settings.
 Add each type when its first usable rule ships.
 Show source and file scope beside scoped rules.
 Date scope is available for supported attribution and time rules.
+
+## Agreed next layout
+
+Streamline conditional filters into a table with When and Then columns.
+Keep the existing types and subtypes as its hierarchy.
+When selects records or record pairs. Then defines the action.
+Available conditions follow the metadata supplied by each source.
+Simple global settings can remain compact controls.
+Use Add filter and Remove filter in the interface.
+
+Implement the track and album relationship before expanding this editor.
+A track page should gather listens across album appearances.
+Each play retains its album association and contributing records.
+Album histories and totals follow the album associated with each play.
+Music matching and play matching remain separate decisions.
+The sections below describe the currently implemented interface.
 
 ## Current layout
 
