@@ -412,9 +412,12 @@ and absent albums. Check track histories, album histories, totals, and raw
 records together. Record actual results without inventing listening data.
 
 Then streamline Filters around **When** conditions and **Then** actions.
-Use the existing taxonomy to organize each filter. Simple global settings can
-remain compact controls. Source metadata determines which conditions are offered.
+Use one consistent builder, including global behavior with an all-records condition.
+Support nested AND/OR conditions, exceptions, typed comparisons, and subtype-specific actions.
+Use the existing taxonomy to organize each filter.
+Source metadata determines which conditions are offered.
 The interface uses **filter**, including Add filter and Remove filter.
+The [interface design](filters-interface.md#agreed-next-layout) records the builder requirements and migration expectations.
 Detailed interaction design follows the working track and album model.
 
 ### 4.1 Preserve recording and release distinctions

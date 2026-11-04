@@ -25,11 +25,15 @@ Date scope is available for supported attribution and time rules.
 
 ## Agreed next layout
 
-Streamline conditional filters into a table with When and Then columns.
+Use one filter manager with a consistent condition-and-action builder.
+The manager summarizes filters in a table with When and Then columns.
 Keep the existing types and subtypes as its hierarchy.
 When selects records or record pairs. Then defines the action.
 Available conditions follow the metadata supplied by each source.
-Simple global settings can remain compact controls.
+Global behavior uses the same builder with All applicable records as its condition.
+Existing behavior can supply editable starting filters.
+Each filter has one enabled state beside its conditions and actions.
+Parameter controls belong inside the action they configure.
 Use Add filter and Remove filter in the interface.
 
 Implement the track and album relationship before expanding this editor.
@@ -37,7 +41,88 @@ A track page should gather listens across album appearances.
 Each play retains its album association and contributing records.
 Album histories and totals follow the album associated with each play.
 Music matching and play matching remain separate decisions.
-The sections below describe the currently implemented interface.
+The builder requirements below describe planned behavior.
+The Current layout section describes the implemented interface.
+
+### Conditions
+
+- Start with readable field, comparison, and value rows.
+- Support All and Any groups for AND and OR conditions.
+- Support nested groups and explicit exceptions using negation.
+- Offer text equality, contains, prefixes, suffixes, lists, and optional regular expressions.
+- Offer numeric, date, and duration comparisons with units and ranges.
+- Offer explicit missing and present checks.
+- Keep case comparison configurable where relevant.
+- Offer field-to-field comparisons for music and play matching.
+- Identify which record supplies each field when comparing a pair.
+- Offer conditions on filenames, sources, metadata, and available identifiers through readable labels.
+- Distinguish original source fields from derived fields when both are available.
+- Preserve the complete source metadata even before dedicated controls exist for a field.
+- Conditions depend on available source fields and their data types.
+
+An absent field is distinct from an empty string or zero.
+Ordinary comparisons against absent fields remain unknown.
+Only a true condition selects a record or pair.
+Missing and present checks explicitly select those cases.
+Negating a comparison against absent data must retain that unknown result.
+This matters for attribution when source metadata is incomplete.
+
+### Actions
+
+Use the agreed type and subtype to offer meaningful actions.
+The builder structure stays consistent across types.
+Action controls reflect the operation's actual parameters.
+
+| Type | Example condition | Example action |
+|---|---|---|
+| Matching, music matching | Artist and title agree, one album is absent | Allow a music match |
+| Matching, play matching | Music matches and compatible times overlap | Link records describing one listen |
+| Inference, count | Records come from an iTunes library export | Use the cumulative play count |
+| Attribution, direct | Source and supplied device match selected values | Attribute listening to me |
+| Presentation, naming | Album name matches a selected pattern | Apply a replacement to the displayed name |
+| Presentation, grouping | Album editions match selected conditions | Report those editions together |
+
+These examples specify the design. They do not claim every action currently exists.
+Album compatibility alone establishes neither recording identity nor a shared listening event.
+Music matching, play matching, and presentation grouping retain their distinct meanings.
+Count actions operate on cumulative evidence rather than manufacturing observed plays.
+
+### Manager and editor
+
+Show enabled state, filter type, condition summary, and action summary in each row.
+Open the same editor when adding or changing a filter.
+Support named filters, duplication, removal, and visible execution order where relevant.
+Use selectors for fields, operators, and actions.
+Use source-provided choices where useful, while allowing suitable typed values.
+Use native music search when selecting specific artists, tracks, or albums.
+Keep advanced grouping and regular expressions available within the editor.
+Use brief hover help beside unfamiliar fields and operations.
+Show validation beside the condition or action that needs correction.
+Keep the normal manager focused on configured filters.
+Show examples beside pattern edits when checking their effect requires them.
+Keep affected records inspectable without adding a permanent preview dashboard.
+
+### Execution and compatibility
+
+The builder needs a typed condition tree and typed actions beneath the interface.
+Fixed scope fields and subtype-specific switches cannot represent the agreed expression model alone.
+The server must validate fields, comparisons, value types, action parameters, and dependencies.
+Use the same evaluator for inspection and publishing.
+Define available derived fields at each processing stage.
+Detect circular dependencies before saving.
+Evaluate record matching, play matching, and cumulative evidence in their appropriate contexts.
+
+Order matters for sequential naming replacements.
+Conflicting attribution actions require an explicit resolution rather than an accidental display-order winner.
+Document action-specific precedence and expose order only where it changes behavior.
+Preserve existing manual matching and splitting decisions across saves and rebuilds.
+Retain the current version check and atomic publication behavior.
+
+Translate existing settings into equivalent starting filters when migrating the saved configuration.
+Verify the same play identities, contributor links, timestamps, attribution, and aggregate contributions before changing behavior.
+Preserve disabled settings and file-specific timezone exceptions.
+Unsupported saved conditions need an explicit migration outcome and must remain recoverable.
+Compare full relationships alongside totals using actual imported data.
 
 ## Current layout
 
