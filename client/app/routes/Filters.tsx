@@ -191,15 +191,15 @@ export default function Filters() {
 
     {saved?.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="attribution-title">Attribution</h2><FieldHelp label="Attribution">Determine which listening belongs to you.</FieldHelp></div>
-      {saved && draft && saved.blocks?.schemas["attribution:direct"] && <ProgramFilterManager state={saved} config={draft} busy={saving} type="attribution" subtype="direct" embedded onChange={upsert} onRemove={remove} />}
-      {(saved.blocks?.schemas["attribution:direct"] ? ["heuristic", "aggregate"] : ["direct", "heuristic", "aggregate"]).map(subtype => {
+      {["direct", "heuristic", "aggregate"].map(subtype => {
+        if (draft && saved.blocks?.schemas[`attribution:${subtype}`]) return <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="attribution" subtype={subtype} embedded onChange={upsert} onRemove={remove} />;
         const rules = draft?.rules.filter(rule => rule.type === "attribution" && rule.subtype === subtype) || [];
         return !!rules.length && <div key={subtype} className={card}><div>
           <div className="flex items-center gap-1 px-4 pt-4 sm:px-5 sm:pt-5"><h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3><FieldHelp label={`${subtypeName(subtype)} attribution`}>{subtype === "direct" ? "Choose who listened using information you know." : subtype === "heuristic" ? "Estimate who listened using supporting listening evidence." : "Assign your share of a cumulative listening total."}</FieldHelp></div>
           {rules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}
         </div></div>;
       })}
-      <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>
+      {["direct", "heuristic", "aggregate"].some(subtype => !saved.blocks?.schemas[`attribution:${subtype}`] && saved.sources.some(source => source.records > 0 && (subtype === "direct" || (subtype === "aggregate" ? source.service === "itunes" : source.service !== "itunes")))) && <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>}
     </section>}
     {saved && draft && <ProgramFilterManager state={saved} config={draft} busy={saving} onChange={upsert} onRemove={remove} />}
   </main>;

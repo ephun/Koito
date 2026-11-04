@@ -186,7 +186,7 @@ must remain attached to stable records or music identities across rebuilds.
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
 | 2 | Last.fm imports and the first matching rules in Filters | Complete |
 | 3 | iTunes counts, inference, and shared-history attribution | Complete |
-| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories, Naming, Direct attribution, imported fields implemented |
+| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories, Naming, Direct and Aggregate attribution, imported fields implemented |
 | 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
 | 7 | Concert and gameplay data | After 3-4; uses 6 where relevant |
@@ -387,7 +387,8 @@ options, and the default treatment of uncertain shared listening.
 original spelling, identifiers, or album association.
 
 **Status: in progress.** Track histories across albums are implemented and verified.
-The atomic filter evaluator, builder, metadata cleanup, genres, and optional tags remain in this phase.
+The atomic evaluator, Naming, Direct and Aggregate attribution, and imported fields are implemented.
+Remaining filter migrations, metadata cleanup, genres, and optional tags remain in this phase.
 Implementation and acceptance evidence: [Phase 4](phase-4.md).
 
 ### First milestone: track history across albums

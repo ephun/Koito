@@ -40,10 +40,17 @@ var Operators = []Operator{
 }
 
 type Schema struct {
-	RawFields bool                `json:"raw_fields,omitempty"`
-	Choices   map[string][]Choice `json:"choices,omitempty"`
-	Fields    map[string]Type     `json:"fields"`
-	Targets   map[string]Type     `json:"targets"`
+	RawFields bool                    `json:"raw_fields,omitempty"`
+	Bounds    map[string]NumberBounds `json:"bounds,omitempty"`
+	Choices   map[string][]Choice     `json:"choices,omitempty"`
+	Fields    map[string]Type         `json:"fields"`
+	Targets   map[string]Type         `json:"targets"`
+}
+
+type NumberBounds struct {
+	Min   *int64 `json:"min,omitempty"`
+	Max   *int64 `json:"max,omitempty"`
+	Whole bool   `json:"whole,omitempty"`
 }
 
 type Choice struct {

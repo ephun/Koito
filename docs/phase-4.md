@@ -127,7 +127,7 @@ Invalid changes roll back the saved version and replacement view together.
 
 The naming filter manager and block editor are implemented.
 Other filter types still use their previous configurations pending equivalent program migration.
-Raw source field discovery and visible unresolved explanations remain outstanding.
+Raw source fields and unresolved explanations are implemented in the later milestone described below.
 The display and artwork changes discussed separately remain deferred at the user's request.
 
 Regression tests cover branching, all Boolean truth tables, incomplete data, atomic actions, exact numbers, timestamp precision, and invalid programs.
@@ -183,7 +183,7 @@ A source-based attribution filter changed the displayed play count from 168,424 
 Disabling it restored 168,424 plays. All 191,473 records remained stored.
 The editor passed 390-pixel and 320-pixel checks without browser errors.
 
-Matching, inference, heuristic attribution, aggregate attribution, grouping, genres, and metadata controls remain in Phase 4.
+Matching, inference, heuristic attribution, grouping, genres, and metadata controls remain in Phase 4.
 
 ## Imported fields in filter programs
 
@@ -217,3 +217,51 @@ Disabling the test filters restored 168,424 plays. All 191,473 source records re
 The main configuration remains unchanged.
 
 Genre assignment, genre charts, and optional metadata on listen rows still need implementation.
+
+## Aggregate attribution migration
+
+Aggregate attribution now uses IF, THEN, ELSE IF, ELSE, and SET blocks in the shared manager.
+The My share (%) action accepts a whole percentage from zero through one hundred.
+Its value can come from arithmetic, imported metadata, or a constant.
+New filters start disabled with an iTunes condition and a zero-percent action.
+The same editor supports conditions, priorities, duplication, removal, and draft discard.
+
+Existing shares receive equivalent programs with their original conditions and enabled states.
+Previous specificity becomes explicit priority. Saved versions remain unchanged until the next save.
+Direct attribution retains precedence over aggregate shares.
+Unknown conditions or invalid calculated percentages leave attribution unresolved.
+Equal-priority conflicts also remain unresolved.
+
+The engine validates numeric target ranges and whole-number requirements.
+Literal errors fail compilation. Invalid calculated values produce inspectable issues and discard that filter's actions.
+The aggregate percentage is applied to the interpreted cumulative count, rounding down to whole plays.
+The Count and Time inference filters retain their separate responsibilities.
+
+Regression tests compare legacy and migrated scopes, disabled settings, priorities, and conflicts.
+They also cover branch selection, arithmetic percentages, missing metadata, reversal, rebuilding, direct precedence, and unchanged original records.
+The full Go suite and frontend type checking and build pass.
+
+Heuristic attribution and the existing matching and inference controls still need migration to the shared editor.
+
+Actual-import browser acceptance enabled Count and a temporary 50% Aggregate filter on the isolated database copy.
+It checked 5,348 resolved shares against their imported counts and verified whole-play rounding.
+The test configuration displayed 190,199 plays. Restoring the original configuration restored 168,424 plays.
+All 191,473 records retained identical fingerprints. Desktop, 390-pixel, and 320-pixel checks passed without page errors.
+
+## Remaining legacy editing audit
+
+Merge routes and controls were removed earlier. Other catalog edits still write directly to the catalog.
+The following paths remain unfinished Phase 4 work.
+
+| Existing operation | Current behavior | Required replacement |
+|---|---|---|
+| Alias creation, removal, and primary-name selection | Writes alias rows and primary flags directly | Reversible Music matching and Naming corrections |
+| Artist, album, and track deletion | Deletes catalog rows. Track deletion also cleans orphaned entries | Remove routine destructive cleanup and retain reversible view decisions |
+| MusicBrainz identifier editing | Updates catalog identifiers directly | Preserve original identifiers separately from corrections |
+| Artist membership and primary-artist editing | Changes catalog associations directly | Reversible association corrections with original multi-artist data retained |
+| Various-artists editing | Changes the album classification directly | Reversible classification corrections |
+
+The active routes are in `engine/routes.go`.
+Their database writes remain in `internal/db/sqlite/artist.go`, `album.go`, and `track.go`.
+The Edit modal still exposes aliases, identifiers, artist associations, and the various-artists flag.
+The media toolbar still exposes deletion. Completing Phase 4 requires replacing these routine editing paths.

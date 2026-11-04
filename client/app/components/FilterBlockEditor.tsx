@@ -7,6 +7,7 @@ const value = (v: unknown = ""): Expression => ({ op: "literal", value: v });
 const number = (): Expression => ({ op: "number", args: [value("0")] });
 const reference = (field: string): Expression => ({ op: "field", field });
 const names: Record<string, string> = {
+	"share.percent": "My share (%)",
   "listener": "Listener", "range.from": "Evidence interval start", "range.until": "Evidence interval end",
   "original.artist": "Original artist", "original.album": "Original album", "original.title": "Original track title",
   "display.artist": "Displayed artist", "display.album": "Displayed album", "display.title": "Displayed track title",
@@ -168,7 +169,7 @@ function Statements({ steps, onChange, ...common }: Common & { steps: FilterStat
     </div>)}
     <div className="flex flex-wrap gap-2">
       <button type="button" className={`${button} text-sm`} disabled={disabled} onClick={() => onChange([...steps, { if: value(true), then: [] }])}>Add IF</button>
-      <button type="button" className={`${button} text-sm`} disabled={disabled} onClick={() => { const target = schema.targets["display.title"] ? "display.title" : Object.keys(schema.targets)[0]; onChange([...steps, { set: target, value: target === "listener" ? value("unknown") : reference(target) }]); }}>Add SET</button>
+      <button type="button" className={`${button} text-sm`} disabled={disabled} onClick={() => { const target = schema.targets["display.title"] ? "display.title" : Object.keys(schema.targets)[0]; onChange([...steps, { set: target, value: schema.targets[target] === "number" ? number() : schema.targets[target] === "boolean" ? value(false) : target === "listener" ? value("unknown") : reference(target) }]); }}>Add SET</button>
     </div>
   </div>;
 }

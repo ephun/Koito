@@ -122,13 +122,13 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
-	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema()}}
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema()}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
 		return state, err
 	}
-	migrated := migrateDirectPrograms(state.Current.Config)
+	migrated := migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config))
 	state.Blocks.Legacy = map[string]Rule{}
 	for i, rule := range migrated.Rules {
 		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil {
@@ -307,7 +307,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && rule.Subtype == "direct") {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -391,6 +391,15 @@ func validateRules(config RuleConfig) error {
 				return errors.New("Choose a listener.")
 			}
 		case rule.Type == "attribution" && rule.Subtype == "aggregate":
+			if rule.Program != nil {
+				if rule.Scope != (RuleScope{}) {
+					return errors.New("Move aggregate attribution conditions into IF blocks.")
+				}
+				if _, err := filters.CompileProgram(*rule.Program, aggregateSchema()); err != nil {
+					return err
+				}
+				continue
+			}
 			if rule.Scope.Service != "itunes" || rule.Settings.SharePercent == nil {
 				return errors.New("Aggregate attribution needs an iTunes scope and share.")
 			}

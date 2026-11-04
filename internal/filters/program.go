@@ -3,6 +3,7 @@ package filters
 import (
 	"context"
 	"fmt"
+	"math/big"
 )
 
 // Statements contain either a conditional or one SET action. ELSE IF and ELSE
@@ -29,6 +30,7 @@ type compiledStatement struct {
 	target          string
 	expected        Type
 	choices         []Choice
+	bounds          *NumberBounds
 	value           *Expression
 }
 type compiledBranch struct {
@@ -116,6 +118,18 @@ func compileStatements(steps []Statement, s Schema, depth int, n *int) ([]compil
 			}
 			c.target, c.value, c.expected = step.Set, x, kind
 			c.choices = s.Choices[step.Set]
+			if bounds, exists := s.Bounds[step.Set]; exists {
+				if kind != Number {
+					return nil, fmt.Errorf("Numeric bounds require a number target.")
+				}
+				if bounds.Min != nil && bounds.Max != nil && *bounds.Min > *bounds.Max {
+					return nil, fmt.Errorf("Invalid numeric bounds.")
+				}
+				c.bounds = &bounds
+				if x.op == "literal" && !withinBounds(x.value, c.bounds) {
+					return nil, fmt.Errorf("SET %s requires a number within its allowed range.", step.Set)
+				}
+			}
 			if x.op == "literal" && !allowedChoice(x.value, c.choices) {
 				return nil, fmt.Errorf("SET %s requires an available choice.", step.Set)
 			}
@@ -186,11 +200,25 @@ func runStatements(ctx context.Context, steps []compiledStatement, env, changes 
 			if !allowedChoice(value, step.choices) {
 				return &Issue{position + ".value", "Value is not an available choice."}, nil
 			}
+			if !withinBounds(value, step.bounds) {
+				return &Issue{position + ".value", "Number is outside the allowed range or requires a whole value."}, nil
+			}
 			env[step.target] = value
 			changes[step.target] = value
 		}
 	}
 	return nil, nil
+}
+
+func withinBounds(value Value, bounds *NumberBounds) bool {
+	if bounds == nil {
+		return true
+	}
+	n, ok := value.data.(*big.Rat)
+	if !ok || value.Type != Number || bounds.Whole && !n.IsInt() {
+		return false
+	}
+	return (bounds.Min == nil || n.Cmp(big.NewRat(*bounds.Min, 1)) >= 0) && (bounds.Max == nil || n.Cmp(big.NewRat(*bounds.Max, 1)) <= 0)
 }
 
 func allowedChoice(value Value, choices []Choice) bool {

@@ -51,13 +51,12 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 			}
 			schema, env = namingSchema(), namingEnv
 		case rule.Type == "attribution" && rule.Subtype == "direct":
-			schema, env = directSchema(), recordEnvironment(r)
-			if !from.IsZero() {
-				env["range.from"] = filters.Timestamp(from)
+			schema, env = directSchema(), attributionEnvironment(r, from, until)
+		case rule.Type == "attribution" && rule.Subtype == "aggregate":
+			if r.Service != "itunes" {
+				continue
 			}
-			if !until.IsZero() {
-				env["range.until"] = filters.Timestamp(until)
-			}
+			schema, env = aggregateSchema(), attributionEnvironment(r, from, until)
 		default:
 			continue
 		}

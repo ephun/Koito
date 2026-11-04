@@ -131,11 +131,14 @@ func aggregateAttribution(r matchingRecord, config RuleConfig, from, until time.
 	if direct.Basis != "unattributed library" {
 		return direct
 	}
-	rule, conflict := chooseRule(config, "attribution", "aggregate", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, scopeUntil) })
+	rule, conflict := chooseAggregateRule(config, r, from, scopeUntil)
 	if conflict {
 		return Attribution{Listener: "unknown", Basis: "conflicting aggregate rules", Rules: []string{}}
 	}
 	if rule != nil {
+		if rule.Settings.SharePercent == nil {
+			return Attribution{Listener: "unknown", Basis: "unresolved aggregate filter", Rules: []string{rule.ID}}
+		}
 		return Attribution{Listener: "partial", Basis: "aggregate", Rules: []string{rule.ID}, Share: rule.Settings.SharePercent}
 	}
 	rule, conflict = chooseRule(config, "attribution", "heuristic", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, scopeUntil) })
