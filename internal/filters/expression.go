@@ -41,6 +41,10 @@ var Operators = []Operator{
 }
 
 type Schema struct {
+	Help           map[string]string       `json:"help,omitempty"`
+	SnapshotFields bool                    `json:"snapshot_fields,omitempty"`
+	ItemFields     map[string]Type         `json:"item_fields,omitempty"`
+	ItemLabels     map[string]string       `json:"item_labels,omitempty"`
 	EvidenceFields bool                    `json:"evidence_fields,omitempty"`
 	Labels         map[string]string       `json:"labels,omitempty"`
 	RawFields      bool                    `json:"raw_fields,omitempty"`
@@ -91,6 +95,11 @@ func compile(e Expr, s Schema, depth int, n *int) (*Expression, error) {
 		}
 		if !ok && s.EvidenceFields && ValidEvidenceField(e.Field) {
 			kind, ok = List, true
+		}
+		if !ok && ValidItemField(e.Field) {
+			if _, bound := s.Fields["item"]; bound {
+				kind, ok = Any, true
+			}
 		}
 		if !ok {
 			return nil, fmt.Errorf("Unknown field %q.", e.Field)
@@ -280,7 +289,15 @@ func (x *Expression) Eval(ctx context.Context, env Env) Value {
 	}
 	if x.op == "field" {
 		if v, ok := env[x.field]; ok {
+			if read, derived := v.data.(computedValue); derived {
+				return read(ctx, env)
+			}
 			return v
+		}
+		if ValidItemField(x.field) {
+			if item, bound := env["item"]; bound {
+				return item.Pointer(strings.TrimPrefix(x.field, "item:"))
+			}
 		}
 		return Absent(x.field)
 	}

@@ -10,9 +10,16 @@ import (
 // The editor receives its supported operators and writable fields from the
 // same registry used for validation and execution.
 type ProgramSchema struct {
-	Legacy    map[string]Rule           `json:"legacy,omitempty"`
-	Operators []filters.Operator        `json:"operators"`
-	Schemas   map[string]filters.Schema `json:"schemas"`
+	Templates map[string][]ProgramTemplate `json:"templates,omitempty"`
+	Legacy    map[string]Rule              `json:"legacy,omitempty"`
+	Operators []filters.Operator           `json:"operators"`
+	Schemas   map[string]filters.Schema    `json:"schemas"`
+}
+
+type ProgramTemplate struct {
+	Name    string           `json:"name"`
+	Label   string           `json:"label"`
+	Program *filters.Program `json:"program"`
 }
 
 func namingSchema() filters.Schema {

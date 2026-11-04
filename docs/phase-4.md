@@ -316,3 +316,43 @@ The updated main application rebuilt in 72.406 seconds and retained 168,424 play
 Original-file checks verified all three SHA-256 hashes, and contributor, timestamp, and decision fingerprints remained unchanged.
 
 Remaining work includes matching and inference migration, reversible music aliases, edition grouping, genres, optional tags, and contextual catalog corrections.
+
+## Count inference programs
+
+Count inference now uses the shared filter manager and conditional editor.
+Its programs explicitly select supporting iTunes library export records and assign a cumulative count.
+The selected record supplies names and date evidence independently from the count expression.
+Counts without a selected date record remain undated.
+
+Starting filters preserve largest-count, latest-count, and counter-reset interpretations.
+They remain editable programs after creation.
+The largest-count expression uses MAX over the selected reported counts.
+Latest and reset fields compute their values from the currently selected supporting records.
+Earlier SET actions update those inputs once, without repeating the program.
+Reset totals explicitly remain undated because their combined date interval is uncertain.
+
+WHERE and MAP bind readable record fields within each collection expression.
+Record fields can load arbitrary metadata from the actual iTunes imports.
+Missing fields, empty values, zero counts, and invalid calculations retain distinct outcomes.
+File conditions offer the actual iTunes filenames.
+The editor keeps Count and Time in separate cards under Inference.
+Purpose and field help use question-mark tooltips.
+
+Migration preserves scopes, priorities, disabled settings, selected records, amounts, and timing behavior.
+Unedited migrations retain the earlier unidentified-library checks and conflict decisions.
+Unknown or invalid count outputs remain unresolved and appear in record inspection.
+Original source records and saved configurations remain unchanged.
+
+Regression coverage compares all three interpretations across valid, conflicting, missing, undated, and unidentified records.
+It also checks file and record conditions, raw-metadata selection, exact arithmetic, reversal, and repeat rebuilding.
+Local item paths remain confined to WHERE and MAP expressions.
+The full Go suite and frontend type checking and production build pass.
+
+Actual-import acceptance selected Rock records through the editor and applied a temporary 50% Aggregate filter.
+It checked genre selection on 1,777 entries and whole-play rounding for 741 shares.
+The test configuration displayed 170,818 plays. All 191,473 source records retained identical fingerprints.
+Desktop, 390-pixel, and 320-pixel checks passed without page errors.
+Restoring the original configuration returned 168,424 plays in 60.94 seconds.
+The updated main application retains the baseline totals and all three original-file hashes.
+
+Time inference, matching, music aliases, edition grouping, genres, optional tags, and contextual corrections remain outstanding.

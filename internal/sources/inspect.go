@@ -176,6 +176,7 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 			return result, err
 		}
 		result.Contributions = append(result.Contributions, value)
+		result.FilterIssues = append(result.FilterIssues, value.FilterIssues...)
 	}
 	err = contributions.Err()
 	contributions.Close()

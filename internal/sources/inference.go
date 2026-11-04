@@ -9,25 +9,26 @@ import (
 )
 
 type AggregateContribution struct {
-	Key            string      `json:"key"`
-	LibraryKey     string      `json:"library_key"`
-	TrackKey       string      `json:"track_key"`
-	Representative int64       `json:"representative"`
-	Records        []int64     `json:"records"`
-	Reported       *int64      `json:"reported"`
-	Available      int64       `json:"available"`
-	Attributed     int64       `json:"attributed"`
-	Observed       int64       `json:"observed"`
-	Overlap        int64       `json:"overlap"`
-	CoveredPlays   []string    `json:"covered_plays"`
-	LastPlayed     int64       `json:"last_played"`
-	Estimated      int64       `json:"estimated"`
-	Undated        int64       `json:"undated"`
-	Attribution    Attribution `json:"attribution"`
-	Rules          []string    `json:"rules"`
-	Reason         string      `json:"reason"`
-	From           time.Time   `json:"from"`
-	Until          time.Time   `json:"until"`
+	Key            string        `json:"key"`
+	LibraryKey     string        `json:"library_key"`
+	TrackKey       string        `json:"track_key"`
+	Representative int64         `json:"representative"`
+	Records        []int64       `json:"records"`
+	Reported       *int64        `json:"reported"`
+	Available      int64         `json:"available"`
+	Attributed     int64         `json:"attributed"`
+	Observed       int64         `json:"observed"`
+	Overlap        int64         `json:"overlap"`
+	CoveredPlays   []string      `json:"covered_plays"`
+	LastPlayed     int64         `json:"last_played"`
+	Estimated      int64         `json:"estimated"`
+	Undated        int64         `json:"undated"`
+	Attribution    Attribution   `json:"attribution"`
+	Rules          []string      `json:"rules"`
+	Reason         string        `json:"reason"`
+	From           time.Time     `json:"from"`
+	Until          time.Time     `json:"until"`
+	FilterIssues   []FilterIssue `json:"filter_issues,omitempty"`
 }
 
 // Count modes are explicit interpretations. In particular a decrease is not
@@ -167,7 +168,7 @@ func calculateView(ctx context.Context, reader sqlReader, records []matchingReco
 	applyAttribution(&plan, config)
 	active := false
 	for _, rule := range config.Rules {
-		if rule.Enabled && rule.Scope.Service == "itunes" && rule.Type == "inference" && rule.Subtype == "count" {
+		if rule.Enabled && (rule.Scope.Service == "itunes" || rule.Program != nil) && rule.Type == "inference" && rule.Subtype == "count" {
 			active = true
 		}
 	}
@@ -211,18 +212,14 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 				r.LibraryID = library.LibraryID
 				return r
 			}
-			countRule, conflict := chooseRule(config, "inference", "count", func(rule Rule) bool {
-				for _, s := range track.Snapshots {
-					if scopeContains(rule.Scope, recordFor(s), time.Time{}, time.Time{}) {
-						return true
-					}
-				}
-				return false
-			})
-			if countRule == nil {
+			selection, conflict, err := chooseCountRule(ctx, config, library, track, byID)
+			if err != nil {
+				return err
+			}
+			if selection == nil {
 				continue
 			}
-			contribution := AggregateContribution{Key: digest([]byte(library.Key + "\x00" + track.Key)), LibraryKey: library.Key, TrackKey: track.Key, Representative: track.Snapshots[0].RecordID, Reported: track.Reported, Records: []int64{}, Rules: []string{countRule.ID}, Attribution: Attribution{Listener: "unknown", Basis: "unattributed library", Rules: []string{}}, Reason: "count inference"}
+			contribution := AggregateContribution{Key: digest([]byte(library.Key + "\x00" + track.Key)), LibraryKey: library.Key, TrackKey: track.Key, Representative: track.Snapshots[0].RecordID, Reported: track.Reported, Records: []int64{}, Rules: []string{selection.Rule.ID}, Attribution: Attribution{Listener: "unknown", Basis: "unattributed library", Rules: []string{}}, Reason: "count inference", FilterIssues: selection.Issues}
 			for _, s := range track.Snapshots {
 				contribution.Records = append(contribution.Records, s.RecordID)
 			}
@@ -236,24 +233,18 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 				plan.Aggregates = append(plan.Aggregates, contribution)
 				continue
 			}
-			if library.LibraryID == "" && countRule.Scope.FileHash == "" {
+			if library.LibraryID == "" && !selection.FileConfirmed {
 				contribution.Reason = "choose a file for the unidentified library"
 				plan.Aggregates = append(plan.Aggregates, contribution)
 				continue
 			}
-			snapshots := []LibrarySnapshot{}
-			for _, s := range track.Snapshots {
-				if scopeContains(countRule.Scope, recordFor(s), time.Time{}, time.Time{}) {
-					snapshots = append(snapshots, s)
-				}
-			}
 			contribution.Records = []int64{}
-			for _, s := range snapshots {
+			for _, s := range selection.Snapshots {
 				contribution.Records = append(contribution.Records, s.RecordID)
 			}
 			sort.Slice(contribution.Records, func(i, j int) bool { return contribution.Records[i] < contribution.Records[j] })
-			amount, selected, valid := interpretedCount(snapshots, countRule.Settings.CountMode)
-			if !valid {
+			amount, selected := selection.Amount, selection.Selected
+			if !selection.Valid {
 				contribution.Reason = "unresolved cumulative count"
 				plan.Aggregates = append(plan.Aggregates, contribution)
 				continue
@@ -277,7 +268,7 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 			}
 			// Reset intervals are uncertain beyond the current segment. Keep the
 			// combined amount undated until segment timing is separately resolved.
-			if countRule.Settings.CountMode == "reset_total" {
+			if selection.Undated {
 				from = time.Time{}
 				until = time.Time{}
 				lastPlayed = time.Time{}

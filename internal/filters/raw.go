@@ -14,6 +14,10 @@ func ValidEvidenceField(field string) bool {
 	return err == nil && id > 0 && strconv.FormatInt(id, 10) == number
 }
 
+func ValidItemField(field string) bool {
+	return strings.HasPrefix(field, "item:") && ValidRawField("raw:"+strings.TrimPrefix(field, "item:"))
+}
+
 // Raw fields use JSON Pointer. Column fields address preserved CSV headers.
 func ValidRawField(field string) bool {
 	var path string

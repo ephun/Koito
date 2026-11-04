@@ -15,7 +15,7 @@ export type RuleSettings = {
 };
 
 export type Rule = {
-	 migration?: { program_hash: string; settings_hash: string };
+	 migration?: { program_hash: string; settings_hash: string; scope?: RuleScope };
   priority?: number;
   name?: string;
   program?: FilterProgram;
@@ -35,7 +35,7 @@ export type RuleScope = {
 export type FilterSource = { id: number; service: string; records: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
-  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema>; legacy?: Record<string, Rule> };
+  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema>; legacy?: Record<string, Rule>; templates?: Record<string, { name: string; label: string; program: FilterProgram }[]> };
   current: RuleVersion;
   time_files: { hash: string; filename: string; source_id: number; records: number }[];
   sources: FilterSource[];
@@ -48,7 +48,7 @@ export type FilterStatement = { if?: Expression; then?: FilterStatement[]; else_
 export type FilterProgram = { steps: FilterStatement[] };
 export type BlockOperator = { id: string; label: string; min_args: number; max_args: number };
 export type SourceField = { path: string; type: string; label: string };
-export type BlockSchema = { evidence_fields?: boolean; raw_fields?: boolean; labels?: Record<string, string>; fields: Record<string, string>; targets: Record<string, string>; bounds?: Record<string, { min?: number; max?: number; whole?: boolean }>; choices?: Record<string, { label: string; value: string }[]> };
+export type BlockSchema = { help?: Record<string, string>; snapshot_fields?: boolean; item_fields?: Record<string, string>; item_labels?: Record<string, string>; evidence_fields?: boolean; raw_fields?: boolean; labels?: Record<string, string>; fields: Record<string, string>; targets: Record<string, string>; bounds?: Record<string, { min?: number; max?: number; whole?: boolean }>; choices?: Record<string, { label: string; value: string }[]> };
 
 export function sourceName(service: string) {
   return ({ spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes" } as Record<string, string>)[service] || service;

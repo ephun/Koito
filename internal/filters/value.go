@@ -3,11 +3,13 @@ package filters
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,6 +38,51 @@ type Value struct {
 }
 
 type Env map[string]Value
+
+type computedValue func(context.Context, Env) Value
+
+// Derived fields read the current program environment. They can reflect a
+// collection selected by an earlier SET without repeating the program.
+func Deferred(read func(context.Context, Env) Value) Value {
+	return Value{Type: Any, data: computedValue(read)}
+}
+
+func (v Value) Lookup(key string) Value {
+	object, ok := v.data.(map[string]Value)
+	if !ok || v.Type != Object {
+		return Unknown("An object is required.")
+	}
+	if value, exists := object[key]; exists {
+		return value
+	}
+	return Absent(key)
+}
+
+func (v Value) Pointer(path string) Value {
+	if !ValidRawField("raw:" + path) {
+		return Unknown("Invalid field path.")
+	}
+	if path == "" {
+		return v
+	}
+	for _, part := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+		key := strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+		if v.Type == Object {
+			v = v.Lookup(key)
+		} else if items, ok := v.Items(); ok {
+			index, err := strconv.Atoi(key)
+			if err != nil || index < 0 || index >= len(items) || strconv.Itoa(index) != key {
+				return Absent(path)
+			}
+			v = items[index]
+		} else if !v.Known() {
+			return v
+		} else {
+			return Absent(path)
+		}
+	}
+	return v
+}
 
 func Unknown(reason string) Value { return Value{Type: Unresolved, Reason: reason} }
 func Absent(field string) Value   { return Value{Type: Missing, Reason: "Missing field: " + field} }

@@ -125,13 +125,14 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
-	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema()}}
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema()}}
+	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
 		return state, err
 	}
-	migrated := migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config)))
+	migrated := migrateCountPrograms(migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config))))
 	state.Blocks.Legacy = map[string]Rule{}
 	for i, rule := range migrated.Rules {
 		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil {
@@ -308,6 +309,14 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		}
 		other.Choices["source.service"] = schema.Choices["source.service"]
 		other.Choices["file.hash"] = schema.Choices["file.hash"]
+		if other.SnapshotFields {
+			other.Choices["file.hash"] = nil
+			for _, file := range state.Files {
+				if file.Service == "itunes" {
+					other.Choices["file.hash"] = append(other.Choices["file.hash"], filters.Choice{Label: file.Filename, Value: file.Hash})
+				}
+			}
+		}
 		state.Blocks.Schemas[key] = other
 	}
 	return state, nil
@@ -332,7 +341,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic")) {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && rule.Subtype == "count") {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -451,6 +460,15 @@ func validateRules(config RuleConfig) error {
 				return errors.New("Library heuristics need an explicit share.")
 			}
 		case rule.Type == "inference" && rule.Subtype == "count":
+			if rule.Program != nil {
+				if rule.Scope != (RuleScope{}) {
+					return errors.New("Move Count conditions into snapshot selection and IF blocks.")
+				}
+				if _, err := filters.CompileProgram(*rule.Program, countSchema()); err != nil {
+					return err
+				}
+				continue
+			}
 			if rule.Scope.Service != "itunes" {
 				return errors.New("Count inference needs an iTunes scope.")
 			}

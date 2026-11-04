@@ -10,8 +10,9 @@ import (
 // switches comparison to its effective assignments, independently of retained
 // legacy settings. Returning to the original program restores its semantics.
 type ProgramMigration struct {
-	ProgramHash  string `json:"program_hash"`
-	SettingsHash string `json:"settings_hash"`
+	Scope        *RuleScope `json:"scope,omitempty"`
+	ProgramHash  string     `json:"program_hash"`
+	SettingsHash string     `json:"settings_hash"`
 }
 
 func jsonHash(value any) string {

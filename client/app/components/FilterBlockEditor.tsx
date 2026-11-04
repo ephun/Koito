@@ -25,12 +25,18 @@ const operatorHelp: Record<string, string> = {
   get: "Read an object field or list position. List positions start at zero.",
 };
 
+function fieldChoices(schema: BlockSchema | undefined, expression: Expression) {
+  const name = expression.field || "";
+  const key = ({ "item:/file_hash": "file.hash", "item:/source_id": "source.id" } as Record<string, string>)[name] || name;
+  return schema?.choices?.[key];
+}
+
 export function expressionSummary(e?: Expression, schema?: BlockSchema, operators: BlockOperator[] = [], choices?: { label: string; value: string }[]): string {
   if (!e) return "";
-  if (e.op === "field") return schema?.labels?.[e.field || ""] || label(e.field || "");
+  if (e.op === "field") return schema?.labels?.[e.field || ""] || schema?.item_labels?.[e.field || ""] || label(e.field || "");
   if (e.op === "literal") return choices?.find(choice => choice.value === e.value)?.label || (typeof e.value === "boolean" ? String(e.value).toUpperCase() : JSON.stringify(e.value));
   if (e.op === "number" && e.args?.[0]?.op === "literal" && typeof e.args[0].value === "string" && /^-?\d+(\.\d+)?$/.test(e.args[0].value)) return e.args[0].value;
-  const args = (e.args || []).map((arg, index) => expressionSummary(arg, schema, operators, index === 1 && e.args?.[0]?.op === "field" ? schema?.choices?.[e.args[0].field || ""] : undefined));
+  const args = (e.args || []).map((arg, index) => expressionSummary(arg, schema, operators, index === 1 && e.args?.[0]?.op === "field" ? fieldChoices(schema, e.args[0]) : undefined));
   const name = operators.find(operator => operator.id === e.op)?.label || e.op.toUpperCase();
   return ["eq", "ne", "lt", "le", "gt", "ge", "add", "subtract", "multiply", "divide"].includes(e.op) && args.length === 2 ? `(${args[0]} ${name} ${args[1]})` : `${name}(${args.join(", ")})`;
 }
@@ -65,29 +71,30 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
     return () => controller.abort();
   }, [source]);
   const editingSchema = useMemo(() => {
-    const next = { ...schema, fields: { ...schema.fields }, labels: { ...schema.labels } };
+    const next = { ...schema, fields: { ...schema.fields }, labels: { ...schema.labels }, item_fields: { ...schema.item_fields }, item_labels: { ...schema.item_labels } };
     for (const field of fields) {
-      next.fields[field.path] = "any";
-      next.labels[field.path] = field.label;
+      if (schema.snapshot_fields && field.path.startsWith("raw:")) { const key = `item:/raw${field.path.slice(4)}`; next.item_fields[key] = "any"; next.item_labels[key] = field.label; }
+      else if (!schema.snapshot_fields) { next.fields[field.path] = "any"; next.labels[field.path] = field.label; }
     }
     // Keep saved references selectable before their source catalog is loaded.
     function visit(value: unknown) {
       if (!value || typeof value !== "object") return;
       const item = value as Record<string, unknown>;
-      if (item.op === "field" && typeof item.field === "string" && /^(raw:|column:|evidence:)/.test(item.field)) next.fields[item.field] = item.field.startsWith("evidence:") ? "list" : "any";
+      if (item.op === "field" && typeof item.field === "string") { if (/^(raw:|column:|evidence:)/.test(item.field)) next.fields[item.field] = item.field.startsWith("evidence:") ? "list" : "any"; if (item.field.startsWith("item:")) next.item_fields[item.field] ||= "any"; }
       for (const child of Object.values(item)) visit(child);
     }
     visit(program);
     return next;
   }, [schema, fields, program]);
   return <div className="min-w-0 space-y-3">
-    {schema.raw_fields && sources.length > 0 && <details>
-      <summary className="cursor-pointer text-sm">Source fields</summary>
+    {(schema.raw_fields || schema.snapshot_fields) && sources.length > 0 && <details>
+      <summary className="cursor-pointer text-sm">{schema.snapshot_fields ? "Record fields" : "Source fields"}</summary>
+      {schema.snapshot_fields ? <button type="button" className="mt-2 text-sm underline" disabled={disabled || loading || !!fields.length} onClick={() => setSource(String(sources.find(item => item.service === "itunes")?.id || ""))}>Load fields</button> :
       <label className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-sm">Source<FieldHelp label="Source fields">Choose a source to add its imported metadata to the field menu.</FieldHelp>
         <select aria-label="Source fields" className={`${input} max-w-full`} value={source} disabled={disabled || loading} onChange={event => setSource(event.target.value)}>
           <option value="">Choose source</option>{sources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service)}</option>)}
         </select>
-      </label>
+      </label>}
       {loading && <p role="status" className="mt-2 text-sm">Loading fields...</p>}
       {error && <p role="alert" className="mt-2 text-sm">{error}</p>}
     </details>}
@@ -117,6 +124,7 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
       {expression.op === "field" && <select aria-label="Field" className={`${input} flex-1 text-sm`} disabled={disabled} value={expression.field} onChange={event => onChange(reference(event.target.value))}>
         {Object.keys({ ...schema.fields, ...schema.targets }).map(field => <option key={field} value={field}>{schema.labels?.[field] || label(field)}</option>)}
       </select>}
+      {expression.op === "field" && schema.help?.[expression.field || ""] && <FieldHelp label={schema.labels?.[expression.field || ""] || label(expression.field || "")}>{schema.help[expression.field || ""]}</FieldHelp>}
       {expression.op === "field" && expression.field?.startsWith("evidence:") && <FieldHelp label="Personal plays">Collections contain distinct matching plays assigned to you by Direct filters. Item fields include time, artist, album, title, and device.</FieldHelp>}
       {expression.op === "literal" && choices?.length ? <select aria-label="Value" className={`${input} min-w-0 flex-1 text-sm`} disabled={disabled} value={String(expression.value ?? "")} onChange={event => onChange(value(event.target.value))}>
         {!choices.some(choice => choice.value === expression.value) && <option value={String(expression.value ?? "")}>{expression.value ? String(expression.value) : "Choose value"}</option>}
@@ -131,7 +139,7 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
     </div>
     {args.length > 0 && <div className="space-y-2 border-l-2 border-(--color-bg-tertiary) pl-2 sm:pl-3">
       {args.map((arg, index) => <div key={index} className="min-w-0 space-y-1">
-        <ExpressionEditor {...common} schema={index === 1 && ["where", "map"].includes(expression.op) ? { ...schema, fields: { ...schema.fields, item: "any" } } : schema} choices={index === 1 && ["eq", "ne"].includes(expression.op) && args[0]?.op === "field" ? schema.choices?.[args[0].field || ""] : undefined} expression={arg} onChange={next => onChange({ ...expression, args: args.map((existing, i) => i === index ? next : existing) })} />
+        <ExpressionEditor {...common} schema={index === 1 && ["where", "map"].includes(expression.op) ? { ...schema, fields: { ...schema.fields, item: "any", ...(args[0]?.op === "field" && ["library.snapshots", "count.snapshots"].includes(args[0].field || "") ? schema.item_fields : {}) }, labels: { ...schema.labels, ...schema.item_labels } } : schema} choices={index === 1 && ["eq", "ne"].includes(expression.op) && args[0]?.op === "field" ? fieldChoices(schema, args[0]) : undefined} expression={arg} onChange={next => onChange({ ...expression, args: args.map((existing, i) => i === index ? next : existing) })} />
         {!!operation && args.length > operation.min_args && <button type="button" disabled={disabled} className="text-xs underline" onClick={() => onChange({ ...expression, args: args.filter((_, i) => i !== index) })}>Remove input</button>}
       </div>)}
     </div>}
@@ -172,9 +180,9 @@ function Statements({ steps, onChange, ...common }: Common & { steps: FilterStat
           {step.else === undefined && <button type="button" disabled={disabled} onClick={() => edit(index, { ...step, else: [] })}>Add ELSE</button>}
         </div>
       </> : <>
-        <select aria-label="SET field" className={`${input} w-full text-sm`} value={step.set} disabled={disabled} onChange={event => edit(index, { ...step, set: event.target.value })}>
+        <div className="flex min-w-0 items-center gap-2"><select aria-label="SET field" className={`${input} w-full text-sm`} value={step.set} disabled={disabled} onChange={event => edit(index, { ...step, set: event.target.value })}>
           {Object.keys(schema.targets).map(field => <option key={field} value={field}>{label(field)}</option>)}
-        </select>
+        </select>{schema.help?.[step.set || ""] && <FieldHelp label={schema.labels?.[step.set || ""] || label(step.set || "")}>{schema.help[step.set || ""]}</FieldHelp>}</div>
         <p className="text-sm font-semibold">TO</p>
         <ExpressionEditor {...common} choices={schema.choices?.[step.set || ""]} expression={step.value || value()} onChange={next => edit(index, { ...step, value: next })} />
       </>}

@@ -70,6 +70,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err := prepareHeuristicPrograms(config); err != nil {
 		return nil, err
 	}
+	if err := prepareCountPrograms(config); err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err
@@ -80,6 +83,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		fieldConfig.Rules = append(fieldConfig.Rules, additional.Rules...)
 	}
 	rawFields := requestedRawFields(fieldConfig)
+	countPrograms := hasCountPrograms(fieldConfig)
 	out := []matchingRecord{}
 	for rows.Next() {
 		var r matchingRecord
@@ -89,6 +93,11 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		interpretMatchingRecord(&r, config)
 		if err = retainRawFields(&r, rawFields); err != nil {
 			return nil, fmt.Errorf("Read source fields for record %d: %w", r.ID, err)
+		}
+		if countPrograms && r.Service == "itunes" {
+			if err = retainCountRaw(&r); err != nil {
+				return nil, err
+			}
 		}
 		// Matching needs interpreted values; inspection reads the original payload
 		// separately. Avoid retaining a second full copy of large history exports.

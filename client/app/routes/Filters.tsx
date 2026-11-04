@@ -87,14 +87,14 @@ export default function Filters() {
   const plays = draft?.rules.find(rule => rule.type === "matching" && rule.subtype === "play");
   const time = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && !rule.scope.file_hash && !rule.scope.source_id);
   const librarySources = saved?.sources.filter(source => source.service === "itunes" && source.records > 0) || [];
-  const countRules = visibleLibraryRules("count");
+  const countRules = draft?.rules.filter(rule => rule.type === "inference" && rule.subtype === "count") || [];
   const libraryTimes = visibleLibraryRules("time");
   function visibleLibraryRules(subtype: "count" | "time") {
     const rules = draft?.rules.filter(rule => rule.type === "inference" && rule.subtype === subtype && rule.scope.service === "itunes") || [];
     return rules.length ? rules : librarySources.map(source => libraryRule(source, subtype));
   }
-  const countEnabled = (timeRule: Rule) => countRules.some(rule => rule.enabled &&
-    (["source_id", "file_hash", "library_id", "track_id", "record_id", "artist"] as const).every(key => !rule.scope[key] || !timeRule.scope[key] || rule.scope[key] === timeRule.scope[key]));
+  const countEnabled = (timeRule: Rule) => countRules.some(rule => rule.enabled && (rule.program ||
+    (["source_id", "file_hash", "library_id", "track_id", "record_id", "artist"] as const).every(key => !rule.scope[key] || !timeRule.scope[key] || rule.scope[key] === timeRule.scope[key])));
   const dirty = !!saved && !!draft && JSON.stringify(saved.current.config) !== JSON.stringify(draft);
 
   function fileTimezone(file: FilterState["time_files"][number], zone: string) {
@@ -151,13 +151,11 @@ export default function Filters() {
 
     {plays && <section aria-labelledby="inference-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
-      <div className={card}>
+      <div className={saved?.blocks?.schemas["inference:count"] ? "space-y-4" : card}>
         {!!librarySources.length && saved && <div>
-          <h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>
-          {countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
-          <AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} />
+          {draft && saved.blocks?.schemas["inference:count"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} /> : <><h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>{countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}<AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} /></>}
         </div>}
-        <section className="space-y-4 p-4 sm:p-5" aria-label="Time inference">
+        <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
           <div className="flex items-center gap-1"><h3 className="text-lg font-medium normal-case tracking-normal">Time</h3><FieldHelp label="Time inference">Determine when plays happened using the dates and durations supplied by each source.</FieldHelp></div>
           <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
             <select id="spotify-time" className={input} disabled={saving} value={plays.settings.spotify_time} onChange={event => edit(plays.id, { spotify_time: event.target.value })}>

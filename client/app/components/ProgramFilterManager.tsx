@@ -10,6 +10,7 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
   state: FilterState; config: RuleConfig; busy: boolean; type?: string; subtype?: string; embedded?: boolean; onChange: (rule: Rule) => void; onRemove: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string>();
+  const [templateName, setTemplateName] = useState("");
   const [checking, setChecking] = useState(false);
   const [examples, setExamples] = useState<NamingExample[]>();
   const [checkedConfig, setCheckedConfig] = useState("");
@@ -18,8 +19,10 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
   const schema = state.blocks?.schemas[`${type}:${subtype}`];
   if (!schema || !state.blocks) return null;
   const rules = config.rules.filter(rule => rule.type === type && rule.subtype === subtype);
-  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : "Naming";
-  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : "Choose displayed names using original metadata and source information.";
+  const templates = state.blocks.templates?.[`${type}:${subtype}`] || [];
+  const template = templates.find(item => item.name === templateName) || templates[0];
+  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : type === "inference" && subtype === "count" ? "Count" : "Naming";
+  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : type === "inference" && subtype === "count" ? "Choose how iTunes library export records contribute to totals." : "Choose displayed names using original metadata and source information.";
   const current = rules.find(rule => rule.id === expanded);
   const freshExamples = checkedVersion === state.current.id && checkedConfig === JSON.stringify(config) ? examples : undefined;
   async function check() {
@@ -50,7 +53,7 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
       </tbody></table></div>}
       {current?.program && <div className="min-w-0 space-y-4 border-t border-(--color-bg-tertiary) pt-4" aria-label="Filter editor">
         <label className="block space-y-1 text-sm"><span>Name</span><input className={`${input} w-full`} value={current.name || ""} disabled={busy} maxLength={200} onChange={event => onChange({ ...current, name: event.target.value })} /></label>
-        {type === "attribution" && <details><summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Priority</summary><label className="mt-2 flex items-center gap-2 text-sm">Priority<FieldHelp label="Filter priority">Higher priority wins when filters assign conflicting values.</FieldHelp><input type="number" min={0} max={100000} className={`${input} w-28`} disabled={busy} value={current.priority || 0} onChange={event => onChange({ ...current, priority: Number(event.target.value) })} /></label></details>}
+        {type !== "presentation" && <details><summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Priority</summary><label className="mt-2 flex items-center gap-2 text-sm">Priority<FieldHelp label="Filter priority">Higher priority wins when filters assign conflicting values.</FieldHelp><input type="number" min={0} max={100000} className={`${input} w-28`} disabled={busy} value={current.priority || 0} onChange={event => onChange({ ...current, priority: Number(event.target.value) })} /></label></details>}
         <fieldset disabled={busy} className={`min-w-0 space-y-3 ${current.enabled ? "" : "opacity-50"}`}>
           <FilterBlockEditor program={current.program} schema={schema} sources={state.sources} operators={state.blocks.operators} disabled={busy} onChange={program => onChange({ ...current, program })} />
         </fieldset>
@@ -64,6 +67,8 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
           {freshExamples.length === 0 ? <p>No displayed names change.</p> : <table className="w-full text-left"><thead><tr><th className="p-2">Field</th><th className="p-2">Before</th><th className="p-2">After</th></tr></thead><tbody>{freshExamples.map((example, i) => <tr key={i} className="border-t border-(--color-bg-tertiary)"><td className="p-2">{example.field}</td><td className="p-2">{example.before}</td><td className="p-2">{example.after}</td></tr>)}</tbody></table>}
         </div>}
       </div>}
+      <div className="flex flex-wrap gap-2">
+      {templates.length > 0 && <select aria-label={`${title} starting filter`} className={`${input} max-w-full text-sm`} disabled={busy} value={template?.name || ""} onChange={event => setTemplateName(event.target.value)}>{templates.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}</select>}
       <button type="button" className={`${button} text-sm`} disabled={busy} onClick={() => {
         const direct = subtype === "direct", aggregate = subtype === "aggregate";
         const rule: Rule = { id: crypto.randomUUID(), name: type === "attribution" ? title : "Naming filter", type, subtype, enabled: type !== "attribution", scope: {}, priority: 0, settings: { ...defaultRuleSettings }, program: { steps: [{ if: aggregate ? { op: "eq", args: [{ op: "field", field: "source.service" }, { op: "literal", value: "itunes" }] } : { op: "literal", value: true }, then: [{ set: aggregate ? "share.percent" : direct ? "listener" : "display.title", value: aggregate ? { op: "number", args: [{ op: "literal", value: "0" }] } : direct ? { op: "literal", value: "unknown" } : { op: "field", field: "original.title" } }] }] } };
@@ -71,8 +76,10 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
           const collection = Object.keys(schema.fields).find(field => field.startsWith("evidence:"));
           rule.program = { steps: [{ if: collection ? { op: "ge", args: [{ op: "count", args: [{ op: "field", field: collection }] }, { op: "number", args: [{ op: "literal", value: "1" }] }] } : { op: "literal", value: false }, then: [{ set: "listener", value: { op: "literal", value: "self" } }], else: [{ set: "listener", value: { op: "literal", value: "unknown" } }] }] };
         }
+        if (template) { rule.name = template.label; rule.enabled = false; rule.program = structuredClone(template.program); }
         onChange(rule); setExpanded(rule.id);
       }}>Add filter</button>
+      </div>
     </div>
   </section>;
 }
