@@ -578,7 +578,7 @@ Mobile diagnostics identified the chart period selector as the remaining overflo
 Its controls now wrap. Tag labels also support wrapping long imported values.
 The completed rerun verified 100 actual listening rows at 390 and 320 pixels without page errors.
 It preserved record and play fingerprints, restored the original configuration, and removed all temporary tags.
-Main-application activation is pending.
+Main-application activation passed with the catalog correction checkpoint described below.
 
 ## Contextual catalog names
 
@@ -642,3 +642,20 @@ Album search and charts now use reversible Various Artists classifications.
 Explicitly cleared identifiers remain absent in search rather than falling back to original values.
 A cross-surface database regression verifies these responses against the same derived corrections.
 Original identifier lookup for ingestion continues to use original catalog values.
+
+
+## Catalog correction checkpoint activation
+
+Commit 61abe4c publishes listening tags and reversible catalog names, identifiers, and Various Artists classifications.
+The working branch is mirrored to GitHub.
+The main local database was backed up before migrations 17 and 18.
+Main acceptance rebuilt in 61.719 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and the existing preservation fingerprints passed.
+Track 271 retained 521 plays, including 519 on its named album and two on its absent-album appearance.
+The full Go suite, frontend type checking, and production build passed before activation.
+Grouping field labels now use Item type, Item identifier, Original artist credits, and Artist identifiers.
+
+Phase 4 remains in progress.
+Native alias mutations, artist-credit mutations, primary-credit mutations, and catalog deletion routes still exist.
+Their UI and endpoints require reversible replacements before the phase can close.
+Mixed-action Grouping consistency and the complete requirements audit also remain outstanding.
