@@ -506,3 +506,19 @@ All three original files retained their SHA-256 hashes.
 The measured preview took approximately 21 seconds and publication took approximately 73 seconds on the imported history.
 Performance targets and broader measurements remain in Phase 9.
 Phase 4 remains in progress for genres, optional listening tags, and contextual corrections replacing destructive edits.
+
+## Genre evidence foundation
+
+The iTunes readers expose original genre labels separately from interpreted listening.
+Labels retain their exact text, including commas, whitespace, empty values, and repeated plist entries.
+Each label carries its original field location and source record reference.
+Unsupported shapes remain available in the preserved payload.
+Migration 13 adds a derived `source_genres` table rebuilt in the publication transaction.
+Genre evidence remains available when Count inference is disabled.
+Record inspection exposes this evidence in a collapsed Source genres section.
+
+The current imports contain 10,629 library-track records with genre text across 1,286 distinct artist strings.
+Source labels include nonmusic classifications, such as Audiobook and Voice Memo.
+These labels are evidence rather than automatic decisions about qualifying listening.
+Regression tests cover exact labels, repeated values, unsupported shapes, count-independent inspection, and idempotent rebuilding.
+Source and database tests pass. Artist assignments, conflict resolution, manual overrides, and chart filtering remain unfinished.

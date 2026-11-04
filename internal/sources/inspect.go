@@ -19,6 +19,7 @@ type InspectedRecord struct {
 }
 
 type RecordInspection struct {
+	SourceGenres  []SourceGenre           `json:"source_genres"`
 	Record        InspectedRecord         `json:"record"`
 	Contributors  []InspectedRecord       `json:"contributors"`
 	Candidates    []InspectedRecord       `json:"candidates"`
@@ -153,6 +154,10 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 		return result, fmt.Errorf("Unknown record.")
 	}
 	result.Record = rows[0]
+	result.SourceGenres, err = SourceGenres(result.Record.Parser, []byte(result.Record.Payload))
+	if err != nil {
+		return result, err
+	}
 	var personal *evidenceIndex
 	for _, rule := range version.Config.Rules {
 		if rule.Enabled && rule.Type == "attribution" && rule.Subtype == "heuristic" && rule.Program != nil {
