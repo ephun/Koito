@@ -28,7 +28,7 @@ export type RuleScope = {
   service?: string; source_id?: number; file_hash?: string; library_id?: string; track_id?: string;
   record_id?: number; artist?: string; device?: string; from?: string; until?: string;
 };
-export type FilterSource = { id: number; service: string; records: number; plays: number; undated: number };
+export type FilterSource = { id: number; service: string; records: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
   current: RuleVersion;

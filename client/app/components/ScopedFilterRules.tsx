@@ -26,7 +26,7 @@ export function ScopedRule({ rule, state, busy, blocked = false, onChange, onRem
 
   return <section aria-label={toggleLabel} className="space-y-4 p-4 sm:p-5">
     <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><div className="flex min-w-0 items-center gap-1"><h4 className="min-w-0 break-words font-medium">{name}</h4>
+      <div className="min-w-0"><div className="flex min-w-0 items-center gap-1"><h4 className="min-w-0 break-words font-medium">{rule.type === "inference" && rule.subtype === "time" && service === "itunes" ? `${name} play dates` : name}</h4>
         {blocked && <FieldHelp label={`${name} timing`}>Enable Count to use library timing.</FieldHelp>}
       </div>
         {conditions.filter(condition => !["file_hash", "library_id", "record_id"].includes(condition.key) && rule.scope[condition.key]).map(condition => <p key={condition.key} className="break-words text-xs text-(--color-fg-secondary)">{condition.label}: {rule.scope[condition.key]}</p>)}
@@ -88,7 +88,7 @@ export function AddScopedRule({ state, type, subtype, busy, onAdd }: { state: Fi
     {type === "attribution" && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-type`}>Type</label><select id={`${id}-type`} className={input} disabled={busy} value={choice} onChange={event => setChoice(event.target.value)}>
       <option value="direct">Direct</option>{observed.length > 0 && <option value="heuristic">Heuristic</option>}{state.sources.some(source => source.service === "itunes" && source.records > 0) && <option value="aggregate">Aggregate</option>}
     </select></div>}
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-source`}>Source</label><select id={`${id}-source`} className={input} value={selected?.id || ""} disabled={busy} onChange={event => setSourceID(event.target.value)}>{sources.map(source => <option key={source.id} value={source.id}>{sourceName(source.service)}</option>)}</select></div>
+    {(type === "attribution" && choice !== "aggregate" || sources.length > 1) && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><label htmlFor={`${id}-source`}>Source</label><select id={`${id}-source`} className={input} value={selected?.id || ""} disabled={busy} onChange={event => setSourceID(event.target.value)}>{sources.map(source => <option key={source.id} value={source.id}>{sourceName(source.service)}</option>)}</select></div>}
     <div className="flex gap-3"><button type="button" className={button} disabled={busy || !selected} onClick={add}>Add</button><button type="button" className="px-2 underline" disabled={busy} onClick={() => setOpen(false)}>Cancel</button></div>
   </div>;
 }
@@ -108,14 +108,19 @@ function ScopeEditor({ rule, state, disabled, onChange }: { rule: Rule; state: F
   const id = useId();
   const libraryOnly = rule.type === "inference" || rule.subtype === "aggregate";
   const noDates = rule.subtype === "count" || rule.subtype === "aggregate";
-  const available = conditions.filter(condition => (!noDates || !["from", "until", "device"].includes(condition.key)) && (rule.scope.service === "itunes" || !["library_id", "track_id"].includes(condition.key)));
+  const service = rule.scope.service || state.sources.find(source => source.id === rule.scope.source_id)?.service;
+  const available = conditions.filter(condition =>
+    (!noDates || !["from", "until", "device"].includes(condition.key)) &&
+    (service === "itunes" || !["library_id", "track_id"].includes(condition.key)) &&
+    (condition.key !== "device" || service === "spotify" || rule.scope.device !== undefined) &&
+    (!["record_id", "track_id"].includes(condition.key) || rule.scope[condition.key] !== undefined));
   const sources = state.sources.filter(source => source.records > 0 && (!libraryOnly || source.service === "itunes"));
   const fields = available.filter(condition => rule.scope[condition.key] !== undefined);
   function set(key: keyof RuleScope, value: string | number) { onChange({ ...rule.scope, [key]: value }); }
   return <details>
-    <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Scope</summary>
+    <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Conditions</summary>
     <div className="mt-4 space-y-4">
-      <Option label="Source" id={`${id}-source`} help="Choose which imported source this rule interprets.">
+      {!libraryOnly && <Option label="Source" id={`${id}-source`} help="Choose which imported source this rule interprets.">
         <select id={`${id}-source`} className={input} disabled={disabled} value={rule.scope.source_id || `service:${rule.scope.service || ""}`} onChange={event => {
           const source = sources.find(source => source.id === Number(event.target.value));
           if (source) onChange({ service: source.service, source_id: source.id });
@@ -123,7 +128,7 @@ function ScopeEditor({ rule, state, disabled, onChange }: { rule: Rule; state: F
           {!rule.scope.source_id && <option value={`service:${rule.scope.service || ""}`}>{sourceName(rule.scope.service || "All sources")}</option>}
           {sources.map(source => <option key={source.id} value={source.id}>{sourceName(source.service)}</option>)}
         </select>
-      </Option>
+      </Option>}
       {fields.map(condition => <div className="space-y-1" key={condition.key}>
         <Option label={condition.label} id={`${id}-${condition.key}`} help={condition.help}>
           <div className="flex min-w-0 gap-2">
@@ -136,7 +141,7 @@ function ScopeEditor({ rule, state, disabled, onChange }: { rule: Rule; state: F
           </div>
         </Option>
       </div>)}
-      {available.some(condition => rule.scope[condition.key] === undefined) && <select className={`${input} text-sm`} aria-label="Add scope condition" disabled={disabled} value="" onChange={event => { if (event.target.value) set(event.target.value as keyof RuleScope, event.target.value === "record_id" ? 0 : ""); }}><option value="">Add condition</option>{available.filter(condition => rule.scope[condition.key] === undefined).map(condition => <option key={condition.key} value={condition.key}>{condition.label}</option>)}</select>}
+      {available.some(condition => rule.scope[condition.key] === undefined) && <select className={`${input} text-sm`} aria-label="Add condition" disabled={disabled} value="" onChange={event => { if (event.target.value) set(event.target.value as keyof RuleScope, event.target.value === "record_id" ? 0 : ""); }}><option value="">Add condition</option>{available.filter(condition => rule.scope[condition.key] === undefined).map(condition => <option key={condition.key} value={condition.key}>{condition.label}</option>)}</select>}
     </div>
   </details>;
 }

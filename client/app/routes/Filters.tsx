@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import FieldHelp from "~/components/FieldHelp";
 import { useAppContext } from "~/providers/AppProvider";
 import { Option, Switch, filterButton as button, filterInput as input, filterCard as card } from "~/components/FilterControls";
 import { AddScopedRule, ScopedRule, libraryRule, subtypeName } from "~/components/ScopedFilterRules";
@@ -125,7 +126,7 @@ export default function Filters() {
     {message && <p role="status" className="text-sm text-(--color-fg-secondary)">{message}</p>}
 
     {music && plays && <section aria-labelledby="matching-title" className="space-y-3">
-      <h2 id="matching-title">Matching</h2>
+      <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
       <div className={card}>
         <RuleGroup title="Music matching" label="Music matching" rule={music} busy={saving} onToggle={enabled => edit(music.id, { enabled })}>
           <Option label="Case" id="music-case" help="Choose how capitalization affects music matching.">
@@ -147,7 +148,7 @@ export default function Filters() {
     </section>}
 
     {plays && <section aria-labelledby="inference-title" className="space-y-3">
-      <h2 id="inference-title">Inference</h2>
+      <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
       <div className={card}>
         {!!librarySources.length && saved && <div>
           <h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>
@@ -155,7 +156,7 @@ export default function Filters() {
           <AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} />
         </div>}
         <section className="space-y-4 p-4 sm:p-5" aria-label="Time inference">
-          <h3 className="text-lg font-medium normal-case tracking-normal">Time</h3>
+          <div className="flex items-center gap-1"><h3 className="text-lg font-medium normal-case tracking-normal">Time</h3><FieldHelp label="Time inference">Determine when plays happened using the dates and durations supplied by each source.</FieldHelp></div>
           <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
             <select id="spotify-time" className={input} disabled={saving} value={plays.settings.spotify_time} onChange={event => edit(plays.id, { spotify_time: event.target.value })}>
               <option value="estimated_start">Estimated start</option><option value="end">Reported end</option>
@@ -165,7 +166,7 @@ export default function Filters() {
             <Option label="Last.fm timezone" id="lastfm-timezone" help="Choose the timezone used by Last.fm export dates.">
               <TimezoneSelect id="lastfm-timezone" label="Last.fm timezone" disabled={saving} value={time.enabled ? time.settings.timezone : ""} onChange={timezone => upsert({ ...time, enabled: true, settings: { ...time.settings, timezone } })} />
             </Option>
-            <details>
+            {(saved.time_files.length > 1 || draft?.rules.some(rule => rule.type === "inference" && rule.scope.service === "lastfm" && rule.scope.file_hash && rule.enabled)) && <details>
               <summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Timezones by file</summary>
               <div className="mt-3 divide-y divide-(--color-bg-tertiary)">{saved.time_files.map(file => {
                 const rule = draft?.rules.find(rule => rule.type === "inference" && rule.subtype === "time" && rule.scope.service !== "itunes" && rule.scope.file_hash === file.hash && (!rule.scope.source_id || rule.scope.source_id === file.source_id));
@@ -176,7 +177,7 @@ export default function Filters() {
                   </Option>
                 </div>;
               })}</div>
-            </details>
+            </details>}
           </div>}
           {!!librarySources.length && saved && <div className="divide-y divide-(--color-bg-tertiary) border-t border-(--color-bg-tertiary)">
             {libraryTimes.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} blocked={!countEnabled(rule)} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
@@ -187,13 +188,13 @@ export default function Filters() {
     </section>}
 
     {saved?.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">
-      <h2 id="attribution-title">Attribution</h2>
+      <div className="flex items-center gap-2"><h2 id="attribution-title">Attribution</h2><FieldHelp label="Attribution">Determine which listening belongs to you.</FieldHelp></div>
       {["direct", "heuristic", "aggregate"].map(subtype => {
         const rules = draft?.rules.filter(rule => rule.type === "attribution" && rule.subtype === subtype) || [];
-        return !!rules.length && <div key={subtype} className="space-y-3">
-          <h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3>
-          <div className={card}>{rules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}</div>
-        </div>;
+        return !!rules.length && <div key={subtype} className={card}><div>
+          <div className="flex items-center gap-1 px-4 pt-4 sm:px-5 sm:pt-5"><h3 className="text-lg font-medium normal-case tracking-normal">{subtypeName(subtype)}</h3><FieldHelp label={`${subtypeName(subtype)} attribution`}>{subtype === "direct" ? "Choose who listened using information you know." : subtype === "heuristic" ? "Estimate who listened using supporting listening evidence." : "Assign your share of a cumulative listening total."}</FieldHelp></div>
+          {rules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}
+        </div></div>;
       })}
       <div className={card}><AddScopedRule state={saved} type="attribution" busy={saving} onAdd={upsert} /></div>
     </section>}

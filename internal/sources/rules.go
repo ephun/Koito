@@ -66,9 +66,15 @@ type FilterState struct {
 	History   []RuleVersion   `json:"history"`
 	TimeFiles []TimeFile      `json:"time_files"`
 	Decisions []MatchDecision `json:"decisions"`
-	Sources   []SourceSummary `json:"sources"`
+	Sources   []FilterSource  `json:"sources"`
 	Files     []FilterFile    `json:"files"`
 	Libraries []FilterLibrary `json:"libraries"`
+}
+
+type FilterSource struct {
+	ID      int64  `json:"id"`
+	Service string `json:"service"`
+	Records int    `json:"records"`
 }
 
 type FilterFile struct {
@@ -177,7 +183,23 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	if err != nil {
 		return state, err
 	}
-	state.Sources, err = s.Summary(ctx)
+	// Rule editing needs source identity and available records, not the full
+	// contribution summaries used by Imports.
+	state.Sources = []FilterSource{}
+	rows, err = s.DB.QueryContext(ctx, `SELECT a.id,a.service,(SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id) FROM source_accounts a ORDER BY a.id`)
+	if err != nil {
+		return state, err
+	}
+	for rows.Next() {
+		var source FilterSource
+		if err = rows.Scan(&source.ID, &source.Service, &source.Records); err != nil {
+			rows.Close()
+			return state, err
+		}
+		state.Sources = append(state.Sources, source)
+	}
+	err = rows.Err()
+	rows.Close()
 	if err != nil {
 		return state, err
 	}

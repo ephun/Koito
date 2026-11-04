@@ -44,9 +44,12 @@ Escape dismisses the tooltip.
 Tooltips stay within the viewport.
 Source headings keep their help icons on the same row.
 
-Last.fm timezone uses a dropdown with Unknown as the initial value.
+Last.fm timezone uses a dropdown.
+The current export uses UTC, corroborated by matching Spotify timestamps.
+Unknown remains available for unidentified exports.
 The timezone setting has no On/Off control.
-Timezones by file provides optional exceptions and defaults to using the Last.fm timezone.
+Timezones by file appears with multiple relevant files or enabled exceptions.
+Its optional exceptions default to using the Last.fm timezone.
 iTunes count help explicitly refers to iTunes library export records.
 Its time controls use last-played dates and estimated play dates as their visible language.
 
@@ -108,3 +111,19 @@ Keep recording identity and release information distinct.
 
 Audit automatic catalog matching, manual edits, aliases, deletion, and live submissions before adding their replacements.
 Include existing legacy data in the migration design.
+
+## Heading and condition refinements
+
+Type headings include their purpose in hover and keyboard help.
+Attribution subheadings sit inside their cards, matching the other filter types.
+The iTunes date controls are labeled iTunes play dates under Time.
+Count, Time, and Context remain the inference subtypes.
+Conditions is the interface label for a rule's scope.
+New conditions omit internal record and persistent track identifiers.
+Existing identifier conditions remain editable.
+Device conditions currently apply to Spotify's supplied platform metadata.
+Future conditions should follow each source adapter's available metadata.
+Filters loads source identities and record availability independently from Imports contribution summaries.
+
+iTunes inference controls omit the redundant source selector.
+Source selection remains available where several source types are meaningful.
