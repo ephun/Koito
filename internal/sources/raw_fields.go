@@ -97,6 +97,10 @@ func requestedRawFields(config RuleConfig) []string {
 	seen := map[string]bool{}
 	var expression func(filters.Expr)
 	expression = func(e filters.Expr) {
+		if e.Op == "field" && filters.ValidPairField(e.Field) {
+			_, field, _ := strings.Cut(e.Field, ".")
+			seen[field] = true
+		}
 		if e.Op == "field" && filters.ValidRawField(e.Field) {
 			seen[e.Field] = true
 		}

@@ -25,6 +25,10 @@ func FiltersHandler(store *sources.Store) http.HandlerFunc {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters":
 			value, err = store.Filters(r.Context())
+		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/pair":
+			left, _ := strconv.ParseInt(r.URL.Query().Get("left"), 10, 64)
+			right, _ := strconv.ParseInt(r.URL.Query().Get("right"), 10, 64)
+			value, err = store.InspectPair(r.Context(), left, right)
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/filters/fields":
 			id, e := strconv.ParseInt(r.URL.Query().Get("source"), 10, 64)
 			if e != nil || id <= 0 {

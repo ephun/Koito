@@ -16,7 +16,7 @@ const names: Record<string, string> = {
   "record.time": "Record time", "record.device": "Device", "library.id": "Library identifier",
   "track.persistent_id": "Library track identifier", "track.spotify_uri": "Spotify track URI", "track.recording_id": "MusicBrainz recording ID",
 };
-const label = (name: string) => names[name] || (name.startsWith("evidence:") ? `Personal plays (source ${name.slice(9)})` : /^(raw:|column:)/.test(name) ? name.slice(name.indexOf(":") + 1).split("/").filter(Boolean).map(part => part.replaceAll("~1", "/").replaceAll("~0", "~")).join(" / ") || "Source record" : name);
+const label = (name: string): string => names[name] || (/^(left|right)\./.test(name) ? `${name.startsWith("left.") ? "Left" : "Right"} ${label(name.slice(name.indexOf(".") + 1))}` : name.startsWith("evidence:") ? `Personal plays (source ${name.slice(9)})` : /^(raw:|column:)/.test(name) ? name.slice(name.indexOf(":") + 1).split("/").filter(Boolean).map(part => part.replaceAll("~1", "/").replaceAll("~0", "~")).join(" / ") || "Source record" : name);
 const booleans = new Set(["and", "or", "not", "nor", "nand", "xor", "xnor"]);
 const arithmetic = new Set(["add", "subtract", "multiply", "divide", "floor", "ceil", "absolute", "milliseconds", "seconds", "minutes", "hours", "days"]);
 const operatorHelp: Record<string, string> = {
@@ -74,20 +74,21 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
     const next = { ...schema, fields: { ...schema.fields }, labels: { ...schema.labels }, item_fields: { ...schema.item_fields }, item_labels: { ...schema.item_labels } };
     for (const field of fields) {
       if (schema.snapshot_fields && field.path.startsWith("raw:")) { const key = `item:/raw${field.path.slice(4)}`; next.item_fields[key] = "any"; next.item_labels[key] = field.label; }
+      else if (schema.pair_fields) { for (const side of ["left", "right"]) { next.fields[`${side}.${field.path}`] = "any"; next.labels[`${side}.${field.path}`] = `${side === "left" ? "Left" : "Right"} ${field.label}`; } }
       else if (!schema.snapshot_fields) { next.fields[field.path] = "any"; next.labels[field.path] = field.label; }
     }
     // Keep saved references selectable before their source catalog is loaded.
     function visit(value: unknown) {
       if (!value || typeof value !== "object") return;
       const item = value as Record<string, unknown>;
-      if (item.op === "field" && typeof item.field === "string") { if (/^(raw:|column:|evidence:)/.test(item.field)) next.fields[item.field] = item.field.startsWith("evidence:") ? "list" : "any"; if (item.field.startsWith("item:")) next.item_fields[item.field] ||= "any"; }
+      if (item.op === "field" && typeof item.field === "string") { if (/^(raw:|column:|evidence:|(left|right)\.(raw:|column:))/.test(item.field)) next.fields[item.field] = item.field.startsWith("evidence:") ? "list" : "any"; if (item.field.startsWith("item:")) next.item_fields[item.field] ||= "any"; }
       for (const child of Object.values(item)) visit(child);
     }
     visit(program);
     return next;
   }, [schema, fields, program]);
   return <div className="min-w-0 space-y-3">
-    {(schema.raw_fields || schema.snapshot_fields) && sources.length > 0 && <details>
+    {(schema.raw_fields || schema.snapshot_fields || schema.pair_fields) && sources.length > 0 && <details>
       <summary className="cursor-pointer text-sm">{schema.snapshot_fields ? "Record fields" : "Source fields"}</summary>
       {schema.snapshot_fields ? <button type="button" className="mt-2 text-sm underline" disabled={disabled || loading || !!fields.length} onClick={() => setSource(String(sources.find(item => item.service === "itunes")?.id || ""))}>Load fields</button> :
       <label className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-sm">Source<FieldHelp label="Source fields">Choose a source to add its imported metadata to the field menu.</FieldHelp>
@@ -181,7 +182,7 @@ function Statements({ steps, onChange, ...common }: Common & { steps: FilterStat
         </div>
       </> : <>
         <div className="flex min-w-0 items-center gap-2"><select aria-label="SET field" className={`${input} w-full text-sm`} value={step.set} disabled={disabled} onChange={event => edit(index, { ...step, set: event.target.value })}>
-          {Object.keys(schema.targets).map(field => <option key={field} value={field}>{label(field)}</option>)}
+          {Object.keys(schema.targets).map(field => <option key={field} value={field}>{schema.labels?.[field] || label(field)}</option>)}
         </select>{schema.help?.[step.set || ""] && <FieldHelp label={schema.labels?.[step.set || ""] || label(step.set || "")}>{schema.help[step.set || ""]}</FieldHelp>}</div>
         <p className="text-sm font-semibold">TO</p>
         <ExpressionEditor {...common} choices={schema.choices?.[step.set || ""]} expression={step.value || value()} onChange={next => edit(index, { ...step, value: next })} />

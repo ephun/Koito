@@ -106,6 +106,7 @@ func bindRoutes(
 				r.Get("/filters/plays", filters)
 				r.Get("/filters/record", filters)
 				r.Get("/filters/fields", filters)
+				r.Get("/filters/pair", filters)
 				r.Post("/filters/preview", filters)
 				r.Post("/filters/apply", filters)
 				r.Post("/filters/save", filters)

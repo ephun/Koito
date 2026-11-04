@@ -128,7 +128,7 @@ export default function Filters() {
     {loading && <p role="status">Loading filters...</p>}
     {message && <p role="status" className="text-sm text-(--color-fg-secondary)">{message}</p>}
 
-    {music && plays && <section aria-labelledby="matching-title" className="space-y-3">
+    {music && <section aria-labelledby="matching-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="matching-title">Matching</h2><FieldHelp label="Matching">Identify the same music, or records describing the same listen.</FieldHelp></div>
       <div className={card}>
         <RuleGroup title="Music matching" label="Music matching" rule={music} busy={saving} onToggle={enabled => edit(music.id, { enabled })}>
@@ -142,21 +142,22 @@ export default function Filters() {
             <Switch id="missing-albums" label="Match missing albums" checked={music.settings.match_missing_album} disabled={saving || !music.enabled} onChange={match_missing_album => edit(music.id, { match_missing_album })} />
           </Option>
         </RuleGroup>
-        <RuleGroup title="Play matching" label="Play matching" rule={plays} busy={saving} onToggle={enabled => edit(plays.id, { enabled })}>
+        {plays && !saved?.blocks?.schemas["matching:play"] && <RuleGroup title="Play matching" label="Play matching" rule={plays} busy={saving} onToggle={enabled => edit(plays.id, { enabled })}>
           <Option label="Time tolerance" id="play-tolerance" help="Allow extra seconds between matching timestamps.">
             <span className="flex items-center gap-2"><input id="play-tolerance" aria-label="Time tolerance in seconds" className={`${input} w-24`} type="number" min="0" max="3600" step="1" disabled={saving || !plays.enabled} value={plays.settings.tolerance_seconds} onChange={event => edit(plays.id, { tolerance_seconds: Number(event.target.value) })} /><span className="text-sm text-(--color-fg-secondary)">seconds</span></span>
           </Option>
-        </RuleGroup>
+        </RuleGroup>}
       </div>
+      {saved && draft && saved.blocks?.schemas["matching:play"] && <ProgramFilterManager state={saved} config={draft} busy={saving} type="matching" subtype="play" embedded onChange={upsert} onRemove={remove} />}
     </section>}
 
-    {plays && <section aria-labelledby="inference-title" className="space-y-3">
+    {saved && <section aria-labelledby="inference-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
       <div className={saved?.blocks?.schemas["inference:count"] ? "space-y-4" : card}>
         {!!librarySources.length && saved && <div>
           {draft && saved.blocks?.schemas["inference:count"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} /> : <><h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>{countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}<AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} /></>}
         </div>}
-        {saved && draft && saved.blocks?.schemas["inference:time"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} /> : <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
+        {saved && draft && saved.blocks?.schemas["inference:time"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} /> : plays && <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
           <div className="flex items-center gap-1"><h3 className="text-lg font-medium normal-case tracking-normal">Time</h3><FieldHelp label="Time inference">Determine when plays happened using the dates and durations supplied by each source.</FieldHelp></div>
           <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
             <select id="spotify-time" className={input} disabled={saving} value={plays.settings.spotify_time} onChange={event => edit(plays.id, { spotify_time: event.target.value })}>

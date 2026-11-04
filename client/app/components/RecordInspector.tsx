@@ -29,12 +29,14 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [target, setTarget] = useState("");
+  const [pair, setPair] = useState<{ left: number; right: number; music: boolean; play: boolean; issues: { name: string; reason: string }[] }>();
 
   useEffect(() => {
     let active = true;
     setInspection(undefined);
     setError("");
     setTarget("");
+    setPair(undefined);
     filterRequest<Inspection>(`/record?id=${id}`).then(value => {
       if (!active) return;
       setInspection(value);
@@ -55,6 +57,14 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
       await queries.invalidateQueries();
       await onSaved();
     } catch (error) { setError(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function compare() {
+    if (!Number(target) || busy) return;
+    setError("");setBusy(true);setPair(undefined);
+    try { setPair(await filterRequest(`/pair?left=${id}&right=${Number(target)}`)); }
+    catch (error) { setError(errorMessage(error)); }
     finally { setBusy(false); }
   }
 
@@ -93,9 +103,11 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
       {!!inspection.candidates.length && <div className="space-y-2"><h3>Possible matches</h3>{inspection.candidates.map(record => <div key={record.id} className="space-y-2"><RecordDetails record={record} /><button type="button" className={button} disabled={busy} onClick={() => decide("match", record.id)}>Match #{record.id}</button></div>)}</div>}
       {inspection.record.values.reason === "counted" && <details><summary className="cursor-pointer text-sm text-(--color-fg-secondary)">Matching</summary>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2">Other record<input className="w-28 rounded border border-(--color-bg-tertiary) bg-(--color-bg) p-2" type="number" min="1" value={target} disabled={busy} onChange={event => setTarget(event.target.value)} /></label>
+          <label className="flex items-center gap-2">Other record<input className="w-28 rounded border border-(--color-bg-tertiary) bg-(--color-bg) p-2" type="number" min="1" value={target} disabled={busy} onChange={event => { setTarget(event.target.value); setPair(undefined); }} /></label>
+          <button type="button" className={button} disabled={busy || !Number(target) || Number(target) === id} onClick={compare}>Compare</button>
           {[["match", "Match"], ["split", "Split"], ["clear", "Use rules"]].map(([action, label]) => <button type="button" className={button} key={action} disabled={busy || !Number(target) || Number(target) === id} onClick={() => decide(action)}>{label}</button>)}
         </div>
+        {pair && <div className="mt-3 space-y-2 text-sm" role="status"><p>Music matching: {pair.music ? "TRUE" : "FALSE"}</p><p>Play matching: {pair.play ? "TRUE" : "FALSE"}</p>{pair.issues.map((issue,index) => <p key={index} className="break-words">{issue.name || "Filter"}: {issue.reason}</p>)}</div>}
       </details>}
     </>}
   </section>;

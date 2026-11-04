@@ -78,6 +78,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err := prepareTimePrograms(config); err != nil {
 		return nil, err
 	}
+	if err := preparePlayPrograms(config); err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err
@@ -235,6 +238,9 @@ func timeCompatible(a, b matchingRecord, tolerance time.Duration) bool {
 // Exact source duplicates are linked first. Other automatic matches require
 // a unique partner on both sides; no repeated-pass or transitive time matching.
 func calculateMatches(ctx context.Context, records []matchingRecord, config RuleConfig, decisions []MatchDecision) (matchPlan, error) {
+	if err := preparePlayPrograms(config); err != nil {
+		return matchPlan{}, err
+	}
 	p := matchPlan{Records: records, Reasons: map[int64]string{}, Keys: map[int64]string{}, Ambiguous: map[int64][]int64{}}
 	musicRule, playRule := config.matchingRules()
 	byID := map[int64]int{}
@@ -353,7 +359,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 			for _, i := range indices {
 				linked := false
 				for _, other := range representatives {
-					if join(i, other) {
+					if resolvePlayPair(ctx, config, records[i], records[other]).Match && join(i, other) {
 						linked = true
 						break
 					}
@@ -396,7 +402,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 			}
 			return [2]int{a, b}
 		}
-		tolerance := time.Duration(playRule.Settings.ToleranceSeconds) * time.Second
+		tolerance := playSearchGap(config)
 		for _, block := range blocks {
 			sort.Slice(block, func(i, j int) bool { return records[block[i]].Start.Before(records[block[j]].Start) })
 			for pos, i := range block {
@@ -406,7 +412,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 				a := records[i]
 				for _, j := range block[pos+1:] {
 					b := records[j]
-					if b.Start.After(a.Start.Add(time.Duration(a.Values.Precision)).Add(tolerance)) {
+					if tolerance != unlimitedPairGap && b.Start.After(a.Start.Add(time.Duration(a.Values.Precision)).Add(tolerance)) {
 						break
 					}
 					ra, rb := root(i), root(j)
@@ -416,7 +422,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 					if a.Service == b.Service && (a.SourceID != b.SourceID || (a.FileHash == b.FileHash && (a.Service != "lastfm" || a.Values.Precision <= int64(time.Second) || b.Values.Precision <= int64(time.Second)))) {
 						continue
 					}
-					if !musicCompatible(a.Values, b.Values, musicRule) || !timeCompatible(a, b, tolerance) {
+					if !musicCompatible(a.Values, b.Values, musicRule) || !resolvePlayPair(ctx, config, a, b).Match {
 						continue
 					}
 					// Every member must remain compatible with the candidate. This avoids
@@ -428,7 +434,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 							if records[x].FileHash == records[y].FileHash && records[x].Service == records[y].Service {
 								sharedFile = true
 							}
-							if !musicCompatible(records[x].Values, records[y].Values, musicRule) || !timeCompatible(records[x], records[y], tolerance) {
+							if !musicCompatible(records[x].Values, records[y].Values, musicRule) || !resolvePlayPair(ctx, config, records[x], records[y]).Match {
 								compatible = false
 							}
 						}

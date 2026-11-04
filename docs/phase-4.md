@@ -382,3 +382,39 @@ Restoring the original configuration retained 168,424 plays and 191,473 records.
 The timezone dropdown and editor passed desktop, 390-pixel, and 320-pixel checks without page errors.
 
 Matching, music aliases, edition grouping, genres, optional tags, and contextual corrections remain outstanding.
+
+## Play matching programs
+
+Play matching now uses the shared conditional editor with a Same play Boolean assignment.
+Each comparison has stable Left and Right records ordered by record identifier.
+Expressions can read both records' music fields, sources, timestamps, devices, files, and arbitrary raw fields.
+Timestamp-range overlap, range gaps, comparable time meanings, and exact source duplicates are explicit inputs.
+
+Existing time tolerances become duration comparisons in the migrated program.
+Exact copies retain their previous handling, including ambiguous repeated minute-resolution Last.fm records.
+Multiple Play matching filters support priority, explicit exclusions, equal-priority conflicts, and missing-field explanations.
+An unresolved condition discards the complete filter's assignments.
+Manual match and split decisions retain their independent precedence.
+Music compatibility, same-owner requirements, and candidate ambiguity remain separate checks.
+
+Candidate indexing derives safe time bounds from recognized expressions.
+Unbounded or unrecognized expressions compare the entire matching music block.
+The optimization does not impose an implicit one-hour limit on edited filters.
+The shared editor offers overlap and 30-second starting filters.
+Existing source-preference settings remain stored during migration.
+
+Record inspection can compare a selected second record using the active matching filters.
+It shows Music matching and Play matching results separately, with unresolved explanations.
+The comparison is read-only and uses the existing record inspection flow.
+
+Regression tests cover migration, disabled settings, duplicates, ambiguity, duration limits, distant candidates,
+stable record sides, raw fields, explicit exclusions, priorities, conflicts, missing fields, reversal, and repeat rebuilding.
+The full Go suite and frontend type checking and production build pass.
+
+Music matching migration, music aliases, edition grouping, genres, optional tags, and contextual corrections remain outstanding.
+
+Actual-import browser acceptance added an exception for one existing Spotify/Last.fm pair.
+The exception changed 168,424 plays to 168,425 and returned FALSE in record comparison.
+Restoring the original configuration restored 168,424 plays and the complete play fingerprint.
+All 191,473 source records retained identical fingerprints.
+Desktop, 390-pixel, and 320-pixel checks passed without page errors.

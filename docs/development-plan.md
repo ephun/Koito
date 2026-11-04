@@ -387,7 +387,7 @@ options, and the default treatment of uncertain shared listening.
 original spelling, identifiers, or album association.
 
 **Status: in progress.** Track histories across albums are implemented and verified.
-The atomic evaluator, Naming, attribution, Count and Time programs, and imported fields are implemented.
+The atomic evaluator, Naming, attribution, Count, Time, Play matching, and imported fields are implemented.
 Remaining filter migrations, metadata cleanup, genres, and optional tags remain in this phase.
 Implementation and acceptance evidence: [Phase 4](phase-4.md).
 

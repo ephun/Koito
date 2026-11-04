@@ -41,6 +41,7 @@ var Operators = []Operator{
 }
 
 type Schema struct {
+	PairFields     bool                    `json:"pair_fields,omitempty"`
 	Help           map[string]string       `json:"help,omitempty"`
 	SnapshotFields bool                    `json:"snapshot_fields,omitempty"`
 	ItemFields     map[string]Type         `json:"item_fields,omitempty"`
@@ -91,6 +92,9 @@ func compile(e Expr, s Schema, depth int, n *int) (*Expression, error) {
 			kind, ok = s.Targets[e.Field]
 		}
 		if !ok && s.RawFields && ValidRawField(e.Field) {
+			kind, ok = Any, true
+		}
+		if !ok && s.PairFields && ValidPairField(e.Field) {
 			kind, ok = Any, true
 		}
 		if !ok && s.EvidenceFields && ValidEvidenceField(e.Field) {

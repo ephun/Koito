@@ -18,6 +18,15 @@ func ValidItemField(field string) bool {
 	return strings.HasPrefix(field, "item:") && ValidRawField("raw:"+strings.TrimPrefix(field, "item:"))
 }
 
+func ValidPairField(field string) bool {
+	for _, prefix := range []string{"left.", "right."} {
+		if strings.HasPrefix(field, prefix) {
+			return ValidRawField(strings.TrimPrefix(field, prefix))
+		}
+	}
+	return false
+}
+
 // Raw fields use JSON Pointer. Column fields address preserved CSV headers.
 func ValidRawField(field string) bool {
 	var path string
