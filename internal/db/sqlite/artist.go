@@ -65,21 +65,21 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	}
 
 	var listenCount int64
-	s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
+	s.db.QueryRowContext(ctx, countedListeningQuery(`SELECT COUNT(*) FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id WHERE at2.artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&listenCount)
 
 	var timeListened int64
 	s.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(t.duration), 0)
 		FROM listens l JOIN tracks t ON l.track_id = t.id
-		JOIN artist_tracks at2 ON t.id = at2.track_id
+		JOIN displayed_artist_tracks at2 ON t.id = at2.track_id
 		WHERE at2.artist_id = ?`,
 		opts.ID).Scan(&timeListened)
 
 	var firstListenUnix int64
 	err = s.db.QueryRowContext(ctx, `
 		SELECT l.listened_at FROM listens l
-		JOIN artist_tracks at2 ON l.track_id = at2.track_id
+		JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 		WHERE at2.artist_id = ? ORDER BY l.listened_at ASC LIMIT 1`,
 		opts.ID).Scan(&firstListenUnix)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -91,7 +91,7 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		SELECT rank FROM (
 			SELECT at2.artist_id,
 			       RANK() OVER (ORDER BY COUNT(*) DESC) AS rank
-			FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id
+			FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 			GROUP BY at2.artist_id
 		) WHERE artist_id = ?`, db.Timeframe{Period: db.PeriodAllTime}),
 		opts.ID).Scan(&rank)
@@ -344,7 +344,7 @@ func (s *Sqlite) SetPrimaryArtistAlias(ctx context.Context, id int32, alias stri
 func (s *Sqlite) GetArtistsForAlbum(ctx context.Context, id int32) ([]*models.Artist, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=a.id),awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image, ar.is_primary
-		FROM artist_releases ar
+		FROM displayed_artist_releases ar
 		JOIN artists_with_name awn ON awn.id = ar.artist_id
 		JOIN artists a ON a.id = ar.artist_id
 		WHERE ar.release_id = ?
@@ -373,7 +373,7 @@ func (s *Sqlite) GetArtistsForAlbum(ctx context.Context, id int32) ([]*models.Ar
 func (s *Sqlite) GetArtistsForTrack(ctx context.Context, id int32) ([]*models.Artist, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=a.id),awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image, at2.is_primary
-		FROM artist_tracks at2
+		FROM displayed_artist_tracks at2
 		JOIN artists_with_name awn ON awn.id = at2.artist_id
 		JOIN artists a ON a.id = at2.artist_id
 		WHERE at2.track_id = ?
@@ -411,7 +411,7 @@ func (s *Sqlite) GetTopArtistsPaginated(ctx context.Context, opts db.GetItemsOpt
 		WITH ArtistCounts AS (
 			SELECT at2.artist_id, COUNT(*) AS listen_count
 			FROM listens l
-			JOIN artist_tracks at2 ON l.track_id = at2.track_id
+			JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ?
 			GROUP BY at2.artist_id
 		),
@@ -567,7 +567,7 @@ func (s *Sqlite) CountArtists(ctx context.Context, timeframe db.Timeframe) (int6
 	var count int64
 	err := s.db.QueryRowContext(ctx, countedListeningQuery(`
 		SELECT COUNT(DISTINCT at2.artist_id)
-		FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id
+		FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 		WHERE l.listened_at BETWEEN ? AND ?`, timeframe),
 		t1.Unix(), t2.Unix()).Scan(&count)
 	return count, err
@@ -581,7 +581,7 @@ func (s *Sqlite) CountNewArtists(ctx context.Context, timeframe db.Timeframe) (i
 			SELECT at2.artist_id
 			FROM listens l
 			JOIN tracks t ON l.track_id = t.id
-			JOIN artist_tracks at2 ON t.id = at2.track_id
+			JOIN displayed_artist_tracks at2 ON t.id = at2.track_id
 			GROUP BY at2.artist_id
 			HAVING MIN(l.listened_at) BETWEEN ? AND ?
 		)`,

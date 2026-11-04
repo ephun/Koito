@@ -779,171 +779,34 @@ func TestAlbumReplaceImage(t *testing.T) {
 	assert.Contains(t, a.Image.Small, response.Image)
 }
 
-func TestSetPrimaryArtist(t *testing.T) {
+func TestRetiredCatalogWritesPreserveOriginalCredits(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	// set and unset track primary artist
-
-	resp, err := makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/artists/1", strings.NewReader(`{"is_primary":false}`))
+	for _, request := range []struct{ method, path, body string }{
+		{"PATCH", "/artist/1", `{"musicbrainz_id":""}`},
+		{"PATCH", "/album/1", `{"various_artists":true}`},
+		{"PATCH", "/track/1", `{"musicbrainz_id":""}`},
+		{"PATCH", "/track/1/artists/1", `{"is_primary":false}`},
+		{"PATCH", "/album/1/artists/1", `{"is_primary":false}`},
+		{"POST", "/track/1/artists", `{"artist_ids":[2]}`},
+		{"DELETE", "/track/1/artists/1", ``},
+	} {
+		t.Run(request.method+request.path, func(t *testing.T) {
+			response, err := makeAuthRequest(t, session, request.method, "/apis/web/v1"+request.path, strings.NewReader(request.body))
+			require.NoError(t, err)
+			defer response.Body.Close()
+			require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+		})
+	}
+	exists, err := store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_tracks WHERE track_id=1 AND artist_id=1 AND is_primary=1)`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err := store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_tracks
-      WHERE track_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, false)
+	require.True(t, exists)
+	exists, err = store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_releases WHERE release_id=1 AND artist_id=1 AND is_primary=1)`)
 	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be false")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/artists/1", strings.NewReader(`{"is_primary":true}`))
+	require.True(t, exists)
+	exists, err = store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_tracks WHERE track_id=1 AND artist_id=2)`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_tracks
-      WHERE track_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, true)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be true")
-
-	// set and unset album primary artist
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/1/artists/1", strings.NewReader(`{"is_primary":false}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_releases
-      WHERE release_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, false)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be false")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/1/artists/1", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_releases
-      WHERE release_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, true)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be true")
-
-	// create a new track with multiple artists to make sure only one is primary at a time
-
-	listenBody := `{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": 1749475719,
-				"track_metadata": {
-					"additional_info": {
-						"artist_names": [
-							"Rat Tally",
-							"Madeline Kenney"
-						],
-						"duration_ms": 197270,
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "Rat Tally feat. Madeline Kenney",
-					"release_name": "In My Car",
-					"track_name": "In My Car"
-				}
-			}
-		]
-	}`
-
-	req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(listenBody))
-	require.NoError(t, err)
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-	req.Header.Add("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	respBytes, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-
-	// ensure only one artist can be primary at once
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/4/artists/4", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/4/artists/5", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/4/artists/4", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/4/artists/5", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	count, err := store.Count(`SELECT COUNT(*) FROM artist_releases WHERE release_id = $1 AND is_primary = $2`, 4, true)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, count, "expected only one primary artist for release")
-	count, err = store.Count(`SELECT COUNT(*) FROM artist_tracks WHERE track_id = $1 AND is_primary = $2`, 4, true)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, count, "expected only one primary artist for track")
-}
-
-func TestUpdateArtists_Track(t *testing.T) {
-	truncateTestData(t)
-	t.Run("Submit Listens", doSubmitListens)
-
-	// happy path: add artist 2 to track 1
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	exists, err := store.RowExists(`
-		SELECT EXISTS (
-			SELECT 1 FROM artist_tracks
-			WHERE track_id = $1 AND artist_id = $2
-		)`, 1, 2)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist 2 to be associated with track 1")
-
-	// happy path: remove artist 2 from track 1
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/track/1/artists/2", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-		SELECT EXISTS (
-			SELECT 1 FROM artist_tracks
-			WHERE track_id = $1 AND artist_id = $2
-		)`, 1, 2)
-	require.NoError(t, err)
-	assert.False(t, exists, "expected artist 2 to be removed from track 1")
-
-	// 401 Unauthorized
-	req, err := http.NewRequest("POST", host()+"/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	resp, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-
-	// 400 Bad Request: invalid id
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/notanumber/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-
-	// 400 Bad Request: invalid add_artist
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":["abc123"]}`))
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-
-	truncateTestData(t)
+	require.False(t, exists)
 }
 
 func TestManualListen(t *testing.T) {

@@ -69,7 +69,7 @@ func (s *Sqlite) artistGenres(ctx context.Context, id int32) ([]string, error) {
 
 func (s *Sqlite) genreChartRows(ctx context.Context, query, genre string, artistChart bool, args ...any) (*sql.Rows, error) {
 	if genre != "" {
-		predicate := `EXISTS(SELECT 1 FROM artist_genres ag JOIN artist_tracks gat ON gat.artist_id=ag.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
+		predicate := `EXISTS(SELECT 1 FROM artist_genres ag JOIN displayed_artist_tracks gat ON gat.artist_id=ag.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
 		if artistChart {
 			predicate = `EXISTS(SELECT 1 FROM artist_genres ag WHERE ag.artist_id=at2.artist_id AND ag.genre=?)`
 		}

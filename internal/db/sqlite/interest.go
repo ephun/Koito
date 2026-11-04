@@ -24,7 +24,7 @@ func (s *Sqlite) GetInterest(ctx context.Context, opts db.GetInterestOpts) ([]db
 		query = `
 			SELECT l.listened_at FROM listens l
 			JOIN tracks t ON t.id = l.track_id
-			JOIN artist_tracks at2 ON at2.track_id = t.id
+			JOIN displayed_artist_tracks at2 ON at2.track_id = t.id
 			WHERE at2.artist_id = ?
 			ORDER BY l.listened_at`
 		arg = opts.ArtistID

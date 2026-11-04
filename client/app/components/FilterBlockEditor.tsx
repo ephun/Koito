@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import FieldHelp from "./FieldHelp";
+import ArtistCreditList from "./ArtistCreditList";
 import { filterButton as button, filterInput as input } from "./FilterControls";
 import { sourceName, type BlockOperator, type BlockSchema, type Expression, type FilterProgram, type FilterStatement, type FilterSource, type SourceField } from "~/utils/filterRules";
 
@@ -105,10 +106,12 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
 
 type Common = { schema: BlockSchema; operators: BlockOperator[]; disabled: boolean };
 
-function ExpressionEditor({ expression, onChange, choices, ...common }: Common & { expression: Expression; onChange: (value: Expression) => void; choices?: { label: string; value: string }[] }) {
+function ExpressionEditor({ expression, onChange, choices, artistCredits, ...common }: Common & { expression: Expression; onChange: (value: Expression) => void; choices?: { label: string; value: string }[]; artistCredits?: boolean }) {
   const { schema, operators, disabled } = common;
   const args = expression.args || [];
   const operation = operators.find(op => op.id === expression.op);
+  const creditIDs = !artistCredits ? undefined : expression.op === "list" && args.every(arg => arg.op === "literal" && typeof arg.value === "number") ? args.map(arg => arg.value as number) : expression.op === "literal" && Array.isArray(expression.value) && expression.value.every(item => typeof item === "number") ? expression.value as number[] : undefined;
+  const creditList = creditIDs !== undefined;
   function choose(op: string) {
     if (op === "field") { onChange(reference(schema.fields["original.title"] ? "original.title" : Object.keys(schema.fields)[0])); return; }
     if (op === "literal") { onChange(value()); return; }
@@ -127,10 +130,10 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
       </select>}
       {expression.op === "field" && schema.help?.[expression.field || ""] && <FieldHelp label={schema.labels?.[expression.field || ""] || label(expression.field || "")}>{schema.help[expression.field || ""]}</FieldHelp>}
       {expression.op === "field" && expression.field?.startsWith("evidence:") && <FieldHelp label="Personal plays">Collections contain distinct matching plays assigned to you by Direct filters. Item fields include time, artist, album, title, and device.</FieldHelp>}
-      {expression.op === "literal" && choices?.length ? <select aria-label="Value" className={`${input} min-w-0 flex-1 text-sm`} disabled={disabled} value={String(expression.value ?? "")} onChange={event => onChange(value(event.target.value))}>
+      {!creditList && expression.op === "literal" && choices?.length ? <select aria-label="Value" className={`${input} min-w-0 flex-1 text-sm`} disabled={disabled} value={String(expression.value ?? "")} onChange={event => onChange(value(event.target.value))}>
         {!choices.some(choice => choice.value === expression.value) && <option value={String(expression.value ?? "")}>{expression.value ? String(expression.value) : "Choose value"}</option>}
         {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-      </select> : expression.op === "literal" && <>
+      </select> : !creditList && expression.op === "literal" && <>
         <select aria-label="Value type" className={`${input} text-sm`} disabled={disabled} value={expression.value === null ? "null" : typeof expression.value} onChange={event => onChange(event.target.value === "number" ? number() : value(event.target.value === "boolean" ? true : event.target.value === "null" ? null : ""))}>
           <option value="string">Text</option><option value="number">Number</option><option value="boolean">Boolean</option><option value="null">Null</option>
         </select>
@@ -138,13 +141,14 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
           : expression.value !== null && <input aria-label="Value" className={`${input} w-full flex-1 text-sm`} disabled={disabled} type={typeof expression.value === "number" ? "number" : "text"} step="any" value={String(expression.value ?? "")} onChange={event => onChange(value(typeof expression.value === "number" ? Number(event.target.value) : event.target.value))} />}
       </>}
     </div>
-    {args.length > 0 && <div className="space-y-2 border-l-2 border-(--color-bg-tertiary) pl-2 sm:pl-3">
+    {creditList && <ArtistCreditList ids={creditIDs || []} disabled={disabled} onChange={ids => onChange({op:"list",args:ids.map(id => value(id))})} />}
+    {!creditList && args.length > 0 && <div className="space-y-2 border-l-2 border-(--color-bg-tertiary) pl-2 sm:pl-3">
       {args.map((arg, index) => <div key={index} className="min-w-0 space-y-1">
         <ExpressionEditor {...common} schema={index === 1 && ["where", "map"].includes(expression.op) ? { ...schema, fields: { ...schema.fields, item: "any", ...(args[0]?.op === "field" && ["library.snapshots", "count.snapshots"].includes(args[0].field || "") ? schema.item_fields : {}) }, labels: { ...schema.labels, ...schema.item_labels } } : schema} choices={index === 1 && ["eq", "ne"].includes(expression.op) && args[0]?.op === "field" ? fieldChoices(schema, args[0]) : undefined} expression={arg} onChange={next => onChange({ ...expression, args: args.map((existing, i) => i === index ? next : existing) })} />
         {!!operation && args.length > operation.min_args && <button type="button" disabled={disabled} className="text-xs underline" onClick={() => onChange({ ...expression, args: args.filter((_, i) => i !== index) })}>Remove input</button>}
       </div>)}
     </div>}
-    {!!operation && args.length < operation.max_args && <button type="button" disabled={disabled} className="text-sm underline" onClick={() => onChange({ ...expression, args: [...args, value(booleans.has(expression.op) ? true : "")] })}>Add input</button>}
+    {!creditList && !!operation && args.length < operation.max_args && <button type="button" disabled={disabled} className="text-sm underline" onClick={() => onChange({ ...expression, args: [...args, value(booleans.has(expression.op) ? true : "")] })}>Add input</button>}
   </div>;
 }
 
@@ -181,11 +185,11 @@ function Statements({ steps, onChange, ...common }: Common & { steps: FilterStat
           {step.else === undefined && <button type="button" disabled={disabled} onClick={() => edit(index, { ...step, else: [] })}>Add ELSE</button>}
         </div>
       </> : <>
-        <div className="flex min-w-0 items-center gap-2"><select aria-label="SET field" className={`${input} w-full text-sm`} value={step.set} disabled={disabled} onChange={event => edit(index, { ...step, set: event.target.value })}>
+        <div className="flex min-w-0 items-center gap-2"><select aria-label="SET field" className={`${input} w-full text-sm`} value={step.set} disabled={disabled} onChange={event => { const target = event.target.value; edit(index, { ...step, set: target, ...(schema.targets[target] === "list" && schema.targets[step.set || ""] !== "list" ? { value: { op: "list", args: [] } } : {}) }); }}>
           {Object.keys(schema.targets).map(field => <option key={field} value={field}>{schema.labels?.[field] || label(field)}</option>)}
         </select>{schema.help?.[step.set || ""] && <FieldHelp label={schema.labels?.[step.set || ""] || label(step.set || "")}>{schema.help[step.set || ""]}</FieldHelp>}</div>
         <p className="text-sm font-semibold">TO</p>
-        <ExpressionEditor {...common} choices={schema.choices?.[step.set || ""]} expression={step.value || value()} onChange={next => edit(index, { ...step, value: next })} />
+        <ExpressionEditor {...common} artistCredits={["display.artist_ids","display.primary_artist_ids"].includes(step.set || "")} choices={schema.choices?.[step.set || ""]} expression={step.value || value()} onChange={next => edit(index, { ...step, value: next })} />
       </>}
     </div>)}
     <div className="flex flex-wrap gap-2">

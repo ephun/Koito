@@ -659,3 +659,44 @@ Phase 4 remains in progress.
 Native alias mutations, artist-credit mutations, primary-credit mutations, and catalog deletion routes still exist.
 Their UI and endpoints require reversible replacements before the phase can close.
 Mixed-action Grouping consistency and the complete requirements audit also remain outstanding.
+
+## Reversible artist credits
+
+Naming filters can assign artist credits and primary artist credits in album and track contexts.
+Assignments use lists of existing artist identities. Primary artists must belong to the assigned credits.
+Multiple primary credits are supported when explicitly assigned.
+Name and credit actions are validated together before a filter's results are accepted.
+Invalid identities or primary membership leave the previous name and credits unchanged with an inspectable issue.
+
+Migration 19 stores derived credit sets and their members separately from original artist relationships.
+Displayed relationship views fall back to original links when no correction is assigned.
+An explicitly empty set is distinct from having no correction.
+Details, listening rows, artist charts, artist activity, genre filtering, and report filters read displayed relationships.
+Ingestion lookups and original exports retain their original relationship reads.
+Disabling a correction rebuilds the displayed relationships from originals.
+
+Edit artist credits opens a contextual Naming filter in the shared editor.
+List actions use the existing native search picker and show artist names.
+Expression lists and catalog-field expressions remain available through the same editor.
+Selecting a list target from a text target starts an empty list.
+Credit previews show before-and-after artist names.
+The native picker now passes the newly selected artist to its caller.
+
+The obsolete identifier, Various Artists, association, and primary-credit controls were removed.
+Their legacy write routes were retired while image and read routes remain available.
+Authenticated integration checks verify that retired requests are rejected and original credits remain unchanged.
+
+Database tests cover publication, previews, disabling, chart attribution, original relationships, and atomic rejection of invalid corrections.
+Evaluator tests cover ordered multiple credits, repeated identifiers, and primary membership validation.
+The full Go suite, frontend type checking, and production build pass.
+Actual-import browser acceptance changed track 271's displayed artist through native search at 390 and 320 pixels.
+It checked the preview, primary credit, rendered artist link, unchanged original fingerprints, and zero page errors.
+Restoring the original configuration restored the original artist credit and retained all checked fingerprints.
+
+Alias mutations and catalog deletion controls still require reversible replacements.
+Mixed-action Grouping consistency, full catalog-read coverage, and the complete Phase 4 audit remain open.
+
+Main activation passed after a database backup and migration 19.
+The main rebuild completed in 68.89 seconds with 191,473 records, 168,424 plays, and zero collisions or estimates.
+All three original-file hashes and preservation fingerprints passed.
+Track 271 retained 521 plays across its original album appearances.

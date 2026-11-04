@@ -87,7 +87,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 			t1.Unix(), t2.Unix(), opts.AlbumID).Scan(&count)
 	case opts.ArtistID > 0:
 		s.db.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM listens l JOIN artist_tracks at2 ON l.track_id = at2.track_id
+			SELECT COUNT(*) FROM listens l JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?`,
 			t1.Unix(), t2.Unix(), opts.ArtistID).Scan(&count)
 	default:
@@ -133,7 +133,7 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 			SELECT l.listened_at, l.track_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='track' AND cn.item_id=t.id),t.title), t.release_id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='album' AND cn.item_id=t.release_id),COALESCE((SELECT alias FROM release_aliases WHERE release_id=t.release_id AND is_primary=1),'')), l.play_key, COALESCE((SELECT representative_record FROM source_plays p WHERE p.policy='filters-v1' AND p.play_key=l.play_key),0),COALESCE((SELECT evidence_level FROM source_play_details d WHERE d.play_key=l.play_key),'observed'),COALESCE((SELECT json_extract(attribution_json,'$.basis') FROM source_play_details d WHERE d.play_key=l.play_key),''),COALESCE((SELECT tags_json FROM source_play_tags tags WHERE tags.play_key=l.play_key),'[]')
 			FROM listens l
 			JOIN tracks_with_title t ON l.track_id = t.id
-			JOIN artist_tracks at2 ON t.id = at2.track_id
+			JOIN displayed_artist_tracks at2 ON t.id = at2.track_id
 			WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?
 			ORDER BY l.listened_at DESC,l.track_id,l.play_key LIMIT ? OFFSET ?`,
 			t1.Unix(), t2.Unix(), opts.ArtistID, opts.Limit, offset,

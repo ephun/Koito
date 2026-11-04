@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { Modal } from "../Modal";
 import AliasManager from "./AliasManager";
-import ArtistManager from "./ArtistManager";
 
 interface Props {
   type: string;
@@ -27,7 +26,7 @@ export default function EditModal({ open, setOpen, type, id }: Props) {
             <Link className="underline" to={`/filters?catalog=album&id=${id}&edit=classification`} onClick={handleClose}>Edit Various Artists</Link>
           </>
         )}
-        {type !== "artist" && <ArtistManager id={id} type={type} />}
+        {type !== "artist" && <Link className="underline" to={`/filters?catalog=${type}&id=${id}&edit=credits`} onClick={handleClose}>Edit artist credits</Link>}
         <Link className="underline" to={`/filters?catalog=${type}&id=${id}&edit=identifier`} onClick={handleClose}>Edit MusicBrainz identifier</Link>
       </div>
     </Modal>

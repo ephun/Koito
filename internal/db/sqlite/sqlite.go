@@ -148,7 +148,7 @@ func (s *Sqlite) Close(_ context.Context) {
 func (s *Sqlite) artistsForTrack(ctx context.Context, trackID int32) ([]models.SimpleArtist, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name), at2.is_primary
-		FROM artist_tracks at2
+		FROM displayed_artist_tracks at2
 		JOIN artists_with_name awn ON awn.id = at2.artist_id
 		JOIN artists a ON a.id = at2.artist_id
 		WHERE at2.track_id = ?
@@ -176,7 +176,7 @@ func (s *Sqlite) artistsForTrack(ctx context.Context, trackID int32) ([]models.S
 func (s *Sqlite) artistsForRelease(ctx context.Context, releaseID int32) ([]models.SimpleArtist, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name), ar.is_primary
-		FROM artist_releases ar
+		FROM displayed_artist_releases ar
 		JOIN artists_with_name awn ON awn.id = ar.artist_id
 		JOIN artists a ON a.id = ar.artist_id
 		WHERE ar.release_id = ?

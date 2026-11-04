@@ -28,15 +28,15 @@ func namingSchema() filters.Schema {
 	return filters.Schema{
 		RawFields: true,
 		Fields: map[string]filters.Type{
-			"original.artists": filters.List, "catalog.artist_ids": filters.List, "catalog.kind": filters.Text, "catalog.id": filters.Number, "catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
+			"original.primary_artist_ids": filters.List, "original.artists": filters.List, "catalog.artist_ids": filters.List, "catalog.kind": filters.Text, "catalog.id": filters.Number, "catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
 			"record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text,
 			"library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
-		Targets: map[string]filters.Type{"display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
-		Help:    map[string]string{"display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
-		Labels:  map[string]string{"original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
+		Targets: map[string]filters.Type{"display.artist_ids": filters.List, "display.primary_artist_ids": filters.List, "display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
+		Help:    map[string]string{"display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list. Use a separate filter for record names.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
+		Labels:  map[string]string{"display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	}
 }
 

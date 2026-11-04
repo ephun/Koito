@@ -514,7 +514,7 @@ func (s *Sqlite) GetTopTracksPaginated(ctx context.Context, opts db.GetItemsOpts
 				SELECT h.canonical_track_id AS track_id, COUNT(*) AS listen_count
 				FROM listens l
 				JOIN track_history_members h ON h.track_id=l.track_id
-				JOIN artist_tracks at2 ON l.track_id = at2.track_id
+				JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
 				WHERE l.listened_at BETWEEN ? AND ? AND at2.artist_id = ?
 				GROUP BY h.canonical_track_id
 			),
