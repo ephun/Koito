@@ -26,11 +26,12 @@ Date scope is available for supported attribution and time rules.
 ## Agreed next layout
 
 Use one filter manager with a consistent condition-and-action builder.
-The manager summarizes filters in a table with When and Then columns.
+The manager summarizes filters in a table with IF and THEN columns.
 Keep the existing types and subtypes as its hierarchy.
-When selects records or record pairs. Then defines the action.
+IF evaluates a condition. THEN specifies its actions.
+ELSE IF adds another conditional branch. ELSE specifies the remaining branch.
 Available conditions follow the metadata supplied by each source.
-Global behavior uses the same builder with All applicable records as its condition.
+Global behavior uses the same builder with TRUE as its IF condition.
 Existing behavior can supply editable starting filters.
 Each filter has one enabled state beside its conditions and actions.
 Parameter controls belong inside the action they configure.
@@ -44,15 +45,66 @@ Music matching and play matching remain separate decisions.
 The builder requirements below describe planned behavior.
 The Current layout section describes the implemented interface.
 
-### Conditions
+### Atomic building blocks
+
+Use familiar IF, THEN, ELSE IF, ELSE, AND, OR, and NOT labels.
+The editor assembles nested blocks with selectable fields and typed inputs.
+Each block performs one operation and can receive another compatible block as input.
+Indentation and visible nesting define grouping.
+The table summarizes the block structure.
+
+| Block | Purpose | Examples |
+|---|---|---|
+| Value | Supply one value | Original album, displayed album, a constant, another record's title |
+| Value operation | Produce a value from inputs | Trim text, replace text, add numbers, subtract timestamps |
+| Comparison | Test values | Equals, greater than, contains, is missing |
+| Logic | Combine or negate conditions | AND, OR, NOT, NOR |
+| Branch | Select actions through conditions | IF, THEN, ELSE IF, ELSE |
+| Action | Apply one interpretation or view change | Set a displayed field, set listener, link music identities |
+
+These are builder elements within the existing filter taxonomy.
+They do not introduce additional filter types.
+Existing behaviors can supply templates assembled from these elements.
+Templates remain editable through the same builder.
+
+### Logical operators
+
+AND, OR, and NOT form the basic logical operations.
+Offer the following named combinations directly in the operator selector.
+Normalize their saved expressions into the basic operations while retaining their chosen display labels.
+
+| Operator | Meaning for known Boolean inputs | Equivalent expression |
+|---|---|---|
+| AND | Both conditions are true | `A AND B` |
+| OR | At least one condition is true | `A OR B` |
+| NOT | Reverse a condition | `NOT A` |
+| NOR | Neither condition is true | `NOT (A OR B)` |
+| NAND | The conditions are not both true | `NOT (A AND B)` |
+| XOR | Exactly one condition is true | `(A OR B) AND NOT (A AND B)` |
+| XNOR | Both conditions have the same truth value | `NOT ((A OR B) AND NOT (A AND B))` |
+
+AND and OR can accept multiple nested conditions.
+NOT accepts one condition. XOR and XNOR compare two conditions.
+NAND and NOR negate their corresponding AND and OR groups.
+Make group boundaries explicit whenever operators are combined.
+Use operator names in the interface rather than substituting All and Any labels.
+
+### Comparisons and values
 
 - Start with readable field, comparison, and value rows.
-- Support All and Any groups for AND and OR conditions.
-- Support nested groups and explicit exceptions using negation.
-- Offer text equality, contains, prefixes, suffixes, lists, and optional regular expressions.
-- Offer numeric, date, and duration comparisons with units and ranges.
-- Offer explicit missing and present checks.
-- Keep case comparison configurable where relevant.
+- Support `=`, `!=`, `<`, `<=`, `>`, and `>=` for compatible value types.
+- Offer CONTAINS, STARTS WITH, ENDS WITH, IN, and MATCHES REGEX for their applicable types.
+- Offer IS MISSING, IS PRESENT, and IS EMPTY as distinct tests.
+- Distinguish absent fields, null values, empty text, empty lists, and numeric zero.
+- Support explicit null checks when source data supplies null values.
+- Offer TRUE and FALSE constants for unconditional behavior.
+- Offer arithmetic `+`, `-`, `*`, and `/` with typed inputs and explicit units.
+- Offer text operations such as TRIM, NORMALIZE CASE, REPLACE, and REGEX REPLACE.
+- Assemble case-insensitive equality by normalizing both compared values.
+- Offer date and duration operations with explicit timezone interpretation.
+- Build a range from lower and upper comparisons, retaining inclusive or exclusive bounds.
+- Offer COUNT, SUM, MIN, and MAX over an explicitly selected collection and field.
+- Identify whether an aggregate counts records, plays, or library evidence.
 - Offer field-to-field comparisons for music and play matching.
 - Identify which record supplies each field when comparing a pair.
 - Offer conditions on filenames, sources, metadata, and available identifiers through readable labels.
@@ -67,11 +119,56 @@ Missing and present checks explicitly select those cases.
 Negating a comparison against absent data must retain that unknown result.
 This matters for attribution when source metadata is incomplete.
 
+### IF, ELSE IF, and ELSE
+
+```text
+IF <condition>
+THEN
+    <action>
+ELSE IF <condition>
+THEN
+    <action>
+ELSE
+    <action>
+END IF
+```
+
+ELSE IF and ELSE are optional.
+Evaluate branches in order and execute the first branch whose condition is true.
+Advance to the next branch only when the previous condition is false.
+ELSE runs after every preceding condition evaluates false.
+If a required condition remains unknown, leave this filter unresolved and expose the reason during inspection.
+Use IS MISSING or IS PRESENT to explicitly handle incomplete evidence.
+An omitted ELSE applies no action from this filter when all conditions are false.
+
+Each branch may contain ordered actions or another IF block.
+Keep ordering within a filter distinct from precedence between filters.
+Select branches using the values available at that point in the declared processing stage.
+Avoid implicitly repeating a filter after its own actions change a field.
+
+For example, a Presentation, Naming filter can choose a displayed album:
+
+```text
+IF (original album IS MISSING) OR (original album = "")
+THEN
+    SET displayed album TO "Unknown Album"
+ELSE
+    SET displayed album TO original album
+END IF
+```
+
+The displayed album is a derived field. Original album values remain preserved.
+
 ### Actions
 
 Use the agreed type and subtype to offer meaningful actions.
 The builder structure stays consistent across types.
 Action controls reflect the operation's actual parameters.
+Build actions from single-purpose operations with explicit targets and inputs.
+Allow an action input to contain a compatible value expression.
+Setting a displayed field, assigning a listener, and linking identities are separate actions.
+An action's target determines which other actions can share its branch.
+Stateful inference operations retain explicit inputs, semantics, and inspectable contributions.
 
 | Type | Example condition | Example action |
 |---|---|---|
@@ -89,13 +186,14 @@ Count actions operate on cumulative evidence rather than manufacturing observed 
 
 ### Manager and editor
 
-Show enabled state, filter type, condition summary, and action summary in each row.
+Show enabled state, filter type, IF summary, and THEN summary in each row.
+Summarize ELSE IF and ELSE branches when present.
 Open the same editor when adding or changing a filter.
 Support named filters, duplication, removal, and visible execution order where relevant.
 Use selectors for fields, operators, and actions.
 Use source-provided choices where useful, while allowing suitable typed values.
 Use native music search when selecting specific artists, tracks, or albums.
-Keep advanced grouping and regular expressions available within the editor.
+Keep nested IF blocks, logical groups, and regular expressions available within the editor.
 Use brief hover help beside unfamiliar fields and operations.
 Show validation beside the condition or action that needs correction.
 Keep the normal manager focused on configured filters.
@@ -104,9 +202,12 @@ Keep affected records inspectable without adding a permanent preview dashboard.
 
 ### Execution and compatibility
 
-The builder needs a typed condition tree and typed actions beneath the interface.
+The builder needs typed value expressions, conditions, branches, and actions beneath the interface.
 Fixed scope fields and subtype-specific switches cannot represent the agreed expression model alone.
-The server must validate fields, comparisons, value types, action parameters, and dependencies.
+The server must validate fields, operators, value types, branches, action parameters, and dependencies.
+Define operator behavior for absent inputs, invalid arithmetic, and explicit conversions.
+Retain unknown results through compound logic rather than converting them into false.
+For example, FALSE AND unknown is false. TRUE OR unknown is true. NOT unknown remains unknown.
 Use the same evaluator for inspection and publishing.
 Define available derived fields at each processing stage.
 Detect circular dependencies before saving.
@@ -123,6 +224,14 @@ Verify the same play identities, contributor links, timestamps, attribution, and
 Preserve disabled settings and file-specific timezone exceptions.
 Unsupported saved conditions need an explicit migration outcome and must remain recoverable.
 Compare full relationships alongside totals using actual imported data.
+
+### Design references
+
+- [Scratch IF/ELSE](https://scratch.mit.edu/help/studio/tips/blocks/if-else/) supplies the familiar branching vocabulary.
+- Scratch's [AND](https://scratch.mit.edu/help/studio/tips/blocks/and/), [OR](https://scratch.mit.edu/help/studio/tips/blocks/or/), and [NOT](https://scratch.mit.edu/help/studio/tips/blocks/not/) demonstrate composable logical blocks.
+- [IFTTT Applets](https://ifttt.com/docs/applets) demonstrates IF/THEN composition and configurable action inputs.
+
+Our ELSE branches, additional operators, and music-specific actions are this fork's design requirements.
 
 ## Current layout
 

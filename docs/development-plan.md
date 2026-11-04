@@ -411,9 +411,10 @@ Verify the first milestone with real imported records spanning album names
 and absent albums. Check track histories, album histories, totals, and raw
 records together. Record actual results without inventing listening data.
 
-Then streamline Filters around **When** conditions and **Then** actions.
-Use one consistent builder, including global behavior with an all-records condition.
-Support nested AND/OR conditions, exceptions, typed comparisons, and subtype-specific actions.
+Then streamline Filters around **IF**, **THEN**, **ELSE IF**, and **ELSE** blocks.
+Use one consistent builder, including global behavior with a TRUE condition.
+Compose atomic values, comparisons, logical operators, branches, and subtype-specific actions.
+Support AND, OR, NOT, NOR, NAND, XOR, and XNOR with explicit nesting.
 Use the existing taxonomy to organize each filter.
 Source metadata determines which conditions are offered.
 The interface uses **filter**, including Add filter and Remove filter.
