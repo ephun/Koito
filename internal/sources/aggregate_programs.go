@@ -2,7 +2,6 @@ package sources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -35,6 +34,7 @@ func migrateAggregatePrograms(config RuleConfig) RuleConfig {
 		priority := scopeRank(r.Scope)
 		r.Priority = &priority
 		r.Program = &filters.Program{Steps: []filters.Statement{{If: &condition, Then: []filters.Statement{{Set: "share.percent", Value: &value}}}}}
+		r.Migration = migratedProgram(*r)
 		r.Scope = RuleScope{}
 		if r.Name == "" {
 			r.Name = "Aggregate attribution"
@@ -82,6 +82,7 @@ func chooseAggregateRule(config RuleConfig, r matchingRecord, from, until time.T
 			continue
 		}
 		candidate := original
+		candidate.legacyComparison = legacyComparison(original)
 		if candidate.Program == nil {
 			if !scopeContains(candidate.Scope, r, from, until) {
 				continue
@@ -117,9 +118,7 @@ func chooseAggregateRule(config RuleConfig, r matchingRecord, from, until time.T
 			copy := candidate
 			selected, best, conflict = &copy, rank, false
 		} else if rank == best {
-			a, _ := json.Marshal(selected.Settings)
-			b, _ := json.Marshal(candidate.Settings)
-			if string(a) != string(b) {
+			if attributionConflict(*selected, candidate) {
 				conflict = true
 			}
 			if candidate.ID < selected.ID {

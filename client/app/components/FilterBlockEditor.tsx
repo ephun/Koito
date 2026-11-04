@@ -7,6 +7,7 @@ const value = (v: unknown = ""): Expression => ({ op: "literal", value: v });
 const number = (): Expression => ({ op: "number", args: [value("0")] });
 const reference = (field: string): Expression => ({ op: "field", field });
 const names: Record<string, string> = {
+	"item": "Item",
 	"share.percent": "My share (%)",
   "listener": "Listener", "range.from": "Evidence interval start", "range.until": "Evidence interval end",
   "original.artist": "Original artist", "original.album": "Original album", "original.title": "Original track title",
@@ -15,19 +16,28 @@ const names: Record<string, string> = {
   "record.time": "Record time", "record.device": "Device", "library.id": "Library identifier",
   "track.persistent_id": "Library track identifier", "track.spotify_uri": "Spotify track URI", "track.recording_id": "MusicBrainz recording ID",
 };
-const label = (name: string) => names[name] || name;
+const label = (name: string) => names[name] || (name.startsWith("evidence:") ? `Personal plays (source ${name.slice(9)})` : /^(raw:|column:)/.test(name) ? name.slice(name.indexOf(":") + 1).split("/").filter(Boolean).map(part => part.replaceAll("~1", "/").replaceAll("~0", "~")).join(" / ") || "Source record" : name);
 const booleans = new Set(["and", "or", "not", "nor", "nand", "xor", "xnor"]);
 const arithmetic = new Set(["add", "subtract", "multiply", "divide", "floor", "ceil", "absolute", "milliseconds", "seconds", "minutes", "hours", "days"]);
+const operatorHelp: Record<string, string> = {
+  where: "Keep items whose condition is TRUE. Use Item to read the current list entry.",
+  map: "Calculate one value for each item. Use Item to read the current list entry.",
+  get: "Read an object field or list position. List positions start at zero.",
+};
 
-export function expressionSummary(e?: Expression): string {
+export function expressionSummary(e?: Expression, schema?: BlockSchema, operators: BlockOperator[] = [], choices?: { label: string; value: string }[]): string {
   if (!e) return "";
-  if (e.op === "field") return label(e.field || "");
-  if (e.op === "literal") return typeof e.value === "boolean" ? String(e.value).toUpperCase() : JSON.stringify(e.value);
-  return `${e.op.toUpperCase()}(${(e.args || []).map(expressionSummary).join(", ")})`;
+  if (e.op === "field") return schema?.labels?.[e.field || ""] || label(e.field || "");
+  if (e.op === "literal") return choices?.find(choice => choice.value === e.value)?.label || (typeof e.value === "boolean" ? String(e.value).toUpperCase() : JSON.stringify(e.value));
+  if (e.op === "number" && e.args?.[0]?.op === "literal" && typeof e.args[0].value === "string" && /^-?\d+(\.\d+)?$/.test(e.args[0].value)) return e.args[0].value;
+  const args = (e.args || []).map((arg, index) => expressionSummary(arg, schema, operators, index === 1 && e.args?.[0]?.op === "field" ? schema?.choices?.[e.args[0].field || ""] : undefined));
+  const name = operators.find(operator => operator.id === e.op)?.label || e.op.toUpperCase();
+  return ["eq", "ne", "lt", "le", "gt", "ge", "add", "subtract", "multiply", "divide"].includes(e.op) && args.length === 2 ? `(${args[0]} ${name} ${args[1]})` : `${name}(${args.join(", ")})`;
 }
 
-export function statementSummary(step: FilterStatement): string {
-  return step.if ? `IF ${expressionSummary(step.if)}` : `SET ${label(step.set || "")} TO ${expressionSummary(step.value)}`;
+export function statementSummary(step: FilterStatement, schema?: BlockSchema, operators: BlockOperator[] = []): string {
+  const statements = (steps: FilterStatement[] = []) => steps.map(child => statementSummary(child, schema, operators)).join(", ");
+  return step.if ? `IF ${expressionSummary(step.if, schema, operators)} THEN ${statements(step.then)}${(step.else_if || []).map(branch => ` ELSE IF ${expressionSummary(branch.if, schema, operators)} THEN ${statements(branch.then)}`).join("")}${step.else ? ` ELSE ${statements(step.else)}` : ""}` : `SET ${schema?.labels?.[step.set || ""] || label(step.set || "")} TO ${expressionSummary(step.value, schema, operators, schema?.choices?.[step.set || ""])}`;
 }
 
 export default function FilterBlockEditor({ program, schema, operators, disabled, sources = [], onChange }: {
@@ -64,7 +74,7 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
     function visit(value: unknown) {
       if (!value || typeof value !== "object") return;
       const item = value as Record<string, unknown>;
-      if (item.op === "field" && typeof item.field === "string" && /^(raw:|column:)/.test(item.field)) next.fields[item.field] = "any";
+      if (item.op === "field" && typeof item.field === "string" && /^(raw:|column:|evidence:)/.test(item.field)) next.fields[item.field] = item.field.startsWith("evidence:") ? "list" : "any";
       for (const child of Object.values(item)) visit(child);
     }
     visit(program);
@@ -103,9 +113,11 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
         <option value="field">Field</option><option value="literal">Value</option>
         {operators.map(op => <option key={op.id} value={op.id}>{op.label}</option>)}
       </select>
+      {operatorHelp[expression.op] && <FieldHelp label={operation?.label || expression.op}>{operatorHelp[expression.op]}</FieldHelp>}
       {expression.op === "field" && <select aria-label="Field" className={`${input} flex-1 text-sm`} disabled={disabled} value={expression.field} onChange={event => onChange(reference(event.target.value))}>
         {Object.keys({ ...schema.fields, ...schema.targets }).map(field => <option key={field} value={field}>{schema.labels?.[field] || label(field)}</option>)}
       </select>}
+      {expression.op === "field" && expression.field?.startsWith("evidence:") && <FieldHelp label="Personal plays">Collections contain distinct matching plays assigned to you by Direct filters. Item fields include time, artist, album, title, and device.</FieldHelp>}
       {expression.op === "literal" && choices?.length ? <select aria-label="Value" className={`${input} min-w-0 flex-1 text-sm`} disabled={disabled} value={String(expression.value ?? "")} onChange={event => onChange(value(event.target.value))}>
         {!choices.some(choice => choice.value === expression.value) && <option value={String(expression.value ?? "")}>{expression.value ? String(expression.value) : "Choose value"}</option>}
         {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
@@ -119,7 +131,7 @@ function ExpressionEditor({ expression, onChange, choices, ...common }: Common &
     </div>
     {args.length > 0 && <div className="space-y-2 border-l-2 border-(--color-bg-tertiary) pl-2 sm:pl-3">
       {args.map((arg, index) => <div key={index} className="min-w-0 space-y-1">
-        <ExpressionEditor {...common} choices={index === 1 && ["eq", "ne"].includes(expression.op) && args[0]?.op === "field" ? schema.choices?.[args[0].field || ""] : undefined} expression={arg} onChange={next => onChange({ ...expression, args: args.map((existing, i) => i === index ? next : existing) })} />
+        <ExpressionEditor {...common} schema={index === 1 && ["where", "map"].includes(expression.op) ? { ...schema, fields: { ...schema.fields, item: "any" } } : schema} choices={index === 1 && ["eq", "ne"].includes(expression.op) && args[0]?.op === "field" ? schema.choices?.[args[0].field || ""] : undefined} expression={arg} onChange={next => onChange({ ...expression, args: args.map((existing, i) => i === index ? next : existing) })} />
         {!!operation && args.length > operation.min_args && <button type="button" disabled={disabled} className="text-xs underline" onClick={() => onChange({ ...expression, args: args.filter((_, i) => i !== index) })}>Remove input</button>}
       </div>)}
     </div>}

@@ -122,7 +122,7 @@ func proportion(total int64, percent int) int64 {
 	return total/100*int64(percent) + (total%100*int64(percent))/100
 }
 
-func aggregateAttribution(r matchingRecord, config RuleConfig, from, until time.Time, evidence evidenceIndex) Attribution {
+func aggregateAttribution(r matchingRecord, config RuleConfig, from, until time.Time, evidence *evidenceIndex) Attribution {
 	scopeUntil := until
 	if !scopeUntil.IsZero() {
 		scopeUntil = scopeUntil.Add(time.Nanosecond)
@@ -141,12 +141,18 @@ func aggregateAttribution(r matchingRecord, config RuleConfig, from, until time.
 		}
 		return Attribution{Listener: "partial", Basis: "aggregate", Rules: []string{rule.ID}, Share: rule.Settings.SharePercent}
 	}
-	rule, conflict = chooseRule(config, "attribution", "heuristic", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, scopeUntil) })
+	rule, conflict = chooseHeuristicRule(config, r, from, scopeUntil, evidence, from, until)
 	if conflict {
 		return Attribution{Listener: "unknown", Basis: "conflicting heuristic rules", Rules: []string{}}
 	}
-	if rule != nil && evidenceMatches(evidence, r, rule.Settings.EvidenceSourceID, rule.Settings.MinimumMatches, config, from, until) {
-		return Attribution{Listener: "partial", Basis: "heuristic", Rules: []string{rule.ID}, Share: rule.Settings.SharePercent}
+	if rule != nil && rule.Settings.Listener == "self" {
+		if rule.Settings.SharePercent != nil {
+			return Attribution{Listener: "partial", Basis: "heuristic", Rules: []string{rule.ID}, Share: rule.Settings.SharePercent}
+		}
+		return Attribution{Listener: "self", Basis: "heuristic", Rules: []string{rule.ID}}
+	}
+	if rule != nil && rule.Program != nil {
+		return Attribution{Listener: rule.Settings.Listener, Basis: "heuristic", Rules: []string{rule.ID}}
 	}
 	return direct
 }

@@ -27,6 +27,7 @@ type Operator struct {
 }
 
 var Operators = []Operator{
+	{"where", "WHERE", 2, 2}, {"map", "MAP", 2, 2},
 	{"get", "GET", 2, 2}, {"keys", "KEYS", 1, 1},
 	{"and", "AND", 2, 64}, {"or", "OR", 2, 64}, {"not", "NOT", 1, 1}, {"nor", "NOR", 2, 64}, {"nand", "NAND", 2, 64}, {"xor", "XOR", 2, 2}, {"xnor", "XNOR", 2, 2},
 	{"eq", "=", 2, 2}, {"ne", "!=", 2, 2}, {"lt", "<", 2, 2}, {"le", "<=", 2, 2}, {"gt", ">", 2, 2}, {"ge", ">=", 2, 2},
@@ -40,11 +41,13 @@ var Operators = []Operator{
 }
 
 type Schema struct {
-	RawFields bool                    `json:"raw_fields,omitempty"`
-	Bounds    map[string]NumberBounds `json:"bounds,omitempty"`
-	Choices   map[string][]Choice     `json:"choices,omitempty"`
-	Fields    map[string]Type         `json:"fields"`
-	Targets   map[string]Type         `json:"targets"`
+	EvidenceFields bool                    `json:"evidence_fields,omitempty"`
+	Labels         map[string]string       `json:"labels,omitempty"`
+	RawFields      bool                    `json:"raw_fields,omitempty"`
+	Bounds         map[string]NumberBounds `json:"bounds,omitempty"`
+	Choices        map[string][]Choice     `json:"choices,omitempty"`
+	Fields         map[string]Type         `json:"fields"`
+	Targets        map[string]Type         `json:"targets"`
 }
 
 type NumberBounds struct {
@@ -86,6 +89,9 @@ func compile(e Expr, s Schema, depth int, n *int) (*Expression, error) {
 		if !ok && s.RawFields && ValidRawField(e.Field) {
 			kind, ok = Any, true
 		}
+		if !ok && s.EvidenceFields && ValidEvidenceField(e.Field) {
+			kind, ok = List, true
+		}
 		if !ok {
 			return nil, fmt.Errorf("Unknown field %q.", e.Field)
 		}
@@ -123,8 +129,16 @@ func compile(e Expr, s Schema, depth int, n *int) (*Expression, error) {
 	if len(e.Args) < operator.Min || len(e.Args) > operator.Max {
 		return nil, fmt.Errorf("%s needs %d–%d inputs.", operator.Label, operator.Min, operator.Max)
 	}
-	for _, a := range e.Args {
-		child, err := compile(a, s, depth+1, n)
+	for i, a := range e.Args {
+		childSchema := s
+		if (e.Op == "where" || e.Op == "map") && i == 1 {
+			childSchema.Fields = map[string]Type{}
+			for key, kind := range s.Fields {
+				childSchema.Fields[key] = kind
+			}
+			childSchema.Fields["item"] = Any
+		}
+		child, err := compile(a, childSchema, depth+1, n)
 		if err != nil {
 			return nil, err
 		}
@@ -162,6 +176,14 @@ func (x *Expression) resultType() (Type, error) {
 		return nil
 	}
 	switch x.op {
+	case "where", "map":
+		if x.args[0].kind != List && x.args[0].kind != Any {
+			return "", fmt.Errorf("%s requires a list.", strings.ToUpper(x.op))
+		}
+		if x.op == "where" && x.args[1].kind != Boolean && x.args[1].kind != Any {
+			return "", fmt.Errorf("WHERE requires a Boolean condition.")
+		}
+		return List, nil
 	case "get":
 		if x.args[0].kind != Any && x.args[0].kind != Object && x.args[0].kind != List {
 			return "", fmt.Errorf("GET requires an object or list.")
@@ -246,6 +268,10 @@ func (x *Expression) resultType() (Type, error) {
 func (x *Expression) Type() Type { return x.kind }
 
 func (x *Expression) Eval(ctx context.Context, env Env) Value {
+	ctx = evaluationContext(ctx)
+	if !consumeEvaluation(ctx) {
+		return Unknown("Calculation exceeded the evaluation limit.")
+	}
 	if err := ctx.Err(); err != nil {
 		return Unknown(err.Error())
 	}
@@ -257,6 +283,43 @@ func (x *Expression) Eval(ctx context.Context, env Env) Value {
 			return v
 		}
 		return Absent(x.field)
+	}
+	if x.op == "where" || x.op == "map" {
+		input := x.args[0].Eval(ctx, env)
+		if !input.Known() {
+			return input
+		}
+		items, ok := input.Items()
+		if !ok {
+			return Unknown("A list is required.")
+		}
+		local := Env{}
+		for key, value := range env {
+			local[key] = value
+		}
+		out := []Value{}
+		for _, item := range items {
+			local["item"] = item
+			result := x.args[1].Eval(ctx, local)
+			if x.op == "map" {
+				out = append(out, result)
+				if result.Type == Unresolved {
+					return result
+				}
+				continue
+			}
+			include, known := result.Bool()
+			if !known {
+				if !result.Known() {
+					return result
+				}
+				return Unknown("WHERE requires a Boolean condition.")
+			}
+			if include {
+				out = append(out, item)
+			}
+		}
+		return Values(out...)
 	}
 	v := make([]Value, len(x.args))
 	for i, a := range x.args {

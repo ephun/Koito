@@ -40,16 +40,19 @@ type RuleSettings struct {
 	EstimateTimes     bool   `json:"estimate_times,omitempty"`
 }
 type Rule struct {
-	Priority *int `json:"priority,omitempty"`
-	compiled *filters.CompiledProgram
-	Name     string           `json:"name,omitempty"`
-	Program  *filters.Program `json:"program,omitempty"`
-	ID       string           `json:"id"`
-	Type     string           `json:"type"`
-	Subtype  string           `json:"subtype"`
-	Enabled  bool             `json:"enabled"`
-	Scope    RuleScope        `json:"scope"`
-	Settings RuleSettings     `json:"settings"`
+	Migration        *ProgramMigration `json:"migration,omitempty"`
+	legacyComparison string
+	evidenceFields   []string
+	Priority         *int `json:"priority,omitempty"`
+	compiled         *filters.CompiledProgram
+	Name             string           `json:"name,omitempty"`
+	Program          *filters.Program `json:"program,omitempty"`
+	ID               string           `json:"id"`
+	Type             string           `json:"type"`
+	Subtype          string           `json:"subtype"`
+	Enabled          bool             `json:"enabled"`
+	Scope            RuleScope        `json:"scope"`
+	Settings         RuleSettings     `json:"settings"`
 }
 type RuleConfig struct {
 	Rules []Rule `json:"rules"`
@@ -122,13 +125,13 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
-	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema()}}
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema()}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
 		return state, err
 	}
-	migrated := migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config))
+	migrated := migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config)))
 	state.Blocks.Legacy = map[string]Rule{}
 	for i, rule := range migrated.Rules {
 		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil {
@@ -282,6 +285,20 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		schema.Choices["file.hash"] = append(schema.Choices["file.hash"], filters.Choice{Label: file.Filename, Value: file.Hash})
 	}
 	state.Blocks.Schemas["presentation:naming"] = schema
+	heuristic := state.Blocks.Schemas["attribution:heuristic"]
+	heuristic.Labels = map[string]string{}
+	for _, source := range state.Sources {
+		if source.Records > 0 && source.Service != "itunes" {
+			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm"}[source.Service]
+			if name == "" {
+				name = source.Service
+			}
+			field := fmt.Sprintf("evidence:%d", source.ID)
+			heuristic.Fields[field] = filters.List
+			heuristic.Labels[field] = "Personal plays from " + name
+		}
+	}
+	state.Blocks.Schemas["attribution:heuristic"] = heuristic
 	for key, other := range state.Blocks.Schemas {
 		if key == "presentation:naming" {
 			continue
@@ -304,10 +321,18 @@ func validateRules(config RuleConfig) error {
 	music, plays := 0, 0
 	timeScopes := map[string]bool{}
 	for _, rule := range config.Rules {
+		if rule.Migration != nil {
+			for _, value := range []string{rule.Migration.ProgramHash, rule.Migration.SettingsHash} {
+				decoded, err := hex.DecodeString(value)
+				if err != nil || len(decoded) != 32 {
+					return errors.New("Invalid filter migration information.")
+				}
+			}
+		}
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate")) {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -407,6 +432,15 @@ func validateRules(config RuleConfig) error {
 				return errors.New("Aggregate shares apply to whole counts.")
 			}
 		case rule.Type == "attribution" && rule.Subtype == "heuristic":
+			if rule.Program != nil {
+				if rule.Scope != (RuleScope{}) {
+					return errors.New("Move heuristic attribution conditions into IF blocks.")
+				}
+				if _, err := filters.CompileProgram(*rule.Program, heuristicSchema()); err != nil {
+					return err
+				}
+				continue
+			}
 			if rule.Scope.Service == "" {
 				return errors.New("Choose a source for heuristic attribution.")
 			}

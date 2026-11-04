@@ -34,7 +34,7 @@ type FilterIssue struct {
 
 // Diagnostic checks evaluate enabled programs against this record. Naming
 // filters see earlier naming changes. Direct attribution reads original fields.
-func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig) ([]FilterIssue, error) {
+func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex) ([]FilterIssue, error) {
 	issues := []FilterIssue{}
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
@@ -57,6 +57,8 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 				continue
 			}
 			schema, env = aggregateSchema(), attributionEnvironment(r, from, until)
+		case rule.Type == "attribution" && rule.Subtype == "heuristic":
+			schema, env = heuristicSchema(), heuristicEnvironment(rule, r, config, evidence, from, until, time.Time{}, time.Time{})
 		default:
 			continue
 		}
@@ -67,6 +69,11 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 		result, err := compiled.Run(ctx, env)
 		if err != nil {
 			return nil, err
+		}
+		if rule.Type == "attribution" && rule.Subtype == "heuristic" {
+			if issue := heuristicDomainIssue(r, result); issue != nil {
+				result.Issues = append(result.Issues, *issue)
+			}
 		}
 		for _, issue := range result.Issues {
 			issues = append(issues, FilterIssue{rule.ID, rule.Name, issue})
@@ -124,7 +131,17 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 		return result, fmt.Errorf("Unknown record.")
 	}
 	result.Record = rows[0]
-	result.FilterIssues, err = inspectFilterIssues(ctx, result.Record.matchingRecord, version.Config)
+	var personal *evidenceIndex
+	for _, rule := range version.Config.Rules {
+		if rule.Enabled && rule.Type == "attribution" && rule.Subtype == "heuristic" && rule.Program != nil {
+			personal, err = inspectionEvidence(ctx, tx, version.Config, version.ID, result.Record.matchingRecord)
+			if err != nil {
+				return result, err
+			}
+			break
+		}
+	}
+	result.FilterIssues, err = inspectFilterIssues(ctx, result.Record.matchingRecord, version.Config, personal)
 	if err != nil {
 		return result, err
 	}

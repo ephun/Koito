@@ -143,6 +143,7 @@ func compileStatements(steps []Statement, s Schema, depth int, n *int) ([]compil
 // this filter's entire result, including preceding SET actions. Later filters
 // can still interpret the record independently.
 func (p *CompiledProgram) Run(ctx context.Context, input Env) (Outcome, error) {
+	ctx = evaluationContext(ctx)
 	env := make(Env, len(input))
 	for key, value := range input {
 		env[key] = value

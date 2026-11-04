@@ -208,12 +208,18 @@ func evidenceMusicKeys(v recordValues, rule Rule) []string {
 	return out
 }
 
-type evidenceIndex map[string][]personalEvidence
+type evidenceIndex struct {
+	byMusic map[string][]personalEvidence
+	sources map[int64]bool
+}
 
-func buildPersonalEvidence(plan matchPlan, config RuleConfig) evidenceIndex {
+func buildPersonalEvidence(plan matchPlan, config RuleConfig) *evidenceIndex {
 	byID := recordIndex(plan.Records)
 	music, _ := config.matchingRules()
-	out := evidenceIndex{}
+	out := &evidenceIndex{byMusic: map[string][]personalEvidence{}, sources: map[int64]bool{}}
+	for _, r := range plan.Records {
+		out.sources[r.SourceID] = true
+	}
 	for _, p := range plan.Plays {
 		if p.Attribution.Listener != "self" || p.Attribution.Basis == "heuristic" {
 			continue
@@ -226,18 +232,21 @@ func buildPersonalEvidence(plan matchPlan, config RuleConfig) evidenceIndex {
 				continue
 			}
 			for _, key := range evidenceMusicKeys(r.Values, music) {
-				out[key] = append(out[key], personalEvidence{p, r})
+				out.byMusic[key] = append(out.byMusic[key], personalEvidence{p, r})
 			}
 		}
 	}
 	return out
 }
 
-func evidenceMatches(index evidenceIndex, r matchingRecord, source int64, minimum int, config RuleConfig, from, until time.Time) bool {
+func evidenceMatches(index *evidenceIndex, r matchingRecord, source int64, minimum int, config RuleConfig, from, until time.Time) bool {
+	if index == nil {
+		return false
+	}
 	music, _ := config.matchingRules()
 	seen := map[string]bool{}
 	for _, key := range evidenceMusicKeys(r.Values, music) {
-		for _, e := range index[key] {
+		for _, e := range index.byMusic[key] {
 			if seen[e.play.Key] || e.record.UserID != r.UserID || e.record.SourceID != source || !musicCompatible(r.Values, e.record.Values, music) {
 				continue
 			}
@@ -264,7 +273,7 @@ func applyAttribution(plan *matchPlan, config RuleConfig) {
 			from, until := recordInterval(r)
 			a := directAttribution(r, config, from, until)
 			if a.Basis == "existing history" {
-				if rule, _ := chooseRule(config, "attribution", "heuristic", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, until) }); rule != nil {
+				if rule, _ := chooseHeuristicRule(config, r, from, until, nil, time.Time{}, time.Time{}); rule != nil {
 					a.Listener = "unknown"
 					a.Basis = "heuristic pending"
 				}
@@ -280,20 +289,15 @@ func applyAttribution(plan *matchPlan, config RuleConfig) {
 			for _, id := range p.Records {
 				r := byID[id]
 				from, until := recordInterval(r)
-				rule, conflict := chooseRule(config, "attribution", "heuristic", func(rule Rule) bool { return scopeContains(rule.Scope, r, from, until) })
+				rule, conflict := chooseHeuristicRule(config, r, from, until, evidence, time.Time{}, time.Time{})
 				if rule == nil || conflict {
 					continue
 				}
-				var windowFrom, windowUntil time.Time
-				if rule.Scope.From != "" {
-					windowFrom, _ = time.Parse(time.RFC3339Nano, rule.Scope.From)
-				}
-				if rule.Scope.Until != "" {
-					windowUntil, _ = time.Parse(time.RFC3339Nano, rule.Scope.Until)
-				}
-				if evidenceMatches(evidence, r, rule.Settings.EvidenceSourceID, rule.Settings.MinimumMatches, config, windowFrom, windowUntil) {
-					p.Attribution = Attribution{Listener: "self", Basis: "heuristic", Rules: []string{rule.ID}}
-					break
+				if rule.Settings.Listener == "self" || rule.Program != nil {
+					p.Attribution = Attribution{Listener: rule.Settings.Listener, Basis: "heuristic", Rules: []string{rule.ID}}
+					if rule.Settings.Listener != "unknown" {
+						break
+					}
 				}
 			}
 		}

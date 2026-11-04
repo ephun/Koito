@@ -67,6 +67,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err := prepareAggregatePrograms(config); err != nil {
 		return nil, err
 	}
+	if err := prepareHeuristicPrograms(config); err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err

@@ -18,8 +18,8 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
   const schema = state.blocks?.schemas[`${type}:${subtype}`];
   if (!schema || !state.blocks) return null;
   const rules = config.rules.filter(rule => rule.type === type && rule.subtype === subtype);
-  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : "Naming";
-  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : "Choose displayed names using original metadata and source information.";
+  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : "Naming";
+  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : "Choose displayed names using original metadata and source information.";
   const current = rules.find(rule => rule.id === expanded);
   const freshExamples = checkedVersion === state.current.id && checkedConfig === JSON.stringify(config) ? examples : undefined;
   async function check() {
@@ -37,10 +37,12 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
       {rules.length > 0 && <div className="relative overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="text-(--color-fg-secondary)"><th className="p-2">Filter</th><th className="p-2">IF</th><th className="p-2">THEN</th><th className="p-2"><span className="sr-only">Enabled</span></th></tr></thead><tbody>
         {rules.map(rule => {
           const first = rule.program?.steps[0];
-          const actions = (first?.if ? first.then : rule.program?.steps)?.map(statementSummary).join(", ") || "";
+          const describe = (step: NonNullable<Rule["program"]>["steps"][number]) => statementSummary(step, schema, state.blocks?.operators);
+          const condition = first?.if ? expressionSummary(first.if, schema, state.blocks?.operators) : "TRUE";
+          const actions = first?.if ? `${(first.then || []).map(describe).join(", ")}${(first.else_if || []).map(branch => ` ELSE IF ${expressionSummary(branch.if, schema, state.blocks?.operators)} THEN ${branch.then.map(describe).join(", ")}`).join("")}${first.else ? ` ELSE ${first.else.map(describe).join(", ")}` : ""}${(rule.program?.steps.slice(1) || []).map(step => `, ${describe(step)}`).join("")}` : (rule.program?.steps || []).map(describe).join(", ");
           return <tr key={rule.id} className="border-t border-(--color-bg-tertiary)">
             <td className="p-2"><button type="button" className="underline" disabled={busy} aria-expanded={expanded === rule.id} onClick={() => setExpanded(expanded === rule.id ? undefined : rule.id)}>{rule.name || `${title} filter`}</button></td>
-            <td className="max-w-40 truncate p-2" title={expressionSummary(first?.if)}>{first?.if ? expressionSummary(first.if) : "TRUE"}</td>
+            <td className="max-w-40 truncate p-2" title={condition}>{condition}</td>
             <td className="max-w-40 truncate p-2" title={actions}>{actions}</td>
             <td className="p-2"><Switch label={`Enable ${rule.name || `${title} filter`}`} checked={rule.enabled} disabled={busy} onChange={enabled => onChange({ ...rule, enabled })} /></td>
           </tr>;
@@ -65,6 +67,10 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
       <button type="button" className={`${button} text-sm`} disabled={busy} onClick={() => {
         const direct = subtype === "direct", aggregate = subtype === "aggregate";
         const rule: Rule = { id: crypto.randomUUID(), name: type === "attribution" ? title : "Naming filter", type, subtype, enabled: type !== "attribution", scope: {}, priority: 0, settings: { ...defaultRuleSettings }, program: { steps: [{ if: aggregate ? { op: "eq", args: [{ op: "field", field: "source.service" }, { op: "literal", value: "itunes" }] } : { op: "literal", value: true }, then: [{ set: aggregate ? "share.percent" : direct ? "listener" : "display.title", value: aggregate ? { op: "number", args: [{ op: "literal", value: "0" }] } : direct ? { op: "literal", value: "unknown" } : { op: "field", field: "original.title" } }] }] } };
+        if (subtype === "heuristic") {
+          const collection = Object.keys(schema.fields).find(field => field.startsWith("evidence:"));
+          rule.program = { steps: [{ if: collection ? { op: "ge", args: [{ op: "count", args: [{ op: "field", field: collection }] }, { op: "number", args: [{ op: "literal", value: "1" }] }] } : { op: "literal", value: false }, then: [{ set: "listener", value: { op: "literal", value: "self" } }], else: [{ set: "listener", value: { op: "literal", value: "unknown" } }] }] };
+        }
         onChange(rule); setExpanded(rule.id);
       }}>Add filter</button>
     </div>

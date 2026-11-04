@@ -71,6 +71,7 @@ func migrateDirectPrograms(config RuleConfig) RuleConfig {
 		priority := scopeRank(r.Scope)
 		r.Priority = &priority
 		r.Program = &filters.Program{Steps: []filters.Statement{{If: &condition, Then: []filters.Statement{{Set: "listener", Value: &value}}}}}
+		r.Migration = migratedProgram(*r)
 		r.Scope = RuleScope{}
 		if r.Name == "" {
 			r.Name = "Direct attribution"
@@ -110,6 +111,7 @@ func chooseDirectRule(config RuleConfig, r matchingRecord, from, until time.Time
 			continue
 		}
 		candidate := original
+		candidate.legacyComparison = legacyComparison(original)
 		if candidate.Program == nil {
 			if !scopeContains(candidate.Scope, r, from, until) {
 				continue
@@ -157,9 +159,7 @@ func chooseDirectRule(config RuleConfig, r matchingRecord, from, until time.Time
 			continue
 		}
 		if rank == best {
-			a, _ := json.Marshal(selected.Settings)
-			b, _ := json.Marshal(candidate.Settings)
-			if string(a) != string(b) {
+			if attributionConflict(*selected, candidate) {
 				conflict = true
 			}
 			if candidate.ID < selected.ID {

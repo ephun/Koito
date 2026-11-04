@@ -1,6 +1,18 @@
 package filters
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
+
+func ValidEvidenceField(field string) bool {
+	if !strings.HasPrefix(field, "evidence:") {
+		return false
+	}
+	number := strings.TrimPrefix(field, "evidence:")
+	id, err := strconv.ParseInt(number, 10, 64)
+	return err == nil && id > 0 && strconv.FormatInt(id, 10) == number
+}
 
 // Raw fields use JSON Pointer. Column fields address preserved CSV headers.
 func ValidRawField(field string) bool {

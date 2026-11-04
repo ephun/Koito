@@ -241,7 +241,7 @@ Regression tests compare legacy and migrated scopes, disabled settings, prioriti
 They also cover branch selection, arithmetic percentages, missing metadata, reversal, rebuilding, direct precedence, and unchanged original records.
 The full Go suite and frontend type checking and build pass.
 
-Heuristic attribution and the existing matching and inference controls still need migration to the shared editor.
+The existing matching and inference controls still need migration to the shared editor.
 
 Actual-import browser acceptance enabled Count and a temporary 50% Aggregate filter on the isolated database copy.
 It checked 5,348 resolved shares against their imported counts and verified whole-play rounding.
@@ -265,3 +265,54 @@ The active routes are in `engine/routes.go`.
 Their database writes remain in `internal/db/sqlite/artist.go`, `album.go`, and `track.go`.
 The Edit modal still exposes aliases, identifiers, artist associations, and the various-artists flag.
 The media toolbar still exposes deletion. Completing Phase 4 requires replacing these routine editing paths.
+
+## Heuristic attribution and evidence collections
+
+Heuristic attribution now uses the same IF, THEN, ELSE IF, ELSE, and SET editor.
+Collections such as Personal plays from Last.fm provide distinct matching plays assigned by Direct filters.
+COUNT compares that evidence with a chosen threshold. WHERE adds explicit conditions on collection items.
+MAP reads or calculates item values for SUM, MIN, MAX, or other list operations.
+GET reads item fields, including time, artist, album, title, and device.
+Item values remain local to the collection expression.
+
+Migration retains source, file, artist, device, library, record, and date conditions.
+Date-limited evidence becomes an explicit WHERE expression using its original bounds.
+Existing minimum matches become COUNT comparisons. Library shares become percentage assignments.
+Disabled settings remain disabled, and previous specificity becomes explicit priority.
+Saved versions remain unchanged until the edited configuration is saved.
+
+Direct attribution runs before Heuristic attribution and remains authoritative.
+Heuristic assignments contribute no personal evidence to other heuristics.
+Unknown conditions and unavailable sources remain unresolved.
+Percentages apply to cumulative counts. Applying percentages to individual observed plays produces an inspectable issue.
+WHERE requires known Boolean results, including explicit handling of missing item fields.
+Nested calculations share an evaluation limit and report exhaustion as an unresolved result.
+
+A derived evidence cache supports record inspection without rescanning the full imported history.
+It preserves distinct play keys, original source record links, source identities, and exact interpreted timestamps.
+Its publication shares the configuration and view transaction.
+Inspection restricts cached evidence to the original owner.
+The cache can be rebuilt entirely from preserved records and filters.
+
+Regression tests compare legacy and migrated attribution across date windows, thresholds, scopes, and disabled configurations.
+They verify direct evidence requirements, library shares, missing-source explanations, owner isolation, and publication rollback.
+List tests cover nested item scopes, exact arithmetic, missing fields, and calculation limits.
+The full Go suite and frontend type checking and build pass.
+
+Actual-import acceptance assigned Last.fm history through a temporary Direct filter and evaluated Spotify records with personal matching evidence.
+It identified 4,182 Heuristic plays and displayed 165,827 plays under that test configuration.
+Eight record inspections completed in at most 0.016 seconds each without unresolved conditions.
+All 191,473 source records retained identical fingerprints.
+The builder passed desktop, 390-pixel, and 320-pixel checks without page errors.
+Restoring the original configuration returned 168,424 plays with unchanged source records.
+Acceptance found a missing cache-removal index. The corrected index restored the baseline in 84.3 seconds.
+Publication also clears child links in bulk before removing cached evidence.
+
+Unedited conversions preserve legacy conflict decisions through migration fingerprints.
+Editing their blocks compares current assignments independently from hidden legacy settings.
+Restoring the original blocks restores their original conflict behavior.
+Table summaries use source names and available value labels, with complete nested THEN, ELSE IF, and ELSE actions.
+The updated main application rebuilt in 72.406 seconds and retained 168,424 plays and 191,473 records.
+Original-file checks verified all three SHA-256 hashes, and contributor, timestamp, and decision fingerprints remained unchanged.
+
+Remaining work includes matching and inference migration, reversible music aliases, edition grouping, genres, optional tags, and contextual catalog corrections.
