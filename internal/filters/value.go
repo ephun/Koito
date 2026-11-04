@@ -109,6 +109,21 @@ func (v Value) Int64() (int64, bool) {
 	return n.Num().Int64(), true
 }
 
+func (v Value) Span() (time.Duration, bool) {
+	if v.Type != Duration {
+		return 0, false
+	}
+	number, ok := v.data.(*big.Rat)
+	if !ok {
+		return 0, false
+	}
+	nanos := new(big.Rat).Mul(number, big.NewRat(int64(time.Millisecond), 1))
+	if !nanos.IsInt() || !nanos.Num().IsInt64() {
+		return 0, false
+	}
+	return time.Duration(nanos.Num().Int64()), true
+}
+
 func numeric(n *big.Rat, kind Type) Value {
 	if n.Num().BitLen() > 4096 || n.Denom().BitLen() > 4096 {
 		return Unknown("Numeric result exceeds the supported range.")

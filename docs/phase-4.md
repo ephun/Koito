@@ -356,3 +356,29 @@ Restoring the original configuration returned 168,424 plays in 60.94 seconds.
 The updated main application retains the baseline totals and all three original-file hashes.
 
 Time inference, matching, music aliases, edition grouping, genres, optional tags, and contextual corrections remain outstanding.
+
+## Time inference programs
+
+Time inference now uses the shared conditional editor for Last.fm timezones, Spotify timestamp interpretation, and iTunes play dates.
+Timezone values use a dropdown. The starting Last.fm filter selects UTC.
+Existing unknown timezone settings retain their original behavior during migration.
+Spotify time interpretation moves into its own Time filter with the saved end/start choice retained.
+Disabling or removing it uses reported endpoints without reactivating the hidden legacy setting.
+
+Time filters support explicit conditions, priorities, raw metadata, and duration adjustments.
+Conditions read pre-adjustment timestamps once. Duration arithmetic retains nanosecond precision.
+Invalid timezones and excessive durations leave the filter unresolved and appear in record inspection.
+Library timing remains dependent on Count and preserves separate last-played and estimated-date actions.
+Original timestamps, records, and saved configurations remain preserved.
+
+Regression tests compare migrated behavior across every supported Last.fm layout, unknown and explicit timezones,
+file overrides, Spotify starts/ends, disabled settings, and iTunes date combinations.
+They also verify raw conditions, atomic invalid actions, conflicts, and removal of migrated Spotify filters.
+The full Go suite, frontend type checking, and production build pass.
+
+Actual-import acceptance checked 9,102 Spotify representative plays against their original reported endpoints.
+Restoring estimated starts reproduced the full play fingerprint.
+Restoring the original configuration retained 168,424 plays and 191,473 records.
+The timezone dropdown and editor passed desktop, 390-pixel, and 320-pixel checks without page errors.
+
+Matching, music aliases, edition grouping, genres, optional tags, and contextual corrections remain outstanding.

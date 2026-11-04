@@ -13,21 +13,23 @@ import (
 )
 
 type matchingRecord struct {
-	ID        int64        `json:"id"`
-	SourceID  int64        `json:"source_id"`
-	Service   string       `json:"service"`
-	FileHash  string       `json:"file_hash"`
-	Ordinal   int          `json:"ordinal"`
-	Parser    string       `json:"parser"`
-	Payload   string       `json:"payload,omitempty"`
-	UserID    int32        `json:"-"`
-	Values    recordValues `json:"values"`
-	Start     time.Time    `json:"time"`
-	Basis     string       `json:"time_basis"`
-	Device    string       `json:"device,omitempty"`
-	LibraryID string       `json:"library_id,omitempty"`
-	TrackID   string       `json:"track_id,omitempty"`
-	RawFields filters.Env  `json:"-"`
+	TimeIssues []FilterIssue `json:"-"`
+	timeOffset *time.Duration
+	ID         int64        `json:"id"`
+	SourceID   int64        `json:"source_id"`
+	Service    string       `json:"service"`
+	FileHash   string       `json:"file_hash"`
+	Ordinal    int          `json:"ordinal"`
+	Parser     string       `json:"parser"`
+	Payload    string       `json:"payload,omitempty"`
+	UserID     int32        `json:"-"`
+	Values     recordValues `json:"values"`
+	Start      time.Time    `json:"time"`
+	Basis      string       `json:"time_basis"`
+	Device     string       `json:"device,omitempty"`
+	LibraryID  string       `json:"library_id,omitempty"`
+	TrackID    string       `json:"track_id,omitempty"`
+	RawFields  filters.Env  `json:"-"`
 }
 
 type MatchDecision struct {
@@ -73,6 +75,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err := prepareCountPrograms(config); err != nil {
 		return nil, err
 	}
+	if err := prepareTimePrograms(config); err != nil {
+		return nil, err
+	}
 	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err
@@ -90,10 +95,10 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID); err != nil {
 			return nil, err
 		}
-		interpretMatchingRecord(&r, config)
 		if err = retainRawFields(&r, rawFields); err != nil {
 			return nil, fmt.Errorf("Read source fields for record %d: %w", r.ID, err)
 		}
+		interpretMatchingRecord(&r, config)
 		if countPrograms && r.Service == "itunes" {
 			if err = retainCountRaw(&r); err != nil {
 				return nil, err
@@ -108,7 +113,8 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 }
 
 func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
-	_, playRule := config.matchingRules()
+	r.TimeIssues = nil
+	r.timeOffset = nil
 	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
 	r.Start = r.Values.Time
 	r.Basis = r.Values.TimeMeaning
@@ -127,7 +133,8 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 		r.TrackID = libraryText(row.Fields, "Persistent ID")
 		r.Device = libraryText(row.Fields, "Device")
 	}
-	if r.Service == "spotify" && playRule.Settings.SpotifyTime == "estimated_start" && r.Values.Reason == "counted" {
+	basis := applyObservedTime(r, config)
+	if r.Service == "spotify" && basis == "estimated_start" && r.Values.Reason == "counted" {
 		// Subtract actual played time, never an assumed recording duration. Guard
 		// duration conversion against overflow and implausible pre-epoch results.
 		if r.Values.PlayedMS > r.Start.UnixMilli() || r.Values.PlayedMS > int64((1<<63-1)/int64(time.Millisecond)) {
@@ -136,6 +143,10 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 			r.Start = r.Start.Add(-time.Duration(r.Values.PlayedMS) * time.Millisecond)
 			r.Basis = "estimated start"
 		}
+	}
+	if r.timeOffset != nil && !r.Start.IsZero() {
+		r.Start = r.Start.Add(*r.timeOffset)
+		r.Basis = "adjusted time"
 	}
 }
 

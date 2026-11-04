@@ -27,7 +27,8 @@ export default function Filters() {
     setStale(false);
     try {
       const state = await filterRequest<FilterState>();
-      state.current.config.rules = state.current.config.rules.map(rule => rule.program ? rule : state.blocks?.legacy?.[rule.id] || rule);
+      state.current.config.rules = state.current.config.rules.map(rule => state.blocks?.legacy?.[rule.id] || rule);
+      state.current.config.rules.push(...(state.blocks?.additions || []).filter(rule => !state.current.config.rules.some(existing => existing.id === rule.id)));
       state.sources ||= [];
       state.files ||= [];
       state.libraries ||= [];
@@ -155,7 +156,7 @@ export default function Filters() {
         {!!librarySources.length && saved && <div>
           {draft && saved.blocks?.schemas["inference:count"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} /> : <><h3 className="px-4 pt-4 text-lg font-medium normal-case tracking-normal sm:px-5 sm:pt-5">Count</h3>{countRules.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} onChange={upsert} onRemove={() => remove(rule.id)} />)}<AddScopedRule state={saved} type="inference" subtype="count" busy={saving} onAdd={upsert} /></>}
         </div>}
-        <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
+        {saved && draft && saved.blocks?.schemas["inference:time"] ? <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} /> : <section className={`space-y-4 p-4 sm:p-5 ${saved?.blocks?.schemas["inference:count"] ? card : ""}`} aria-label="Time inference">
           <div className="flex items-center gap-1"><h3 className="text-lg font-medium normal-case tracking-normal">Time</h3><FieldHelp label="Time inference">Determine when plays happened using the dates and durations supplied by each source.</FieldHelp></div>
           <Option label="Spotify timestamps" id="spotify-time" help="Estimate starts using the end time and played duration.">
             <select id="spotify-time" className={input} disabled={saving} value={plays.settings.spotify_time} onChange={event => edit(plays.id, { spotify_time: event.target.value })}>
@@ -183,7 +184,7 @@ export default function Filters() {
             {libraryTimes.map(rule => <ScopedRule key={rule.id} rule={rule} state={saved} busy={saving} blocked={!countEnabled(rule)} onChange={upsert} onRemove={draft?.rules.some(existing => existing.id === rule.id) ? () => remove(rule.id) : undefined} />)}
             <AddScopedRule state={saved} type="inference" subtype="time" busy={saving} onAdd={upsert} />
           </div>}
-        </section>
+        </section>}
       </div>
     </section>}
 

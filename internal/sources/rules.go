@@ -40,6 +40,8 @@ type RuleSettings struct {
 	EstimateTimes     bool   `json:"estimate_times,omitempty"`
 }
 type Rule struct {
+	TimeMigrated     bool `json:"time_migrated,omitempty"`
+	timeTargets      map[string]bool
 	Migration        *ProgramMigration `json:"migration,omitempty"`
 	legacyComparison string
 	evidenceFields   []string
@@ -125,17 +127,22 @@ func readRuleVersion(ctx context.Context, reader sqlReader, id int64) (RuleVersi
 
 func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	var state FilterState
-	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema()}}
+	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema(), "inference:time": timeSchema()}}
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
+	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
 		return state, err
 	}
-	migrated := migrateCountPrograms(migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config))))
+	migrated := migrateTimePrograms(migrateCountPrograms(migrateHeuristicPrograms(migrateAggregatePrograms(migrateDirectPrograms(state.Current.Config)))))
 	state.Blocks.Legacy = map[string]Rule{}
 	for i, rule := range migrated.Rules {
-		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil {
+		if i >= len(state.Current.Config.Rules) {
+			state.Blocks.Additions = append(state.Blocks.Additions, rule)
+			continue
+		}
+		if state.Current.Config.Rules[i].Program == nil && rule.Program != nil || state.Current.Config.Rules[i].TimeMigrated != rule.TimeMigrated {
 			state.Blocks.Legacy[rule.ID] = rule
 		}
 	}
@@ -341,7 +348,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && rule.Subtype == "count") {
+		if rule.Program != nil && !(rule.Type == "presentation" && rule.Subtype == "naming" || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -478,6 +485,13 @@ func validateRules(config RuleConfig) error {
 			if rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
 				return errors.New("Count inference applies to whole counts.")
 			}
+		case rule.Type == "inference" && rule.Subtype == "time" && rule.Program != nil:
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Time conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, timeSchema()); err != nil {
+				return err
+			}
 		case rule.Type == "inference" && rule.Subtype == "time" && rule.Scope.Service == "itunes":
 		case rule.Type == "inference" && rule.Subtype == "time":
 			if rule.Scope.LibraryID != "" || rule.Scope.TrackID != "" || rule.Scope.RecordID != 0 || rule.Scope.Artist != "" || rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
@@ -522,7 +536,7 @@ func (config RuleConfig) zoneFor(sourceID int64, fileHash, service string) strin
 	best := -1
 	zone := ""
 	for _, rule := range config.Rules {
-		if !rule.Enabled || rule.Type != "inference" || rule.Subtype != "time" {
+		if !rule.Enabled || rule.Type != "inference" || rule.Subtype != "time" || rule.Program != nil {
 			continue
 		}
 		if rule.Scope.Service != "" && rule.Scope.Service != service {

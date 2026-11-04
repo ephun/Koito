@@ -35,7 +35,7 @@ type FilterIssue struct {
 // Diagnostic checks evaluate enabled programs against this record. Naming
 // filters see earlier naming changes. Direct attribution reads original fields.
 func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex) ([]FilterIssue, error) {
-	issues := []FilterIssue{}
+	issues := append([]FilterIssue{}, r.TimeIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
 	for _, rule := range config.Rules {
@@ -103,10 +103,10 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID, &r.Reason, &r.PlayKey); err != nil {
 			return nil, err
 		}
-		interpretMatchingRecord(&r.matchingRecord, config)
 		if err = retainRawFields(&r.matchingRecord, rawFields); err != nil {
 			return nil, err
 		}
+		interpretMatchingRecord(&r.matchingRecord, config)
 		out = append(out, r)
 	}
 	return out, rows.Err()

@@ -15,6 +15,7 @@ export type RuleSettings = {
 };
 
 export type Rule = {
+	 time_migrated?: boolean;
 	 migration?: { program_hash: string; settings_hash: string; scope?: RuleScope };
   priority?: number;
   name?: string;
@@ -35,7 +36,7 @@ export type RuleScope = {
 export type FilterSource = { id: number; service: string; records: number };
 export type RuleVersion = { id: number; config: RuleConfig };
 export type FilterState = {
-  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema>; legacy?: Record<string, Rule>; templates?: Record<string, { name: string; label: string; program: FilterProgram }[]> };
+  blocks?: { operators: BlockOperator[]; schemas: Record<string, BlockSchema>; legacy?: Record<string, Rule>; additions?: Rule[]; templates?: Record<string, { name: string; label: string; program: FilterProgram }[]> };
   current: RuleVersion;
   time_files: { hash: string; filename: string; source_id: number; records: number }[];
   sources: FilterSource[];

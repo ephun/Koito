@@ -347,15 +347,19 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 				contribution.CoveredPlays = append(contribution.CoveredPlays, key)
 			}
 			remaining := contribution.Attributed - contribution.Observed - contribution.Overlap
-			timeRule, timeConflict := chooseRule(config, "inference", "time", func(rule Rule) bool {
-				scopeUntil := until
-				if !scopeUntil.IsZero() {
-					scopeUntil = scopeUntil.Add(time.Nanosecond)
-				}
-				return rule.Scope.Service == "itunes" && scopeContains(rule.Scope, r, from, scopeUntil)
-			})
-			if timeRule != nil && !timeConflict {
-				contribution.Rules = append(contribution.Rules, timeRule.ID)
+			scopeUntil := until
+			if !scopeUntil.IsZero() {
+				scopeUntil = scopeUntil.Add(time.Nanosecond)
+			}
+			times := resolveTimePrograms(ctx, config, r, from, scopeUntil, true)
+			contribution.FilterIssues = append(contribution.FilterIssues, times.Issues...)
+			var timeRule *Rule
+			timeConflict := false
+			if len(times.Values) > 0 {
+				timeRule = &Rule{}
+				timeRule.Settings.UseLastPlayed, _ = times.Values["time.last_played"].Bool()
+				timeRule.Settings.EstimateTimes, _ = times.Values["time.estimate_dates"].Bool()
+				contribution.Rules = append(contribution.Rules, times.Rules...)
 			}
 			used := map[int64]bool{}
 			for _, p := range candidates {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import FilterBlockEditor, { expressionSummary, statementSummary } from "./FilterBlockEditor";
 import FieldHelp from "./FieldHelp";
 import { Switch, filterInput as input, filterButton as button } from "./FilterControls";
@@ -16,13 +16,18 @@ export default function ProgramFilterManager({ state, config, busy, type = "pres
   const [checkedConfig, setCheckedConfig] = useState("");
   const [checkedVersion, setCheckedVersion] = useState(0);
   const [error, setError] = useState("");
-  const schema = state.blocks?.schemas[`${type}:${subtype}`];
+  const baseSchema = state.blocks?.schemas[`${type}:${subtype}`];
+  const schema = useMemo(() => {
+    if (!baseSchema || !baseSchema.targets["time.zone"]) return baseSchema;
+    const available = (Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") || ["America/Denver", "America/New_York", "America/Los_Angeles"];
+    return { ...baseSchema, choices: { ...baseSchema.choices, "time.zone": [{ label: "Unknown", value: "" }, ...[...new Set(["UTC", ...available])].map(zone => ({ label: zone.replaceAll("_", " "), value: zone }))] } };
+  }, [baseSchema]);
   if (!schema || !state.blocks) return null;
   const rules = config.rules.filter(rule => rule.type === type && rule.subtype === subtype);
   const templates = state.blocks.templates?.[`${type}:${subtype}`] || [];
   const template = templates.find(item => item.name === templateName) || templates[0];
-  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : type === "inference" && subtype === "count" ? "Count" : "Naming";
-  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : type === "inference" && subtype === "count" ? "Choose how iTunes library export records contribute to totals." : "Choose displayed names using original metadata and source information.";
+  const title = subtype === "direct" ? "Direct attribution" : subtype === "aggregate" ? "Aggregate attribution" : subtype === "heuristic" ? "Heuristic attribution" : type === "inference" && subtype === "count" ? "Count" : type === "inference" && subtype === "time" ? "Time" : "Naming";
+  const help = subtype === "direct" ? "Assign listening using information you know." : subtype === "aggregate" ? "Assign your percentage of a cumulative listening count. Whole plays round down." : subtype === "heuristic" ? "Estimate who listened using matching plays assigned to you by Direct filters." : type === "inference" && subtype === "count" ? "Choose how iTunes library export records contribute to totals." : type === "inference" && subtype === "time" ? "Determine when plays happened using each source's dates, durations, and timezone." : "Choose displayed names using original metadata and source information.";
   const current = rules.find(rule => rule.id === expanded);
   const freshExamples = checkedVersion === state.current.id && checkedConfig === JSON.stringify(config) ? examples : undefined;
   async function check() {

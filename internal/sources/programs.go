@@ -10,6 +10,7 @@ import (
 // The editor receives its supported operators and writable fields from the
 // same registry used for validation and execution.
 type ProgramSchema struct {
+	Additions []Rule                       `json:"additions,omitempty"`
 	Templates map[string][]ProgramTemplate `json:"templates,omitempty"`
 	Legacy    map[string]Rule              `json:"legacy,omitempty"`
 	Operators []filters.Operator           `json:"operators"`
