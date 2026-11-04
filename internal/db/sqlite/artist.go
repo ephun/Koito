@@ -11,7 +11,6 @@ import (
 	"github.com/gabehf/koito/internal/catalog"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
-	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -174,7 +173,7 @@ func (s *Sqlite) SaveArtist(ctx context.Context, opts db.SaveArtistOpts) (*model
 		return nil, fmt.Errorf("SaveArtist: canonical alias: %w", err)
 	}
 
-	if err := sources.RefreshNativeCatalog(ctx, tx, "artist", int64(id)); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "artist", int64(id)); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -233,7 +232,7 @@ func (s *Sqlite) SaveArtistAliases(ctx context.Context, id int32, aliases []stri
 			return fmt.Errorf("SaveArtistAliases: insert: %w", err)
 		}
 	}
-	if err := sources.RefreshNativeCatalog(ctx, tx, "artist", int64(id)); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "artist", int64(id)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -264,6 +263,11 @@ func (s *Sqlite) UpdateArtist(ctx context.Context, opts db.UpdateArtistOpts) err
 			`UPDATE artists SET image = ?, image_source = ? WHERE id = ?`,
 			opts.Image.String(), opts.ImageSrc, opts.ID); err != nil {
 			return fmt.Errorf("UpdateArtist: image: %w", err)
+		}
+	}
+	if opts.MusicBrainzID != uuid.Nil {
+		if err = refreshNativeCatalogItem(ctx, tx, "artist", int64(opts.ID)); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()

@@ -12,7 +12,6 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
-	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -230,7 +229,7 @@ func (s *Sqlite) SaveAlbum(ctx context.Context, opts db.SaveAlbumOpts) (*models.
 	if err := music.AssignAlbumGroup(ctx, tx, id64); err != nil {
 		return nil, fmt.Errorf("SaveAlbum: grouping: %w", err)
 	}
-	if err := sources.RefreshNativeCatalog(ctx, tx, "album", int64(id)); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "album", int64(id)); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -290,7 +289,7 @@ func (s *Sqlite) SaveAlbumAliases(ctx context.Context, id int32, aliases []strin
 			return fmt.Errorf("SaveAlbumAliases: insert: %w", err)
 		}
 	}
-	if err := sources.RefreshNativeCatalog(ctx, tx, "album", int64(id)); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "album", int64(id)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -331,6 +330,11 @@ func (s *Sqlite) UpdateAlbum(ctx context.Context, opts db.UpdateAlbumOpts) error
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE releases SET various_artists = ? WHERE id = ?`, v, opts.ID); err != nil {
 			return fmt.Errorf("UpdateAlbum: various_artists: %w", err)
+		}
+	}
+	if opts.MusicBrainzID != uuid.Nil || opts.VariousArtistsUpdate {
+		if err = refreshNativeCatalogItem(ctx, tx, "album", int64(opts.ID)); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()
@@ -430,6 +434,9 @@ func (s *Sqlite) AddArtistsToAlbum(ctx context.Context, opts db.AddArtistsToAlbu
 			artistID, opts.AlbumID); err != nil {
 			return fmt.Errorf("AddArtistsToAlbum: insert: %w", err)
 		}
+	}
+	if err = refreshNativeCatalogItem(ctx, tx, "album", int64(opts.AlbumID)); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

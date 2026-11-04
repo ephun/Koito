@@ -10,7 +10,7 @@ import (
 )
 
 // RefreshNativeCatalog evaluates saved catalog corrections inside the capture
-// transaction. Only the captured item's derived caches are replaced.
+// transaction. Shared aliases also refresh affected artists' source genres.
 func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64) error {
 	version, err := readRuleVersion(ctx, tx, 0)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -18,6 +18,32 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 	}
 	if err != nil {
 		return err
+	}
+	if kind == "artist" {
+		// A new shared alias can make another artist's source genres ambiguous.
+		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT a.artist_id FROM artist_aliases a JOIN artist_aliases current ON current.alias=a.alias WHERE current.artist_id=? ORDER BY a.artist_id`, id)
+		if err != nil {
+			return err
+		}
+		ids := []int64{}
+		for rows.Next() {
+			var artist int64
+			if err = rows.Scan(&artist); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, artist)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		for _, artist := range ids {
+			if err = publishArtistGenres(ctx, tx, version.Config, artist); err != nil {
+				return err
+			}
+		}
 	}
 	active := false
 	for _, rule := range version.Config.Rules {

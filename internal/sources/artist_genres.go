@@ -85,17 +85,22 @@ func resolveArtistGenres(ctx context.Context, programs []namingProgram, artistID
 	return result, issues, nil
 }
 
-func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig) error {
+func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...int64) error {
 	programs, err := compileNamingDomain(config, true)
 	if err != nil {
 		return err
 	}
-	artists, err := loadArtistGenreInputs(ctx, tx)
+	artists, err := loadArtistGenreInputs(ctx, tx, targets...)
 	if err != nil {
 		return err
 	}
 	for _, q := range []string{`DELETE FROM artist_genres`, `DELETE FROM artist_genre_issues`} {
-		if _, err = tx.ExecContext(ctx, q); err != nil {
+		args := []any{}
+		if len(targets) > 0 {
+			q += " WHERE artist_id=?"
+			args = append(args, targets[0])
+		}
+		if _, err = tx.ExecContext(ctx, q, args...); err != nil {
 			return err
 		}
 	}
@@ -134,8 +139,15 @@ type genreArtist struct {
 	evidence []filters.Value
 }
 
-func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx) ([]genreArtist, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT a.id,a.name FROM artists_with_name a ORDER BY a.id`)
+func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx, targets ...int64) ([]genreArtist, error) {
+	query := `SELECT a.id,a.name FROM artists_with_name a`
+	args := []any{}
+	if len(targets) > 0 {
+		query += ` WHERE a.id=?`
+		args = append(args, targets[0])
+	}
+	query += ` ORDER BY a.id`
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +167,12 @@ func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx) ([]genreArtist, erro
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT DISTINCT a.artist_id,g.record_id,g.position,g.value,r.source_id,r.file_hash,g.field FROM source_genres g JOIN source_records r ON r.id=g.record_id JOIN artist_aliases a ON a.alias=json_extract(r.payload,'$.fields.Artist') WHERE json_type(r.payload,'$.fields.Artist')='text' AND NOT EXISTS(SELECT 1 FROM artist_aliases other WHERE other.alias=a.alias AND other.artist_id<>a.artist_id) ORDER BY a.artist_id,g.record_id,g.position`)
+	query = `SELECT DISTINCT a.artist_id,g.record_id,g.position,g.value,r.source_id,r.file_hash,g.field FROM source_genres g JOIN source_records r ON r.id=g.record_id JOIN artist_aliases a ON a.alias=json_extract(r.payload,'$.fields.Artist') WHERE json_type(r.payload,'$.fields.Artist')='text' AND NOT EXISTS(SELECT 1 FROM artist_aliases other WHERE other.alias=a.alias AND other.artist_id<>a.artist_id)`
+	if len(targets) > 0 {
+		query += ` AND a.artist_id=?`
+	}
+	query += ` ORDER BY a.artist_id,g.record_id,g.position`
+	rows, err = tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

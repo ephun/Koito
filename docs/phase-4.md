@@ -939,3 +939,40 @@ There were zero collisions or estimates.
 Original fingerprints and all three file hashes passed.
 Track 271 retained its 521 plays and album associations.
 Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.
+
+## Native enrichment and incoming genres
+
+Native identifier enrichment, artist-credit association changes, and additional aliases refresh the affected catalog corrections.
+Track histories and inclusion refresh after the updated metadata and displayed corrections are available.
+Image-only and duration-only enrichment do not recalculate unrelated catalog filters.
+MusicBrainz recording enrichment retains an existing Spotify identity and leaves earlier recording rows intact.
+
+Track enrichment now performs artist additions and album-credit additions in its existing transaction.
+It no longer opens nested catalog transactions while holding the write transaction.
+A failed correction rolls back the artist additions, album credits, duration change, and derived corrections together.
+
+New native artists receive saved genre assignments immediately.
+A shared original alias refreshes genre assignments for every affected artist.
+Ambiguous source genre evidence stops contributing until a filter or source identity can resolve it.
+The source genre records themselves remain unchanged.
+Targeted genre publication uses the same evaluator as Rebuild and preserves unrelated artists' assignments.
+
+Regression checks cover transaction failure and retry, immediate names and inclusion after enrichment,
+identifier conditions becoming inapplicable, preserved recording identities, incoming genres,
+shared-alias ambiguity, original evidence, and rebuild consistency.
+Mixed Naming/genre actions, metadata-dependent grouping enrichment, catalog-read coverage,
+and the final Phase 4 requirement audit remain open.
+
+The grouping audit identified a remaining consistency gap in existing-item enrichment.
+AssignAlbumGroup currently assumes a newly captured release and does not clear an earlier native assignment.
+Imported contributions also store inherited native groups alongside explicit source assignments.
+Refreshing an existing native group's metadata needs to distinguish inherited defaults from explicit source overrides.
+The correction must preserve source-specific exceptions and reconcile prior membership and classification caches.
+
+The full Go suite passes for enrichment and native genre refresh.
+Main activation passed after a database backup.
+The actual-import rebuild completed in 72.86 seconds with 191,473 records and 168,424 plays.
+There were zero collisions or estimates.
+All preservation fingerprints and three original-file hashes passed.
+Track 271 retained its 521 plays and original album associations.
+Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.

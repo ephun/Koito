@@ -12,7 +12,6 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
-	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/google/uuid"
 )
@@ -210,18 +209,7 @@ func (s *Sqlite) SaveTrack(ctx context.Context, opts db.SaveTrackOpts) (*models.
 	if err = music.AssignRecording(ctx, tx, id64, mbid, ""); err != nil {
 		return nil, err
 	}
-	sensitive, err := music.CaseSensitive(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	if err = music.AssignHistory(ctx, tx, id64, sensitive); err != nil {
-		return nil, err
-	}
-
-	if err := sources.RefreshNativeCatalog(ctx, tx, "track", int64(id)); err != nil {
-		return nil, err
-	}
-	if err = music.RefreshScope(ctx, tx, id64); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "track", int64(id)); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -274,7 +262,7 @@ func (s *Sqlite) SaveTrackAliases(ctx context.Context, id int32, aliases []strin
 			return fmt.Errorf("SaveTrackAliases: insert: %w", err)
 		}
 	}
-	if err := sources.RefreshNativeCatalog(ctx, tx, "track", int64(id)); err != nil {
+	if err := refreshNativeCatalogItem(ctx, tx, "track", int64(id)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -292,6 +280,9 @@ func (s *Sqlite) AddArtistsToTrack(ctx context.Context, opts db.AddArtistsToTrac
 			artistID, opts.TrackID); err != nil {
 			return fmt.Errorf("AddArtistsToTrack: insert: %w", err)
 		}
+	}
+	if err = refreshNativeCatalogItem(ctx, tx, "track", int64(opts.TrackID)); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -312,6 +303,13 @@ func (s *Sqlite) UpdateTrack(ctx context.Context, opts db.UpdateTrackOpts) error
 			opts.MusicBrainzID.String(), opts.ID); err != nil {
 			return fmt.Errorf("UpdateTrack: mbzid: %w", err)
 		}
+		var uri string
+		if err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT r.spotify_uri FROM track_recordings tr JOIN recordings r ON r.recording_key=tr.recording_key WHERE tr.track_id=?),'')`, opts.ID).Scan(&uri); err != nil {
+			return err
+		}
+		if err = music.AssignRecording(ctx, tx, int64(opts.ID), opts.MusicBrainzID.String(), uri); err != nil {
+			return err
+		}
 	}
 	if opts.Duration != 0 {
 		if _, err := tx.ExecContext(ctx,
@@ -321,24 +319,20 @@ func (s *Sqlite) UpdateTrack(ctx context.Context, opts db.UpdateTrackOpts) error
 		}
 	}
 	if len(opts.AddArtists) > 0 {
-		var releaseID int32
-		if t, err := s.GetTrack(ctx, db.GetTrackOpts{ID: opts.ID}); err != nil {
-			return fmt.Errorf("UpdateTrack: GetTrack By ID: %w", err)
-		} else {
-			releaseID = t.AlbumID
+		var releaseID int64
+		if err = tx.QueryRowContext(ctx, `SELECT release_id FROM tracks WHERE id=?`, opts.ID).Scan(&releaseID); err != nil {
+			return err
 		}
-
-		if err = s.AddArtistsToTrack(ctx, db.AddArtistsToTrackOpts{
-			TrackID:   opts.ID,
-			ArtistIDs: opts.AddArtists,
-		}); err != nil {
-			return fmt.Errorf("UpdateTrack: AssociateArtistToTrack: %w", err)
+		for _, artistID := range opts.AddArtists {
+			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO artist_tracks(artist_id,track_id,is_primary) VALUES(?,?,0)`, artistID, opts.ID); err != nil {
+				return err
+			}
+			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO artist_releases(artist_id,release_id,is_primary) VALUES(?,?,0)`, artistID, releaseID); err != nil {
+				return err
+			}
 		}
-		if err = s.AddArtistsToAlbum(ctx, db.AddArtistsToAlbumOpts{
-			ArtistIDs: opts.AddArtists,
-			AlbumID:   releaseID,
-		}); err != nil {
-			return fmt.Errorf("UpdateTrack: AssociateArtistToRelease: %w", err)
+		if err = refreshNativeCatalogItem(ctx, tx, "album", releaseID); err != nil {
+			return err
 		}
 	}
 
@@ -355,6 +349,11 @@ func (s *Sqlite) UpdateTrack(ctx context.Context, opts db.UpdateTrackOpts) error
 		}
 		if err = cleanOrphanedEntries(ctx, tx); err != nil {
 			return fmt.Errorf("UpdateTrack: CleanOrphanedEntries: %w", err)
+		}
+	}
+	if opts.MusicBrainzID != uuid.Nil || len(opts.AddArtists) > 0 || len(opts.RemoveArtists) > 0 {
+		if err = refreshNativeCatalogItem(ctx, tx, "track", int64(opts.ID)); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()
