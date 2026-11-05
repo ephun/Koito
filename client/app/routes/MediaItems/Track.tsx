@@ -34,7 +34,6 @@ export default function Track() {
       imgItemId={track.album_id}
       subContent={
         <>
-          <MusicStates kind="track" id={track.id} />
           {track.artists.length > 0 && (
             <p>
               By{" "}
@@ -60,10 +59,11 @@ export default function Track() {
               </Link>
             </span>)}
           </p>
+          <MusicStates kind="track" id={track.id} />
         </>
       }
     >
-      <div className="flex flex-col gap-10 md:gap-20 mt-14">
+      {track.first_listen > 0 && <div className="flex flex-col gap-10 md:gap-20 mt-14">
         <div className="min-w-0 flex-1">
           <LastPlayed limit={11} trackId={track.id} musicTrackId={track.music_track_id} showAlbums showNowPlaying showSeeMore />
         </div>
@@ -71,7 +71,7 @@ export default function Track() {
           <InterestGraph type="track" id={track.id} />
           <ActivityGrid configurable trackId={track.id} />
         </div>
-      </div>
+      </div>}
     </MediaLayout>
   );
 }

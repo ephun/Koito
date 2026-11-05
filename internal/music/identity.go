@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -87,11 +88,8 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 	if err != nil {
 		return err
 	}
-	query := `SELECT t.id,t.title,COALESCE((SELECT group_concat(artist_id,',') FROM
-	    (SELECT artist_id FROM artist_tracks WHERE track_id=t.id ORDER BY artist_id)),'')
-	    ,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_tracks ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.track_id=t.id ORDER BY ar.artist_id)),'[]'),COALESCE(r.title,''),COALESCE(o.comparison_key,'')
-	    ,c.artist,COALESCE((SELECT group_concat(artist_id,',') FROM(SELECT DISTINCT COALESCE(mt.artist_id,ma.matched_artist_id,a.artist_id) AS artist_id FROM artist_tracks a LEFT JOIN music_track_artists mt ON mt.track_id=a.track_id AND mt.original_artist_id=a.artist_id LEFT JOIN music_artist_matches ma ON ma.artist_id=a.artist_id WHERE a.track_id=t.id ORDER BY artist_id)),'')
-	    FROM tracks_with_title t LEFT JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_history_overrides o ON o.track_id=t.id LEFT JOIN music_album_comparisons c ON c.track_id=t.id`
+	query := `SELECT t.id,t.title,COALESCE(r.title,''),COALESCE(o.comparison_key,''),c.artist
+ FROM tracks_with_title t LEFT JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_history_overrides o ON o.track_id=t.id LEFT JOIN music_album_comparisons c ON c.track_id=t.id`
 	var args []any
 	if trackID != 0 {
 		query += ` WHERE t.id=?`
@@ -112,7 +110,7 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 	var items []item
 	for rows.Next() {
 		var v item
-		if err = rows.Scan(&v.id, &v.title, &v.artists, &v.names, &v.album, &v.override, &v.comparisonArtist, &v.matchedArtists); err != nil {
+		if err = rows.Scan(&v.id, &v.title, &v.album, &v.override, &v.comparisonArtist); err != nil {
 			rows.Close()
 			return err
 		}
@@ -122,6 +120,28 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 	rows.Close()
 	if err != nil {
 		return err
+	}
+	credits, err := loadTrackCredits(ctx, db, trackID)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		credit := credits[items[i].id]
+		original, matched := []string{}, []string{}
+		for _, id := range credit.Original {
+			original = append(original, strconv.FormatInt(id, 10))
+		}
+		for _, id := range credit.Matched {
+			matched = append(matched, strconv.FormatInt(id, 10))
+		}
+		names := credit.Names
+		if names == nil {
+			names = []string{}
+		}
+		raw, _ := json.Marshal(names)
+		items[i].artists = strings.Join(original, ",")
+		items[i].matchedArtists = strings.Join(matched, ",")
+		items[i].names = string(raw)
 	}
 	for _, v := range items {
 		title := v.title

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gabehf/koito/internal/logger"
 	"github.com/gabehf/koito/internal/music"
 )
 
@@ -46,6 +47,10 @@ func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 // publishPlan replaces only owned display rows and derived links, atomically.
 // It never updates source records, legacy aliases or unrelated live listens.
 func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int64) (ProjectionResult, error) {
+	started := time.Now()
+	stage := func(name string) {
+		logger.FromContext(ctx).Debug().Str("stage", name).Dur("elapsed", time.Since(started)).Msg("Rebuilding imported view")
+	}
 	result := ProjectionResult{Policy: Policy, Records: len(plan.Records), Plays: len(plan.Plays)}
 	version, err := readRuleVersion(ctx, tx, versionID)
 	if err != nil {
@@ -73,6 +78,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			return result, err
 		}
 	}
+	stage("Catalog")
 	// Read unowned display rows once. A per-play COUNT with a user condition
 	// can make SQLite choose the user index and scan the entire single-user
 	// history for every new play.
@@ -149,6 +155,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		}
 		tracks[key] = appearance
 	}
+	stage("Play details")
 	for key, attribution := range plan.Attributions {
 		raw, err := json.Marshal(attribution)
 		if err != nil {
@@ -165,6 +172,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			}
 		}
 	}
+	stage("Plays")
 	for _, play := range plan.Plays {
 		r := byID[play.Representative]
 		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
@@ -270,6 +278,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			}
 		}
 	}
+	stage("Interpretations")
 	statement, err := tx.PrepareContext(ctx, `INSERT INTO source_interpretations(record_id,policy,play_key,reason) VALUES(?,?,?,?)`)
 	if err != nil {
 		return result, err
@@ -304,15 +313,19 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = publishCatalogIdentifiers(ctx, tx, config); err != nil {
 		return result, err
 	}
+	stage("Source genres")
 	if err = refreshSourceGenres(ctx, tx); err != nil {
 		return result, err
 	}
-	if err = publishSnapshots(ctx, tx, byID, naming, historyAssignments); err != nil {
+	stage("Snapshots")
+	if err = publishSnapshots(ctx, tx, byID, naming, historyAssignments, tracks); err != nil {
 		return result, err
 	}
+	stage("Artist matching")
 	if err = music.RefreshArtistMatches(ctx, tx, rawConfig); err != nil {
 		return result, err
 	}
+	stage("Names")
 	if err = publishCatalogNames(ctx, tx, config); err != nil {
 		return result, err
 	}
@@ -320,28 +333,35 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = publishAlbumClassification(ctx, tx, config); err != nil {
 		return result, err
 	}
+	stage("Catalog matching")
 	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
 		return result, err
 	}
+	stage("Album groups")
 	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {
 		return result, err
 	}
+	stage("Catalog matching")
 	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
 		return result, err
 	}
+	stage("Track histories")
 	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
 		return result, err
 	}
 	if err = publishArtistGenres(ctx, tx, config); err != nil {
 		return result, err
 	}
+	stage("Attribution evidence")
 	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {
 		return result, err
 	}
+	stage("Inclusion")
 	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
 		return result, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
+	stage("Complete")
 	return result, err
 }
 

@@ -79,10 +79,19 @@ func attachRecordMemberships(ctx context.Context, reader sqlReader, records []ma
 			index[r.Values.URI] = append(index[r.Values.URI], entry{item, r.Values.URI})
 		}
 	}
+	// Membership is current item evidence. Identical item identities can share
+	// this immutable environment across their individual history records.
+	environments := map[string]filters.Env{}
 	for i := range records {
 		r := &records[i]
+		identity := membershipKey("track", r.Values) + "\x00" + membershipKey("album", r.Values) + "\x00" + r.Values.URI
+		if env, ok := environments[identity]; ok {
+			r.LibraryFields = env
+			continue
+		}
 		env := music.EmptyLibraryEnvironment()
 		r.LibraryFields = env
+		environments[identity] = env
 		seen := map[int64]bool{}
 		playlists := map[string]bool{}
 		names := []filters.Value{}

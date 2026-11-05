@@ -87,7 +87,7 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
       {!!inspection.snapshots?.length && <details className="rounded border border-(--color-bg-tertiary) p-3">
         <summary className="cursor-pointer text-sm">Snapshot</summary>
         {inspection.snapshots.map(snapshot => <div className="mt-2 space-y-2" key={snapshot.id}>
-          <p className="text-sm">{snapshot.name} ? Item {snapshot.position + 1}</p>
+          <p className="text-sm">{snapshot.name} · Item {snapshot.position + 1}</p>
           <pre className="max-h-80 overflow-auto text-sm">{JSON.stringify(snapshot.metadata, null, 2)}</pre>
         </div>)}
       </details>}

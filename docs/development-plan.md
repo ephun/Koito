@@ -481,6 +481,9 @@ in Phase 2 must already avoid discarding these distinctions.
 
 ## Phase 5: remaining Spotify exports, playlists, and Discogs
 
+**Status:** complete. See [implementation notes](phase-5.md) and the
+[closing audit](phase-5-audit.md) for verified behavior and source coverage.
+
 **Outcome:** the view can use streaming history, saved music, and physical
 collections without treating all of them as listening events.
 
@@ -754,7 +757,8 @@ has implemented them. Summaries were checked while writing this plan.
 Phase 4 is complete. See [the Phase 4 notes](phase-4.md) and
 [requirement audit](phase-4-audit.md) for implementation and verification.
 
-Phase 5 is the next proposed phase. It covers more Spotify exports, playlists and Discogs.
+Phase 5 is complete. See [its notes](phase-5.md) and [closing audit](phase-5-audit.md).
+Phase 6 covers Navidrome, Multi-Scrobbler, and the remaining historical export formats.
 
 Field-specific source preference also needs concrete examples before controls
 return to Filters. Keep original music identities and source album associations

@@ -37,7 +37,6 @@ export default function Album() {
       imgItemId={album.id}
       subContent={
         <>
-          <MusicStates kind="album" id={album.id} />
           {album.artists.length > 0 && !album.is_various_artists && (
             <p>
               By{" "}
@@ -54,6 +53,7 @@ export default function Album() {
             </p>
           )}
           {album.is_various_artists && <p>By Various Artists</p>}
+          <MusicStates kind="album" id={album.id} />
         </>
       }
     >
@@ -64,7 +64,7 @@ export default function Album() {
           <span className="shrink-0 text-sm text-(--color-fg-secondary)">{edition.listen_count} plays</span>
         </li>)}</ul>
       </section>}
-      <div className="flex flex-col gap-10 md:gap-12 mt-8 max-w-[1400px]">
+      {album.listen_count > 0 && <div className="flex flex-col gap-10 md:gap-12 mt-8 max-w-[1400px]">
         <div className="flex gap-10 md:gap-20 flex-wrap xl:flex-nowrap items-start">
           <TopTracks
             limit={8}
@@ -74,7 +74,7 @@ export default function Album() {
             showSeeMore
             className="max-w-[750px] lg:max-w-[450px]"
           />
-          <div className="min-w-0 w-full sm:min-w-[350px] flex-1">
+          {album.first_listen > 0 && <div className="min-w-0 w-full sm:min-w-[350px] flex-1">
             <LastPlayed
               limit={11}
               albumId={album.album_group_id ? undefined : album.id}
@@ -83,13 +83,13 @@ export default function Album() {
               showAlbums={!!album.album_group_id}
               showSeeMore
             />
-          </div>
+          </div>}
         </div>
-        <div className="flex flex-wrap gap-10">
+        {album.first_listen > 0 && <div className="flex flex-wrap gap-10">
           <InterestGraph type={album.album_group_id ? "album-group" : "album"} id={album.album_group_id || album.id} />
           <ActivityGrid configurable albumId={album.album_group_id ? undefined : album.id} albumGroupId={album.album_group_id} />
-        </div>
-      </div>
+        </div>}
+      </div>}
     </MediaLayout>
   );
 }

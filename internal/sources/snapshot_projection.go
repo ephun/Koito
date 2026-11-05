@@ -107,7 +107,7 @@ func projectSnapshotRelease(ctx context.Context, tx *sql.Tx, r matchingRecord) (
 	return id, err
 }
 
-func publishSnapshots(ctx context.Context, tx *sql.Tx, records map[int64]*matchingRecord, naming []namingProgram, historyAssignments map[int64]string) error {
+func publishSnapshots(ctx context.Context, tx *sql.Tx, records map[int64]*matchingRecord, naming []namingProgram, historyAssignments map[int64]string, tracks map[string]int64) error {
 	items, err := currentSnapshotRecords(ctx, tx)
 	if err != nil {
 		return err
@@ -115,6 +115,7 @@ func publishSnapshots(ctx context.Context, tx *sql.Tx, records map[int64]*matchi
 	if _, err = tx.ExecContext(ctx, `DELETE FROM source_music_states`); err != nil {
 		return err
 	}
+	albums := map[int64]int64{}
 	for _, item := range items {
 		r := records[item.RecordID]
 		if r == nil {
@@ -126,18 +127,28 @@ func publishSnapshots(ctx context.Context, tx *sql.Tx, records map[int64]*matchi
 			if e != nil {
 				return e
 			}
-			id, e := projectTrack(ctx, tx, v)
-			if e != nil {
-				return e
-			}
-			id, e = historyVariant(ctx, tx, id, historyComparisonKey(*r), historyAssignments)
-			if e != nil {
-				return e
+			comparisonKey := historyComparisonKey(*r)
+			raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID, comparisonKey})
+			key := string(raw)
+			id, exists := tracks[key]
+			if !exists {
+				id, e = projectTrack(ctx, tx, v)
+				if e != nil {
+					return e
+				}
+				id, e = historyVariant(ctx, tx, id, comparisonKey, historyAssignments)
+				if e != nil {
+					return e
+				}
+				tracks[key] = id
 			}
 			track = id
-			var album int64
-			if e = tx.QueryRowContext(ctx, `SELECT release_id FROM tracks WHERE id=?`, id).Scan(&album); e != nil {
-				return e
+			album, exists := albums[id]
+			if !exists {
+				if e = tx.QueryRowContext(ctx, `SELECT release_id FROM tracks WHERE id=?`, id).Scan(&album); e != nil {
+					return e
+				}
+				albums[id] = album
 			}
 			release = album
 		} else if item.Kind == "saved_albums" || item.Kind == "owned" || item.Kind == "wanted" || item.Kind == "inventory" || item.Kind == "contributions" {

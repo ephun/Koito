@@ -280,25 +280,29 @@ func TestAdditiveMigrationPreservesExistingCatalog(t *testing.T) {
 }
 
 func TestZipValidationIsAtomic(t *testing.T) {
-	s := testStore(t)
-	var buf bytes.Buffer
-	z := zip.NewWriter(&buf)
-	for name, data := range map[string]string{"Streaming_History_Audio_good.json": "[" + complete + "]", "Streaming_History_Audio_bad.json": "not JSON"} {
-		w, err := z.Create(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w.Write([]byte(data))
-	}
-	if err := z.Close(); err != nil {
-		t.Fatal(err)
-	}
-	_, err := s.ImportSpotify(context.Background(), bytes.NewReader(buf.Bytes()), "broken.zip", "me", 1)
-	if err == nil {
-		t.Fatal("malformed ZIP member was accepted")
-	}
-	if count(t, s, "source_records") != 0 || count(t, s, "source_extractions") != 0 {
-		t.Fatal("failed ZIP partially committed records")
+	for _, prefix := range []string{"Streaming_History_Audio_", "StreamingHistory_music_"} {
+		t.Run(prefix, func(t *testing.T) {
+			s := testStore(t)
+			var buf bytes.Buffer
+			z := zip.NewWriter(&buf)
+			for name, data := range map[string]string{prefix + "good.json": "[" + complete + "]", prefix + "bad.json": "not JSON"} {
+				w, err := z.Create(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				w.Write([]byte(data))
+			}
+			if err := z.Close(); err != nil {
+				t.Fatal(err)
+			}
+			_, err := s.ImportSpotify(context.Background(), bytes.NewReader(buf.Bytes()), "broken.zip", "me", 1)
+			if err == nil {
+				t.Fatal("malformed ZIP member was accepted")
+			}
+			if count(t, s, "source_records") != 0 || count(t, s, "source_extractions") != 0 {
+				t.Fatal("failed ZIP partially committed records")
+			}
+		})
 	}
 }
 

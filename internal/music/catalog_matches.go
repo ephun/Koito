@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/gabehf/koito/internal/logger"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gabehf/koito/internal/filters"
 )
@@ -232,6 +234,11 @@ func AssignCatalogMatches(ctx context.Context, db Database, config, kind string,
 }
 
 func refreshCatalogMatches(ctx context.Context, db Database, config, kind string, id int64) error {
+	started := time.Now()
+	stage := func(name string, count int) {
+		logger.FromContext(ctx).Debug().Str("stage", name).Int("items", count).Dur("elapsed", time.Since(started)).Msg("Matching music catalog")
+	}
+
 	full := kind == ""
 	if full {
 		if err := RefreshArtistMatches(ctx, db, config); err != nil {
@@ -251,8 +258,6 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 		return nil
 	}
 	query := `SELECT t.id,t.release_id,t.title,r.title,COALESCE(r.musicbrainz_id,''),
- COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_tracks ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.track_id=t.id ORDER BY ar.artist_id)),'[]'),
- COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_tracks WHERE track_id=t.id ORDER BY artist_id)),''),
  c.artist,c.album FROM tracks_with_title t JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_catalog_comparisons c ON c.track_id=t.id`
 	args := []any{}
 	if kind == "track" {
@@ -272,7 +277,7 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 	for rows.Next() {
 		var a catalogAppearance
 		var artist, album *string
-		if err = rows.Scan(&a.id, &a.release, &a.title, &a.album, &a.identifier, &a.artistNames, &a.credits, &artist, &album); err != nil {
+		if err = rows.Scan(&a.id, &a.release, &a.title, &a.album, &a.identifier, &artist, &album); err != nil {
 			rows.Close()
 			return err
 		}
@@ -288,6 +293,7 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 	if err != nil {
 		return err
 	}
+	stage("Artists", len(items))
 	rows, err = db.QueryContext(ctx, `SELECT a.id,a.name,COALESCE(a.musicbrainz_id,''),COALESCE(m.comparison_key,a.name),EXISTS(SELECT 1 FROM artist_tracks ar WHERE ar.artist_id=a.id AND (EXISTS(SELECT 1 FROM listens l WHERE l.track_id=ar.track_id) OR EXISTS(SELECT 1 FROM source_aggregates g WHERE g.track_id=ar.track_id AND g.undated_count>0))),EXISTS(SELECT 1 FROM catalog_names n WHERE n.kind='artist' AND n.item_id=a.id) FROM artists_with_name a LEFT JOIN music_artist_matches m ON m.artist_id=a.id ORDER BY a.id`)
 	if err != nil {
 		return err
@@ -306,12 +312,58 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 	if err != nil {
 		return err
 	}
+	// Read raw credit ordering once. Correlating the artists view from every
+	// appearance can cause a full catalog scan for each newly imported track.
+	creditQuery := `SELECT track_id,artist_id FROM artist_tracks`
+	creditArgs := []any{}
+	if kind == "track" {
+		creditQuery += ` WHERE track_id=?`
+		creditArgs = append(creditArgs, id)
+	}
+	if kind == "album" {
+		creditQuery += ` WHERE track_id IN(SELECT id FROM tracks WHERE release_id=?)`
+		creditArgs = append(creditArgs, id)
+	}
+	creditQuery += ` ORDER BY track_id,artist_id`
+	creditRows, err := db.QueryContext(ctx, creditQuery, creditArgs...)
+	if err != nil {
+		return err
+	}
+	trackCredits := map[int64][]int64{}
+	for creditRows.Next() {
+		var track, artist int64
+		if err = creditRows.Scan(&track, &artist); err != nil {
+			creditRows.Close()
+			return err
+		}
+		trackCredits[track] = append(trackCredits[track], artist)
+	}
+	err = creditRows.Err()
+	creditRows.Close()
+	if err != nil {
+		return err
+	}
+	artistNames := map[int64][]string{}
+	for _, a := range artists {
+		artistNames[a.id] = append(artistNames[a.id], a.name)
+	}
+	for i := range items {
+		names, ids := []string{}, []string{}
+		for _, artist := range trackCredits[items[i].id] {
+			ids = append(ids, strconv.FormatInt(artist, 10))
+			names = append(names, artistNames[artist]...)
+		}
+		raw, _ := json.Marshal(names)
+		items[i].artistNames = string(raw)
+		items[i].credits = strings.Join(ids, ",")
+	}
 	families := map[string][]catalogArtist{}
 	byID := map[int64]catalogArtist{}
 	for _, a := range artists {
 		families[a.key] = append(families[a.key], a)
 		byID[a.id] = a
 	}
+	stage("Release flags", len(artists))
 	if full {
 		for _, query := range []string{`DELETE FROM music_track_artists`, `DELETE FROM music_release_groups`, `DELETE FROM music_album_comparisons`,
 			`DELETE FROM album_group_members WHERE group_id IN(SELECT id FROM album_groups WHERE json_extract(group_key,'$[0]')='music')`} {
@@ -343,6 +395,7 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 	if err != nil {
 		return err
 	}
+	stage("Credits", len(items))
 	affected := map[string]bool{}
 	// Read structured release credits once. A predicate above the grouped view
 	// can otherwise repeat its complete scan for every track appearance.
@@ -424,7 +477,10 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 	separate := map[int64]bool{}
 	checked := map[int64]bool{}
 	catalogPrograms := programs.Catalog()
-	for _, a := range items {
+	for index, a := range items {
+		if index%10000 == 0 {
+			stage("Comparisons", index)
+		}
 		if !full {
 			var oldKey string
 			if e := db.QueryRowContext(ctx, `SELECT comparison_key FROM music_album_comparisons WHERE track_id=?`, a.id).Scan(&oldKey); e == nil {
@@ -537,6 +593,7 @@ func refreshCatalogMatches(ctx context.Context, db Database, config, kind string
 		affected[string(key)] = true
 	}
 	buckets := map[string][]releaseContribution{}
+	stage("Groups", len(contributions))
 	for _, c := range contributions {
 		buckets[c.key] = append(buckets[c.key], c)
 	}

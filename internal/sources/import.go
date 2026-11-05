@@ -224,7 +224,8 @@ func (s *Store) readUpload(ctx context.Context, f File, filenames ...string) ([]
 			return nil, e
 		}
 		part, e := s.parseFile(child, member.Name)
-		if errors.Is(e, ErrUnsupportedFile) && !strings.HasPrefix(filepath.Base(strings.ReplaceAll(member.Name, "\\", "/")), "Streaming_History_") {
+		name := baseFilename(member.Name)
+		if errors.Is(e, ErrUnsupportedFile) && !strings.HasPrefix(name, "Streaming_History_") && !strings.HasPrefix(name, "StreamingHistory") {
 			continue
 		}
 		if e != nil {
