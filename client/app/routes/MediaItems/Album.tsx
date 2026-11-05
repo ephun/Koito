@@ -35,11 +35,12 @@ export default function Album() {
       listenCount={album.listen_count}
       firstListen={album.first_listen}
       imgItemId={album.id}
+      metadata={<MusicStates kind="album" id={album.id} />}
       subContent={
         <>
           {album.artists.length > 0 && !album.is_various_artists && (
             <p>
-              By{" "}
+              by{" "}
               {
                 <span key={album.artists[0].id}>
                   <Link
@@ -52,8 +53,7 @@ export default function Album() {
               }
             </p>
           )}
-          {album.is_various_artists && <p>By Various Artists</p>}
-          <MusicStates kind="album" id={album.id} />
+          {album.is_various_artists && <p>by Various Artists</p>}
         </>
       }
     >

@@ -32,11 +32,12 @@ export default function Track() {
       listenCount={track.listen_count}
       firstListen={track.first_listen}
       imgItemId={track.album_id}
+      metadata={<MusicStates kind="track" id={track.id} />}
       subContent={
         <>
           {track.artists.length > 0 && (
             <p>
-              By{" "}
+              by{" "}
               {track.artists.map((artist, i) => (
                 <span key={artist.id}>
                   {i > 0 && i !== track.artists.length - 1 && ", "}
@@ -59,7 +60,6 @@ export default function Track() {
               </Link>
             </span>)}
           </p>
-          <MusicStates kind="track" id={track.id} />
         </>
       }
     >

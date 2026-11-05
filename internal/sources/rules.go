@@ -85,6 +85,7 @@ type FilterState struct {
 }
 
 type FilterSource struct {
+	Label   string `json:"label,omitempty"`
 	ID      int64  `json:"id"`
 	Service string `json:"service"`
 	Records int    `json:"records"`
@@ -225,13 +226,13 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	// Rule editing needs source identity and available records, not the full
 	// contribution summaries used by Imports.
 	state.Sources = []FilterSource{}
-	rows, err = s.DB.QueryContext(ctx, `SELECT a.id,a.service,(SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id) FROM source_accounts a ORDER BY a.id`)
+	rows, err = s.DB.QueryContext(ctx, `SELECT a.id,a.service,CASE WHEN a.account LIKE 'user:%' THEN '' ELSE a.account END,(SELECT COUNT(*) FROM source_records r WHERE r.source_id=a.id) FROM source_accounts a ORDER BY a.id`)
 	if err != nil {
 		return state, err
 	}
 	for rows.Next() {
 		var source FilterSource
-		if err = rows.Scan(&source.ID, &source.Service, &source.Records); err != nil {
+		if err = rows.Scan(&source.ID, &source.Service, &source.Label, &source.Records); err != nil {
 			rows.Close()
 			return state, err
 		}
@@ -293,8 +294,10 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	rows.Close()
 	schema := state.Blocks.Schemas["presentation:naming"]
 	schema.Choices = map[string][]filters.Choice{"catalog.kind": {{Label: "Record", Value: "record"}, {Label: "Artist", Value: "artist"}, {Label: "Album", Value: "album"}, {Label: "Track", Value: "track"}}}
+	services := map[string]bool{}
 	for _, source := range state.Sources {
-		if source.Records > 0 {
+		if source.Records > 0 && !services[source.Service] {
+			services[source.Service] = true
 			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs", "navidrome": "Navidrome", "multi-scrobbler": "Multi-Scrobbler", "listenbrainz": "ListenBrainz", "maloja": "Maloja", "koito": "Koito", "legacy": "Earlier exports", "database": "Database"}[source.Service]
 			if name == "" {
 				name = source.Service
@@ -313,6 +316,9 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm"}[source.Service]
 			if name == "" {
 				name = source.Service
+			}
+			if source.Label != "" {
+				name += " (" + source.Label + ")"
 			}
 			field := fmt.Sprintf("evidence:%d", source.ID)
 			heuristic.Fields[field] = filters.List

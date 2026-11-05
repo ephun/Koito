@@ -1,4 +1,4 @@
-import { ExternalLink, History, Home, Info, Upload, SlidersHorizontal } from "lucide-react";
+import { History, Home, Upload, Funnel } from "lucide-react";
 import { useAppContext } from "../../providers/AppProvider";
 import SidebarSearch from "./SidebarSearch";
 import SidebarItem from "./SidebarItem";
@@ -56,21 +56,9 @@ export default function Sidebar() {
           <History size={iconSize} />
         </SidebarItem>
         {user?.role === "admin" && <SidebarItem space={10} to="/imports" name="Imports" onClick={() => {}} modal={<></>}><Upload size={iconSize} /></SidebarItem>}
-        {user?.role === "admin" && <SidebarItem space={10} to="/filters" name="Filters" onClick={() => {}} modal={<></>}><SlidersHorizontal size={iconSize} /></SidebarItem>}
+        {user?.role === "admin" && <SidebarItem space={10} to="/filters" name="Filters" onClick={() => {}} modal={<></>}><Funnel size={iconSize} /></SidebarItem>}
       </div>
       <div className="flex gap-2 sm:gap-4 sm:flex-col">
-        <SidebarItem
-          icon
-          keyHint={<ExternalLink size={14} />}
-          space={22}
-          externalLink
-          to="https://koito.io"
-          name="About"
-          onClick={() => {}}
-          modal={<></>}
-        >
-          <Info size={iconSize} className="relative" />
-        </SidebarItem>
         <SidebarSettings size={iconSize} />
       </div>
     </div>

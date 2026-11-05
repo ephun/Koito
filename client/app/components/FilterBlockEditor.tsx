@@ -95,7 +95,7 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
       {schema.snapshot_fields && selectableSources.length === 1 ? <button type="button" className="mt-2 text-sm underline" disabled={disabled || loading || !!fields.length} onClick={() => setSource(String(selectableSources[0].id))}>Load fields</button> :
       <label className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-sm">Source<FieldHelp label="Source fields">Choose a source to add its imported metadata to the field menu.</FieldHelp>
         <select aria-label="Source fields" className={`${input} max-w-full`} value={source} disabled={disabled || loading} onChange={event => setSource(event.target.value)}>
-          <option value="">Choose source</option>{selectableSources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service)}</option>)}
+          <option value="">Choose source</option>{selectableSources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service,item.label)}</option>)}
         </select>
       </label>}
       {loading && <p role="status" className="mt-2 text-sm">Loading fields...</p>}
