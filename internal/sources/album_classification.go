@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/gabehf/koito/internal/filters"
 	"github.com/gabehf/koito/internal/music"
 )
@@ -72,42 +71,6 @@ func resolveAlbumClassification(ctx context.Context, programs music.GroupingProg
 	return result.VariousArtists, result.VariousAssigned, converted, err
 }
 
-func previewAlbumClassification(ctx context.Context, tx *sql.Tx, before, after RuleConfig) ([]NamingExample, error) {
-	old, err := compileAlbumClassification(before)
-	if err != nil {
-		return nil, err
-	}
-	next, err := compileAlbumClassification(after)
-	if err != nil {
-		return nil, err
-	}
-	examples := []NamingExample{}
-	if !old.Active() && !next.Active() {
-		return examples, nil
-	}
-	albums, err := classificationAlbums(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range albums {
-		a, _, _, e := resolveAlbumClassification(ctx, old, item)
-		if e != nil {
-			return nil, e
-		}
-		b, _, _, e := resolveAlbumClassification(ctx, next, item)
-		if e != nil {
-			return nil, e
-		}
-		if a != b {
-			examples = append(examples, NamingExample{Field: "Various Artists: " + item.title, Before: fmt.Sprint(a), After: fmt.Sprint(b)})
-			if len(examples) == 12 {
-				break
-			}
-		}
-	}
-	return examples, nil
-}
-
 func classificationAlbums(ctx context.Context, tx *sql.Tx) ([]classificationAlbum, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT id,title,various_artists FROM releases_with_title ORDER BY id`)
 	if err != nil {
@@ -140,6 +103,13 @@ func classificationAlbums(ctx context.Context, tx *sql.Tx) ([]classificationAlbu
 	}
 	for i := range albums {
 		albums[i].metadata = metadata[albums[i].id]
+	}
+	displays, err := music.AlbumDisplays(ctx, tx, 0)
+	if err != nil {
+		return nil, err
+	}
+	for i := range albums {
+		albums[i].metadata = music.WithAlbumDisplay(albums[i].metadata, displays[albums[i].id])
 	}
 	return albums, nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 )
 
 // RefreshNativeCatalog evaluates saved catalog corrections inside the capture
@@ -19,6 +20,7 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 	if err != nil {
 		return err
 	}
+	affectedArtists := []int64{id}
 	if kind == "artist" {
 		// A new shared alias can make another artist's source genres ambiguous.
 		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT a.artist_id FROM artist_aliases a JOIN artist_aliases current ON current.alias=a.alias WHERE current.artist_id=? ORDER BY a.artist_id`, id)
@@ -39,6 +41,7 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 		if err != nil {
 			return err
 		}
+		affectedArtists = ids
 		for _, artist := range ids {
 			if err = publishArtistGenres(ctx, tx, version.Config, artist); err != nil {
 				return err
@@ -62,6 +65,12 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 		}
 	}
 	if !active {
+		if kind == "album" {
+			return refreshNativeSourceGroups(ctx, tx, version.Config, id)
+		}
+		if kind == "track" {
+			return refreshNativeTrackGroups(ctx, tx, version.Config, id)
+		}
 		return nil
 	}
 	item, identifier, err := nativeCatalogItem(ctx, tx, kind, id)
@@ -71,7 +80,54 @@ func RefreshNativeCatalog(ctx context.Context, tx *sql.Tx, kind string, id int64
 	if err = publishCatalogIdentifiers(ctx, tx, version.Config, identifier); err != nil {
 		return err
 	}
-	return publishCatalogNames(ctx, tx, version.Config, item)
+	if err = publishCatalogNames(ctx, tx, version.Config, item); err != nil {
+		return err
+	}
+	if kind == "album" {
+		return refreshNativeSourceGroups(ctx, tx, version.Config, id)
+	}
+	if kind == "track" {
+		return refreshNativeTrackGroups(ctx, tx, version.Config, id)
+	}
+	if kind == "artist" {
+		grouping := false
+		for _, r := range version.Config.Rules {
+			if r.Enabled && r.Type == "presentation" && r.Subtype == "grouping" {
+				grouping = true
+			}
+		}
+		if grouping {
+			albums := map[int64]bool{}
+			for _, artist := range affectedArtists {
+				rows, err := tx.QueryContext(ctx, `SELECT release_id FROM artist_releases WHERE artist_id=? UNION SELECT release_id FROM displayed_artist_releases WHERE artist_id=? UNION SELECT t.release_id FROM artist_tracks a JOIN tracks t ON t.id=a.track_id WHERE a.artist_id=? UNION SELECT t.release_id FROM displayed_artist_tracks a JOIN tracks t ON t.id=a.track_id WHERE a.artist_id=?`, artist, artist, artist, artist)
+				if err != nil {
+					return err
+				}
+				for rows.Next() {
+					var album int64
+					if err = rows.Scan(&album); err != nil {
+						rows.Close()
+						return err
+					}
+					albums[album] = true
+				}
+				err = rows.Err()
+				rows.Close()
+				if err != nil {
+					return err
+				}
+			}
+			for album := range albums {
+				if err = refreshNativeSourceGroups(ctx, tx, version.Config, album); err != nil {
+					return err
+				}
+				if err = music.AssignAlbumGroup(ctx, tx, album); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func nativeCatalogItem(ctx context.Context, tx *sql.Tx, kind string, id int64) (catalogNameItem, catalogIdentifierItem, error) {

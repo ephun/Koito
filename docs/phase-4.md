@@ -1047,3 +1047,36 @@ There were zero collisions or estimates.
 All preservation fingerprints and three original-file hashes passed.
 Track 271 retained its 521 plays and original album associations.
 Desktop, 390-pixel, and 320-pixel browser checks passed without page errors.
+
+## Grouping reads the current displayed metadata
+
+Native grouping and classification now read corrected album names and displayed artist credits.
+Original names and original credit lists remain available independently.
+Source grouping reads current displayed track, artist and album fields while preserving original record fields.
+Grouping keys use the effective release credits, so explicit artist-credit corrections also affect edition grouping.
+
+Native name, alias, genre and credit enrichment refreshes dependent album and source grouping assignments.
+This includes albums reached through guest track credits.
+Groups without a remaining explicit assignment release their implicit base members.
+Source-specific assignments and separation exceptions remain independent.
+Canonical members prefer the current displayed base title.
+
+Grouping and Inclusion previews share one temporary publication inside a savepoint.
+The preview uses the same proposed catalog, names, credits and grouping results as Apply and Rebuild.
+Native classification samples and source grouping samples are compared from actual before/after snapshots.
+Temporary versions, catalog changes, source projections and group changes are rolled back before returning.
+The older detached grouping/classification preview approximation was removed.
+
+New regressions cover corrected display names, corrected artist credits, base canonical selection,
+genre-dependent names, alias enrichment, incoming releases, stale implicit members, preview rollback,
+publication failure, rebuilding and restoration.
+The full Go suite passes.
+The remaining scope is recorded in the [Phase 4 audit](phase-4-audit.md), including confirmed matching/statistics and native identifier gaps.
+
+Current-build actual-import acceptance passed on album 209 and its 2,807 plays.
+Corrected album and artist names drove grouping and classification in Preview and Save.
+Preview left versions and checked raw fingerprints unchanged.
+The two-action editor passed at 390 and 320 pixels without page errors.
+Restoration returned the original configuration, album state and checked fingerprints.
+Main activation passed after a backup and a 63.125-second rebuild.
+It retained 191,473 records, 168,424 plays, three original-file hashes and the checked album associations.

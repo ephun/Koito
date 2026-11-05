@@ -116,12 +116,17 @@ func AlbumGroupingEnvironment(id int64, title string, various bool, metadata ...
 			env[key] = value
 		}
 	}
+	_, displayedArtist := env["display.artist"]
 	if artists, ok := env["original.artists"].Items(); ok && len(artists) == 1 {
 		env["original.artist"] = artists[0]
-		env["display.artist"] = artists[0]
+		if !displayedArtist {
+			env["display.artist"] = artists[0]
+		}
 	} else {
 		delete(env, "original.artist")
-		delete(env, "display.artist")
+		if !displayedArtist {
+			delete(env, "display.artist")
+		}
 	}
 	return env
 }
@@ -174,6 +179,8 @@ type groupingRelease struct {
 	id                     int64
 	various                bool
 	title, artist, credits string
+	displayTitle           string
+	reportCredits          string
 }
 type groupingRequest struct {
 	release         groupingRelease
@@ -209,10 +216,14 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	if len(programs.programs) == 0 {
 		return nil
 	}
+	displays, err := AlbumDisplays(ctx, db, 0)
+	if err != nil {
+		return err
+	}
 	rows, err := db.QueryContext(ctx, `SELECT r.id,r.title,
  COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),
  COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]')
- ,r.various_artists FROM releases_with_title r ORDER BY r.id`)
+ ,r.various_artists,COALESCE((SELECT group_concat(artist_id,',') FROM(SELECT DISTINCT artist_id FROM displayed_artist_releases WHERE release_id=r.id ORDER BY artist_id)),'') FROM releases_with_title r ORDER BY r.id`)
 	if err != nil {
 		return err
 	}
@@ -221,7 +232,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	for rows.Next() {
 		var r groupingRelease
 		var raw string
-		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw, &r.various); err != nil {
+		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw, &r.various, &r.reportCredits); err != nil {
 			rows.Close()
 			return err
 		}
@@ -235,6 +246,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		} else {
 			r.artist = raw
 		}
+		r.displayTitle, _ = displays[r.id]["display.album"].Text()
 		releases[r.id] = r
 		order = append(order, r.id)
 	}
@@ -251,6 +263,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		if e != nil {
 			return e
 		}
+		env = WithAlbumDisplay(env, displays[id])
 		label, explicit, _, e := programs.Resolve(ctx, env)
 		if e != nil {
 			return e
@@ -286,22 +299,22 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	for i := range requests {
 		r := &requests[i]
 		if r.explicit && r.label != "" {
-			key := albumGroupKey(r.release.credits, r.label)
+			key := albumGroupKey(r.release.reportCredits, r.label)
 			prior := wanted[key]
-			if prior == nil || r.release.title == r.label && prior.release.title != prior.label || r.release.title == prior.release.title && r.release.id < prior.release.id {
+			if prior == nil || r.release.displayTitle == r.label && prior.release.displayTitle != prior.label || r.release.displayTitle == prior.release.displayTitle && r.release.id < prior.release.id {
 				wanted[key] = r
 			}
 		}
 	}
 	for i := range requests {
 		r := &requests[i]
-		if r.explicit && r.label != r.release.title {
+		if r.explicit && r.label != r.release.displayTitle {
 			continue
 		}
-		key := albumGroupKey(r.release.credits, r.release.title)
-		if prior := wanted[key]; prior != nil && (prior.release.title != prior.label || r.release.id < prior.release.id) {
+		key := albumGroupKey(r.release.reportCredits, r.release.displayTitle)
+		if prior := wanted[key]; prior != nil && (prior.release.displayTitle != prior.label || r.release.id < prior.release.id) {
 			copy := *r
-			copy.label = r.release.title
+			copy.label = r.release.displayTitle
 			wanted[key] = &copy
 		}
 	}
@@ -358,9 +371,9 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		}
 		label := r.label
 		if !r.explicit {
-			label = r.release.title
+			label = r.release.displayTitle
 		}
-		id := ids[albumGroupKey(r.release.credits, label)]
+		id := ids[albumGroupKey(r.release.reportCredits, label)]
 		if r.explicit && r.label == "" {
 			id = 0
 		}
@@ -387,9 +400,9 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 
 // AssignAlbumGroup refreshes current native defaults after capture or enrichment.
 // Existing source overrides remain untouched.
-func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
+func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) (err error) {
 	var config string
-	err := db.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config)
+	err = db.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -406,6 +419,15 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	if err != nil {
 		return err
 	}
+	oldGroups, e := albumMemberships(ctx, db, releaseID)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		if err == nil {
+			err = pruneInactiveAlbumGroups(ctx, db, programs, oldGroups)
+		}
+	}()
 	if _, err = db.ExecContext(ctx, `DELETE FROM album_classification WHERE album_id=?`, releaseID); err != nil {
 		return err
 	}
@@ -418,28 +440,15 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	if len(programs.programs) == 0 {
 		return nil
 	}
-	var title, credits, raw string
-	var various bool
-	err = db.QueryRowContext(ctx, `SELECT r.title,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]'),r.various_artists FROM releases_with_title r WHERE r.id=?`, releaseID).Scan(&title, &credits, &raw, &various)
+	release, env, err := loadGroupingAlbum(ctx, db, releaseID)
 	if err != nil {
 		return err
 	}
+	credits := release.reportCredits
 	if err = rekeySourceAlbumAssignments(ctx, db, releaseID, credits); err != nil {
 		return err
 	}
 	if err = pruneAlbumMemberships(ctx, db, releaseID); err != nil {
-		return err
-	}
-	var names []string
-	if err = json.Unmarshal([]byte(raw), &names); err != nil {
-		return err
-	}
-	artist := raw
-	if len(names) == 1 {
-		artist = names[0]
-	}
-	env, err := NativeAlbumGroupingEnvironment(releaseID, title, artist, credits, various)
-	if err != nil {
 		return err
 	}
 	result, issues, err := programs.ResolveValues(ctx, env)
@@ -469,7 +478,7 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 		}
 	}
 	if !explicit {
-		label = title
+		label, _ = env["display.album"].Text()
 	}
 	if label == "" {
 		return nil
@@ -496,21 +505,18 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 	}
 	// When a deluxe edition creates a group, an already captured base release
 	// can join immediately. Evaluate it too so explicit exceptions still win.
-	rows, err := db.QueryContext(ctx, `SELECT r.id,r.various_artists FROM releases_with_title r WHERE r.title=? AND COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),'')=? ORDER BY r.id`, label, credits)
+	rows, err := db.QueryContext(ctx, `SELECT r.id FROM releases_with_title r WHERE COALESCE((SELECT display_name FROM catalog_names WHERE kind='album' AND item_id=r.id),r.title)=? AND COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM displayed_artist_releases WHERE release_id=r.id ORDER BY artist_id)),'')=? ORDER BY r.id`, label, credits)
 	if err != nil {
 		return err
 	}
 	candidates := []int64{}
-	candidateFlags := map[int64]bool{}
 	for rows.Next() {
 		var candidate int64
-		var flag bool
-		if err = rows.Scan(&candidate, &flag); err != nil {
+		if err = rows.Scan(&candidate); err != nil {
 			rows.Close()
 			return err
 		}
 		candidates = append(candidates, candidate)
-		candidateFlags[candidate] = flag
 	}
 	err = rows.Err()
 	rows.Close()
@@ -518,11 +524,11 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 		return err
 	}
 	for _, candidate := range candidates {
-		env["catalog.id"] = filters.Integer(candidate)
-		env["original.various_artists"] = filters.Bool(candidateFlags[candidate])
-		env["group.various_artists"] = filters.Bool(candidateFlags[candidate])
-		env["catalog.album_id"], env["original.album"], env["display.album"] = filters.Integer(candidate), filters.String(label), filters.String(label)
-		target, assigned, _, e := programs.Resolve(ctx, env)
+		_, candidateEnv, e := loadGroupingAlbum(ctx, db, candidate)
+		if e != nil {
+			return e
+		}
+		target, assigned, _, e := programs.Resolve(ctx, candidateEnv)
 		if e != nil {
 			return e
 		}
@@ -543,7 +549,7 @@ func AssignAlbumGroup(ctx context.Context, db Database, releaseID int64) error {
 }
 
 func refreshAlbumGroupCanonical(ctx context.Context, db Database, groupID int64) error {
-	_, err := db.ExecContext(ctx, `UPDATE album_groups SET canonical_release_id=(SELECT m.release_id FROM album_group_members m JOIN releases_with_title r ON r.id=m.release_id WHERE m.group_id=album_groups.id ORDER BY CASE WHEN r.title=album_groups.title THEN 0 ELSE 1 END,m.release_id LIMIT 1) WHERE id=?`, groupID)
+	_, err := db.ExecContext(ctx, `UPDATE album_groups SET canonical_release_id=(SELECT m.release_id FROM album_group_members m JOIN releases_with_title r ON r.id=m.release_id WHERE m.group_id=album_groups.id ORDER BY CASE WHEN COALESCE((SELECT display_name FROM catalog_names WHERE kind='album' AND item_id=r.id),r.title)=album_groups.title THEN 0 ELSE 1 END,m.release_id LIMIT 1) WHERE id=?`, groupID)
 	return err
 }
 

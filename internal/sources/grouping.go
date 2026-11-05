@@ -44,16 +44,20 @@ func publishAlbumGroups(ctx context.Context, tx *sql.Tx, config RuleConfig, byID
 	}
 	inputs := []music.AlbumGroupingInput{}
 	if active {
-		rows, e := tx.QueryContext(ctx, `SELECT p.play_key,'',t.release_id,p.representative_record FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE p.policy='filters-v1'
-  UNION ALL SELECT '',a.aggregate_key,t.release_id,a.representative_record FROM source_aggregates a JOIN tracks t ON t.id=a.track_id`)
+		displays, e := music.TrackDisplays(ctx, tx, 0)
+		if e != nil {
+			return e
+		}
+		rows, e := tx.QueryContext(ctx, `SELECT p.play_key,'',t.release_id,p.representative_record,p.track_id FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE p.policy='filters-v1'
+  UNION ALL SELECT '',a.aggregate_key,t.release_id,a.representative_record,a.track_id FROM source_aggregates a JOIN tracks t ON t.id=a.track_id`)
 		if e != nil {
 			return e
 		}
 		displayed := map[int64]spotifyItem{}
 		for rows.Next() {
 			var input music.AlbumGroupingInput
-			var recordID int64
-			if e = rows.Scan(&input.PlayKey, &input.AggregateKey, &input.ReleaseID, &recordID); e != nil {
+			var recordID, trackID int64
+			if e = rows.Scan(&input.PlayKey, &input.AggregateKey, &input.ReleaseID, &recordID, &trackID); e != nil {
 				rows.Close()
 				return e
 			}
@@ -67,7 +71,8 @@ func publishAlbumGroups(ctx context.Context, tx *sql.Tx, config RuleConfig, byID
 				}
 				displayed[recordID] = v
 			}
-			input.Env = func() filters.Env { return groupingEnvironment(*r, v) }
+			display := displays[trackID]
+			input.Env = func() filters.Env { return music.WithAlbumDisplay(groupingEnvironment(*r, v), display) }
 			inputs = append(inputs, input)
 		}
 		e = rows.Err()
@@ -78,152 +83,4 @@ func publishAlbumGroups(ctx context.Context, tx *sql.Tx, config RuleConfig, byID
 	}
 
 	return music.RefreshAlbumGroups(ctx, tx, string(raw), inputs)
-}
-
-func previewGrouping(ctx context.Context, reader sqlReader, plan matchPlan, before, after RuleConfig) ([]NamingExample, error) {
-	old, err := music.CompileGroupingPrograms(groupingFilters(before))
-	if err != nil {
-		return nil, err
-	}
-	next, err := music.CompileGroupingPrograms(groupingFilters(after))
-	if err != nil {
-		return nil, err
-	}
-	if !old.Active() && !next.Active() {
-		return []NamingExample{}, nil
-	}
-	type release struct {
-		id            int64
-		title, artist string
-		various       bool
-		credits       string
-	}
-	catalog := []release{}
-	byName := map[[2]string]int64{}
-	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.title,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]'),r.various_artists,COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),'') FROM releases_with_title r ORDER BY r.id`)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var r release
-		var raw string
-		if err = rows.Scan(&r.id, &r.title, &raw, &r.various, &r.credits); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		var names []string
-		if err = json.Unmarshal([]byte(raw), &names); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		r.artist = raw
-		if len(names) == 1 {
-			r.artist = names[0]
-		}
-		catalog = append(catalog, r)
-		key := [2]string{r.artist, r.title}
-		if byName[key] == 0 {
-			byName[key] = r.id
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	oldNames, err := compileNaming(before)
-	if err != nil {
-		return nil, err
-	}
-	newNames, err := compileNaming(after)
-	if err != nil {
-		return nil, err
-	}
-	examples := []NamingExample{}
-	shown := map[[2]string]bool{}
-	records := map[int64]matchingRecord{}
-	for _, r := range plan.Records {
-		records[r.ID] = r
-	}
-	ids := []int64{}
-	for _, p := range plan.Plays {
-		ids = append(ids, p.Representative)
-	}
-	for _, a := range plan.Aggregates {
-		if a.Attributed > 0 {
-			ids = append(ids, a.Representative)
-		}
-	}
-	for _, id := range ids {
-		r := records[id]
-		v := spotifyItem{Artist: r.Values.Artist, Album: r.Values.Album, Title: r.Values.Title}
-		a, e := applyNaming(ctx, oldNames, r, v)
-		if e != nil {
-			return nil, e
-		}
-		b, e := applyNaming(ctx, newNames, r, v)
-		if e != nil {
-			return nil, e
-		}
-		envA, envB := groupingEnvironment(r, a), groupingEnvironment(r, b)
-		if albumID := byName[[2]string{a.Artist, a.Album}]; albumID > 0 {
-			envA["catalog.album_id"] = filters.Integer(albumID)
-		}
-		if albumID := byName[[2]string{b.Artist, b.Album}]; albumID > 0 {
-			envB["catalog.album_id"] = filters.Integer(albumID)
-		}
-		left, assigned, _, e := old.Resolve(ctx, envA)
-		if e != nil {
-			return nil, e
-		}
-		if !assigned || left == "" {
-			left = a.Album
-		}
-		right, assigned, _, e := next.Resolve(ctx, envB)
-		if e != nil {
-			return nil, e
-		}
-		if !assigned || right == "" {
-			right = b.Album
-		}
-		key := [2]string{left, right}
-		if left != right && !shown[key] {
-			shown[key] = true
-			examples = append(examples, NamingExample{id, "Album group", left, right})
-			if len(examples) == 12 {
-				break
-			}
-		}
-	}
-	if len(examples) < 12 {
-		for _, r := range catalog {
-			env, e := music.NativeAlbumGroupingEnvironment(r.id, r.title, r.artist, r.credits, r.various)
-			if e != nil {
-				return nil, e
-			}
-			left, assigned, _, e := old.Resolve(ctx, env)
-			if e != nil {
-				return nil, e
-			}
-			if !assigned || left == "" {
-				left = r.title
-			}
-			right, assigned, _, e := next.Resolve(ctx, env)
-			if e != nil {
-				return nil, e
-			}
-			if !assigned || right == "" {
-				right = r.title
-			}
-			key := [2]string{left, right}
-			if left != right && !shown[key] {
-				shown[key] = true
-				examples = append(examples, NamingExample{Field: "Album group", Before: left, After: right})
-				if len(examples) == 12 {
-					break
-				}
-			}
-		}
-	}
-	return examples, nil
 }

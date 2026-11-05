@@ -73,31 +73,46 @@ func scopeSnapshot(ctx context.Context, tx *sql.Tx) (map[string]scopeSnapshotIte
 	return result, err
 }
 
-// The pending projection uses the publication path, including newly allocated
-// catalog identities. Its savepoint is always rolled back before returning.
-func previewProjectedScope(ctx context.Context, tx *sql.Tx, base int64, before, after RuleConfig, plan matchPlan) (examples []NamingExample, err error) {
-	examples = []NamingExample{}
-	active := false
+// Preview publishes the proposed view once inside a savepoint, then rolls it back.
+func previewProjectedViews(ctx context.Context, tx *sql.Tx, base int64, before, after RuleConfig, plan matchPlan) (scope, groups []NamingExample, err error) {
+	scope, groups = []NamingExample{}, []NamingExample{}
+	scopeActive, groupActive := false, false
 	for _, config := range []RuleConfig{before, after} {
 		for _, rule := range config.Rules {
-			if rule.Enabled && rule.Type == "inclusion" && rule.Subtype == "scope" {
-				active = true
+			if !rule.Enabled {
+				continue
+			}
+			if rule.Type == "inclusion" && rule.Subtype == "scope" {
+				scopeActive = true
+			}
+			if rule.Type == "presentation" && rule.Subtype == "grouping" {
+				groupActive = true
 			}
 		}
 	}
-	if !active {
-		return examples, nil
+	if !scopeActive && !groupActive {
+		return scope, groups, nil
 	}
-	old, err := scopeSnapshot(ctx, tx)
-	if err != nil {
-		return nil, err
+	oldScope := map[string]scopeSnapshotItem{}
+	oldGroups := map[string]groupSnapshotItem{}
+	if scopeActive {
+		oldScope, err = scopeSnapshot(ctx, tx)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	if _, err = tx.ExecContext(ctx, `SAVEPOINT scope_preview`); err != nil {
-		return nil, err
+	if groupActive {
+		oldGroups, err = groupSnapshot(ctx, tx)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `SAVEPOINT view_preview`); err != nil {
+		return nil, nil, err
 	}
 	defer func() {
-		_, rollbackErr := tx.ExecContext(context.Background(), `ROLLBACK TO scope_preview`)
-		_, releaseErr := tx.ExecContext(context.Background(), `RELEASE scope_preview`)
+		_, rollbackErr := tx.ExecContext(context.Background(), `ROLLBACK TO view_preview`)
+		_, releaseErr := tx.ExecContext(context.Background(), `RELEASE view_preview`)
 		if err == nil {
 			if rollbackErr != nil {
 				err = rollbackErr
@@ -108,19 +123,34 @@ func previewProjectedScope(ctx context.Context, tx *sql.Tx, base int64, before, 
 	}()
 	raw, err := json.Marshal(after)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	id, err := insertID(ctx, tx, `INSERT INTO filter_versions(parent_id,config_json,label,created_at) VALUES(?,?,?,?)`, base, string(raw), "Preview", time.Now().Unix())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err = publishPlan(ctx, tx, plan, id); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	next, err := scopeSnapshot(ctx, tx)
-	if err != nil {
-		return nil, err
+	if scopeActive {
+		next, e := scopeSnapshot(ctx, tx)
+		if e != nil {
+			return nil, nil, e
+		}
+		scope = scopeDifferences(oldScope, next)
 	}
+	if groupActive {
+		next, e := groupSnapshot(ctx, tx)
+		if e != nil {
+			return nil, nil, e
+		}
+		groups = groupDifferences(oldGroups, next)
+	}
+	return scope, groups, nil
+}
+
+func scopeDifferences(old, next map[string]scopeSnapshotItem) []NamingExample {
+	examples := []NamingExample{}
 	keys := map[string]bool{}
 	for key := range old {
 		keys[key] = true
@@ -151,5 +181,5 @@ func previewProjectedScope(ctx context.Context, tx *sql.Tx, base int64, before, 
 			break
 		}
 	}
-	return examples, nil
+	return examples
 }
