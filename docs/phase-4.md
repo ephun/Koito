@@ -1,6 +1,6 @@
-# Phase 4: implementation progress
+# Phase 4: implementation and verification
 
-Status: **in progress**. Updated November 4, 2026.
+Status: **complete**. Updated November 4, 2026.
 
 The [phase plan](development-plan.md#phase-4-music-matching-album-distinctions-and-bulk-cleanup) defines the complete scope.
 The [filter design](filters-interface.md#agreed-next-layout) defines the agreed atomic builder.
@@ -1136,5 +1136,16 @@ Actual-import verification combined the two Over the Garden Wall spellings into
 597 plays. Fetch the Bolt Cutters retained its 17-play and 1,089-play release
 appearances while reporting 1,106 album plays. Restoring the original settings
 restored exact statistics. The original view has 191,473 records, 168,424 plays
-and three retained files. These are measurements of the supplied acceptance
-imports, rather than a claim about complete lifetime listening.
+and three retained files. These measurements cover the supplied acceptance imports.
+
+
+## Closing validation
+
+The complete Go suite, client typecheck and production build passed.
+The closing local build passed actual-import, grouping, reversal and mobile checks.
+Original files, source records and original catalog metadata passed hash comparisons.
+Both local instances use the original configuration after verification.
+See [the completed requirement audit](phase-4-audit.md) for the full matrix.
+
+Full-data rebuilds and filter changes take several minutes in this Windows setup.
+The later operational phase covers larger import jobs and progress reporting.

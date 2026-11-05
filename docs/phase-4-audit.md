@@ -1,6 +1,6 @@
 # Phase 4 requirement audit
 
-Status: **in progress**. November 4, 2026.
+Status: **complete**. November 4, 2026.
 
 The scope remains [Phase 4 in the development plan](development-plan.md#phase-4-music-matching-album-distinctions-and-bulk-cleanup).
 This audit distinguishes implemented behavior from remaining correctness work.
@@ -31,8 +31,8 @@ Passing a narrower test does not close a broader requirement.
 | One IF/THEN/ELSE IF/ELSE builder with nested typed operators | Shared operator registry, truth-table tests, migrated filters and browser checks | Verified |
 | AND, OR, NOT, NOR, NAND, XOR and XNOR | `internal/filters/program_test.go` truth tables and unknown-value tests | Verified |
 | Existing taxonomy, one enabled state, source-aware fields and native music search | Filter manager, schema registry, disabled controls and contextual editors | Verified in prior browser checks |
-| Actual imports, repeat/rebuild stability, rollback and originals | Private acceptance logs, 191,473 records, 168,424 plays, three original-file hashes. Final migration preserves twelve original-data and contribution tables | Verified. Closing runtime checks are running |
-| Final client typecheck, production build, small-screen checks and GitHub mirror | Earlier checks pass. Final checks and push must cover the closing revision | Pending |
+| Actual imports, repeat/rebuild stability, rollback and originals | Private acceptance logs, 191,473 records, 168,424 plays, three original-file hashes. Final migration preserves twelve original-data and contribution tables | Verified on the closing build |
+| Final client typecheck, production build, small-screen checks and GitHub mirror | Full Go suite, client typecheck/build, 390/320-pixel browser checks and GitHub mirror | Verified |
 
 ## Referenced issues
 
@@ -44,7 +44,7 @@ Passing a narrower test does not close a broader requirement.
 
 ## Remaining work
 
-1. Finish closing runtime checks against the final build and push the reviewed revision.
+None within Phase 4. The implementation and closing verification are mirrored to `custom/koito`.
 
 ## Closing matching checks
 
@@ -81,7 +81,26 @@ The **Fetch The Bolt Cutters** and **Fetch the Bolt Cutters** releases contribut
 Original aliases, records and release links retained their hashes.
 Restoring the original configuration restored its exact statistics.
 
-These checks measure the supplied imports. They do not establish final lifetime totals.
+These measurements cover the supplied acceptance imports.
 
 The deferred Records styling, alternative missing-album wording and artwork providers remain deferred.
 They are not substitutes for the correctness items above.
+
+
+## Closing verification
+
+All Go packages passed. Client typecheck and production build passed.
+The main instance rebuilt 191,473 records into its original 168,424-play view.
+All three original-file hashes and the original-record fingerprints matched.
+Track 271 retained 521 plays across its 519-play and two-play album appearances.
+
+The closing build verified the 2,807-play grouping example and both mobile widths.
+Case matching reproduced the artist and album examples above.
+Restoring the original configuration restored its exact statistics and fingerprints.
+The original settings are active on both local instances.
+
+The implementation is committed as `b643d95` on `custom/koito`.
+Private validation logs remain under `.local`.
+
+Full-data rebuilds and filter changes currently take several minutes on Windows.
+The large-import job and progress work belongs to the later operational phase.

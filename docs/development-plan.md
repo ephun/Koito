@@ -6,7 +6,7 @@ This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 through 3 are complete. Phase 4 is in progress. Later phases below are proposed
+Phases 1 through 4 are complete. Later phases below are proposed
 work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
@@ -386,10 +386,10 @@ options, and the default treatment of uncertain shared listening.
 **Outcome:** music can be matched, renamed, and grouped without destroying its
 original spelling, identifiers, or album association.
 
-**Status: in progress.** Track histories across albums are implemented and verified.
+**Status: complete.** Track histories across albums are implemented and verified.
 The shared evaluator and builder cover Matching, Naming, Grouping, attribution, Count, Time, and imported fields.
 Contextual corrections, genres, optional tags, and artist/album matching are implemented.
-Final runtime checks and the GitHub mirror are being closed against the full scope.
+The complete scope passed closing verification and is mirrored to GitHub.
 Implementation and acceptance evidence: [Phase 4](phase-4.md).
 
 ### First milestone: track history across albums
@@ -751,11 +751,10 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Phase 4 is in progress. See [the Phase 4 notes](phase-4.md) for completed
-milestones, actual-import checks, and remaining requirements.
+Phase 4 is complete. See [the Phase 4 notes](phase-4.md) and
+[requirement audit](phase-4-audit.md) for implementation and verification.
 
-Close the full [Phase 4 requirement audit](phase-4-audit.md).
-The remaining work is final runtime verification and publication to the working branch.
+Phase 5 is the next proposed phase. It covers more Spotify exports, playlists and Discogs.
 
 Field-specific source preference also needs concrete examples before controls
 return to Filters. Keep original music identities and source album associations
