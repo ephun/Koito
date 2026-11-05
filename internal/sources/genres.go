@@ -11,7 +11,7 @@ import (
 // Source evidence is rebuilt independently of personal listening decisions.
 // Artist assignments and manual corrections consume this evidence separately.
 func refreshSourceGenres(ctx context.Context, tx *sql.Tx) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id,parser,payload FROM source_records WHERE kind='library_track' ORDER BY id`)
+	rows, err := tx.QueryContext(ctx, `SELECT id,parser,payload FROM source_records WHERE kind IN ('library_track','catalog_track') ORDER BY id`)
 	if err != nil {
 		return err
 	}
@@ -71,6 +71,36 @@ type SourceGenre struct {
 // preserved record rather than being converted into invented labels.
 func SourceGenres(parser string, payload []byte) ([]SourceGenre, error) {
 	result := []SourceGenre{}
+	if databaseFormat(parser) == NavidromeDB {
+		var record databaseRecord
+		if err := json.Unmarshal(payload, &record); err != nil {
+			return nil, err
+		}
+		if record.Table != "media_file" {
+			return result, nil
+		}
+		if genre := valueText(record.Fields["genre"]); genre != "" {
+			result = append(result, SourceGenre{genre, "raw:/fields/genre"})
+		}
+		tags := jsonObject(record.Fields["tags"])
+		if genres, ok := tags["genre"].([]any); ok {
+			for index, value := range genres {
+				genre := valueText(value)
+				path := "raw:/fields/tags/genre/" + strconv.Itoa(index)
+				if genre == "" {
+					genre = valueText(object(value)["value"])
+					path += "/value"
+				}
+				if _, encoded := record.Fields["tags"].(string); encoded {
+					path = "raw:/fields/tags"
+				}
+				if genre != "" {
+					result = append(result, SourceGenre{genre, path})
+				}
+			}
+		}
+		return result, nil
+	}
 	if parser != ITunesXML && parser != ITunesJSON {
 		return result, nil
 	}

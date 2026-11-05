@@ -177,13 +177,13 @@ func readLibraryTrack(id int64, file LibraryFile, row libraryEnvelope) libraryTr
 }
 
 func loadLibraryFiles(ctx context.Context, reader sqlReader) ([]*libraryFileInput, error) {
-	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.file_hash,r.source_id,a.user_id,r.parser,r.payload FROM source_records r JOIN source_accounts a ON a.id=r.source_id WHERE a.service='itunes' AND r.kind IN ('library','library_track') ORDER BY r.source_id,r.file_hash,r.ordinal`)
+	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.file_hash,r.source_id,a.user_id,r.parser,r.payload FROM source_records r JOIN source_accounts a ON a.id=r.source_id WHERE a.service IN ('itunes','navidrome') AND r.kind IN ('library','library_track') ORDER BY r.source_id,r.file_hash,r.ordinal`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	files := []*libraryFileInput{}
-	var current *libraryFileInput
+	byFile := map[string]*libraryFileInput{}
 	for rows.Next() {
 		var id, source int64
 		var user int32
@@ -191,13 +191,23 @@ func loadLibraryFiles(ctx context.Context, reader sqlReader) ([]*libraryFileInpu
 		if err := rows.Scan(&id, &hash, &source, &user, &parser, &payload); err != nil {
 			return nil, err
 		}
-		if current == nil || current.file.Hash != hash || current.file.SourceID != source {
-			current = &libraryFileInput{file: LibraryFile{Hash: hash, SourceID: source, Converted: parser == ITunesJSON, Issues: []string{}}, userID: user}
-			files = append(files, current)
-		}
 		var envelope libraryEnvelope
 		if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
 			return nil, err
+		}
+		if databaseFormat(parser) == NavidromeDB {
+			var record databaseRecord
+			if err := json.Unmarshal([]byte(payload), &record); err != nil {
+				return nil, err
+			}
+			envelope = navidromeLibraryRecord(record)
+		}
+		key := fmt.Sprintf("%d:%s:%s:%s", source, hash, parser, envelope.LibraryID)
+		current := byFile[key]
+		if current == nil {
+			current = &libraryFileInput{file: LibraryFile{Hash: hash, SourceID: source, Converted: parser == ITunesJSON, Issues: []string{}}, userID: user}
+			byFile[key] = current
+			files = append(files, current)
 		}
 		current.file.LibraryID = envelope.LibraryID
 		current.file.Snapshot = envelope.Snapshot

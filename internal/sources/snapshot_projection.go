@@ -122,7 +122,7 @@ func publishSnapshots(ctx context.Context, tx *sql.Tx, records map[int64]*matchi
 			continue
 		}
 		var track, release any
-		if r.Values.Title != "" && r.Values.Artist != "" && (item.Kind == "playlist" || item.Kind == "saved_tracks") {
+		if r.Values.Title != "" && r.Values.Artist != "" && (item.Kind == "playlist" || item.Kind == "saved_tracks" || item.Kind == "catalog") {
 			v, e := applyNaming(ctx, naming, *r, spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID})
 			if e != nil {
 				return e

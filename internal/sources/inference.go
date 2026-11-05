@@ -173,6 +173,7 @@ func calculateView(ctx context.Context, reader sqlReader, records []matchingReco
 		}
 	}
 	if !active {
+		attachForwardingEvidence(&plan)
 		return plan, nil
 	}
 	libraries, err := libraryEvidence(ctx, reader)
@@ -180,6 +181,9 @@ func calculateView(ctx context.Context, reader sqlReader, records []matchingReco
 		return plan, err
 	}
 	err = inferLibraryContributions(ctx, &plan, libraries, config)
+	if err == nil {
+		attachForwardingEvidence(&plan)
+	}
 	return plan, err
 }
 
@@ -212,7 +216,7 @@ func inferLibraryContributions(ctx context.Context, plan *matchPlan, libraries [
 				r.LibraryID = library.LibraryID
 				return r
 			}
-			selection, conflict, err := chooseCountRule(ctx, config, library, track, byID)
+			selection, conflict, err := chooseCountRule(ctx, config, library, track, byID, plan)
 			if err != nil {
 				return err
 			}

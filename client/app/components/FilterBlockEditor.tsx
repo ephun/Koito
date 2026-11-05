@@ -88,13 +88,14 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
     visit(program);
     return next;
   }, [schema, fields, program]);
+  const selectableSources = sources.filter(item => item.records > 0 && (!schema.snapshot_fields || ["itunes", "navidrome"].includes(item.service)));
   return <div className="min-w-0 space-y-3">
     {(schema.raw_fields || schema.snapshot_fields || schema.pair_fields) && sources.length > 0 && <details>
       <summary className="cursor-pointer text-sm">{schema.snapshot_fields ? "Record fields" : "Source fields"}</summary>
-      {schema.snapshot_fields ? <button type="button" className="mt-2 text-sm underline" disabled={disabled || loading || !!fields.length} onClick={() => setSource(String(sources.find(item => item.service === "itunes")?.id || ""))}>Load fields</button> :
+      {schema.snapshot_fields && selectableSources.length === 1 ? <button type="button" className="mt-2 text-sm underline" disabled={disabled || loading || !!fields.length} onClick={() => setSource(String(selectableSources[0].id))}>Load fields</button> :
       <label className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-sm">Source<FieldHelp label="Source fields">Choose a source to add its imported metadata to the field menu.</FieldHelp>
         <select aria-label="Source fields" className={`${input} max-w-full`} value={source} disabled={disabled || loading} onChange={event => setSource(event.target.value)}>
-          <option value="">Choose source</option>{sources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service)}</option>)}
+          <option value="">Choose source</option>{selectableSources.map(item => <option key={item.id} value={item.id}>{sourceName(item.service)}</option>)}
         </select>
       </label>}
       {loading && <p role="status" className="mt-2 text-sm">Loading fields...</p>}

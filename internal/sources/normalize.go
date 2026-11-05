@@ -12,6 +12,15 @@ import (
 )
 
 type recordValues struct {
+	EventID          string               `json:"event_id,omitempty"`
+	SupportID        string               `json:"support_id,omitempty"`
+	NativeLibraryID  string               `json:"native_library_id,omitempty"`
+	NativeTrackID    string               `json:"native_track_id,omitempty"`
+	OriginalService  string               `json:"original_service,omitempty"`
+	OriginalFormat   string               `json:"original_format,omitempty"`
+	Forwarder        string               `json:"forwarder,omitempty"`
+	Endpoint         string               `json:"endpoint,omitempty"`
+	Device           string               `json:"device,omitempty"`
 	ReportedComplete *bool                `json:"reported_complete,omitempty"`
 	Music            *music.MatchIdentity `json:"music,omitempty"`
 	Title            string               `json:"title"`
@@ -24,6 +33,7 @@ type recordValues struct {
 	Precision        int64                `json:"precision_ns"`
 	Time             time.Time            `json:"-"`
 	PlayedMS         int64                `json:"played_ms,omitempty"`
+	DurationMS       int64                `json:"duration_ms,omitempty"`
 	Reason           string               `json:"reason"`
 	Origin           string               `json:"origin"`
 	NowPlaying       bool                 `json:"now_playing,omitempty"`
@@ -56,6 +66,20 @@ func itemText(raw json.RawMessage) string {
 }
 
 func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
+	if parser == NormalizedJSONL {
+		var row map[string]any
+		_ = json.Unmarshal(raw, &row)
+		return normalizeHistoryRow(row, zone)
+	}
+	if parser == MultiCache || parser == MultiLog {
+		return normalizeMultiHistory(raw, parser)
+	}
+	if legacyHistoryParser(parser) {
+		return normalizeLegacyHistory(raw, parser)
+	}
+	if databaseParser(parser) {
+		return normalizeDatabase(raw, parser, zone)
+	}
 	if snapshotParser(parser) {
 		return normalizeSnapshot(raw, parser)
 	}
@@ -77,6 +101,7 @@ func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
 		v.Album = item.Album
 		v.URI = item.URI
 		v.PlayedMS = item.Played
+		v.Device = item.Platform
 		if item.ReasonEnd != "" {
 			complete := item.ReasonEnd == "trackdone"
 			v.ReportedComplete = &complete

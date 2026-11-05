@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const MaxFileSize int64 = 512 << 20
+const MaxFileSize int64 = 8 << 30
 const Parser = "spotify-extended-v1"
 const Policy = "filters-v1"
 

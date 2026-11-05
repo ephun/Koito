@@ -56,6 +56,7 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 	}
 	result.Hash = f.Hash
 	parts, parseErr := s.readUpload(ctx, f, filename)
+	defer cleanupParsedFiles(parts)
 	service := expected
 	if service == "" {
 		service = "unknown"
@@ -113,7 +114,7 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 	}
 	defer tx.Rollback()
 	for i, part := range parts {
-		result.Records += len(part.records)
+		result.Records += part.countRecords()
 		var count int
 		e := tx.QueryRowContext(ctx, `SELECT record_count FROM source_extractions WHERE source_id=? AND file_hash=? AND parser=?`, sources[i], part.file.Hash, part.parser).Scan(&count)
 		if e == nil {
@@ -133,13 +134,18 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 				kinds[ordinal] = snapshot.Kind
 			}
 		}
-		for ordinal, raw := range part.records {
+		e = part.eachRecord(func(ordinal int, raw json.RawMessage) error {
 			kind := "play"
 			if part.service == "itunes" {
 				var row itunesRecord
 				if e = json.Unmarshal(raw, &row); e != nil {
-					stmt.Close()
-					return result, e
+					return e
+				}
+				kind = row.Kind
+			} else if databaseParser(part.parser) || part.parser == MultiCache || part.parser == MultiLog {
+				var row databaseRecord
+				if e = json.Unmarshal(raw, &row); e != nil {
+					return e
 				}
 				kind = row.Kind
 			} else if snapshotParser(part.parser) {
@@ -152,16 +158,19 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 			}
 			_, e = stmt.ExecContext(ctx, sources[i], part.file.Hash, ordinal, kind, string(raw), part.parser)
 			if e != nil {
-				stmt.Close()
-				return result, e
+				return e
 			}
 			result.Added++
-		}
+			return nil
+		})
 		stmt.Close()
+		if e != nil {
+			return result, e
+		}
 		if e = storeSnapshots(ctx, tx, sources[i], part); e != nil {
 			return result, e
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO source_extractions(source_id,file_hash,parser,record_count) VALUES(?,?,?,?)`, sources[i], part.file.Hash, part.parser, len(part.records))
+		_, e = tx.ExecContext(ctx, `INSERT INTO source_extractions(source_id,file_hash,parser,record_count) VALUES(?,?,?,?)`, sources[i], part.file.Hash, part.parser, part.countRecords())
 		if e != nil {
 			return result, e
 		}
@@ -183,7 +192,7 @@ func (s *Store) readUpload(ctx context.Context, f File, filenames ...string) ([]
 		return nil, err
 	}
 	if string(signature[:]) != "PK\x03\x04" && string(signature[:]) != "PK\x05\x06" {
-		part, e := s.parseFile(f, filenames...)
+		part, e := s.parseFile(ctx, f, filenames...)
 		if e != nil {
 			return nil, e
 		}
@@ -199,6 +208,19 @@ func (s *Store) readUpload(ctx context.Context, f File, filenames ...string) ([]
 	}
 	var total uint64
 	var parts []parsedFile
+	type storedMember struct {
+		name string
+		file File
+	}
+	members := []storedMember{}
+	byName := map[string]File{}
+	conflicting := map[string]bool{}
+	success := false
+	defer func() {
+		if !success {
+			cleanupParsedFiles(parts)
+		}
+	}()
 	for pos, member := range z.File {
 		if member.FileInfo().IsDir() {
 			continue
@@ -223,16 +245,40 @@ func (s *Store) readUpload(ctx context.Context, f File, filenames ...string) ([]
 		if e != nil {
 			return nil, e
 		}
-		part, e := s.parseFile(child, member.Name)
-		name := baseFilename(member.Name)
+		name := strings.ReplaceAll(member.Name, "\\", "/")
+		members = append(members, storedMember{name, child})
+		if previous, exists := byName[name]; exists && previous.Hash != child.Hash {
+			conflicting[name] = true
+		}
+		byName[name] = child
+	}
+	for _, member := range members {
+		if strings.HasSuffix(member.name, "-wal") && byName[strings.TrimSuffix(member.name, "-wal")].Hash == "" {
+			return nil, fmt.Errorf("SQLite WAL has no matching database: %s", member.name)
+		}
+		if strings.HasSuffix(member.name, "-wal") || strings.HasSuffix(member.name, "-shm") {
+			continue
+		}
+		var part parsedFile
+		var e error
+		if wal, ok := byName[member.name+"-wal"]; ok {
+			if conflicting[member.name] || conflicting[member.name+"-wal"] {
+				return nil, fmt.Errorf("SQLite bundle contains conflicting files named %s.", member.name)
+			}
+			part, e = s.parseSQLite(ctx, member.file, wal)
+		} else {
+			part, e = s.parseFile(ctx, member.file, member.name)
+		}
+		name := baseFilename(member.name)
 		if errors.Is(e, ErrUnsupportedFile) && !strings.HasPrefix(name, "Streaming_History_") && !strings.HasPrefix(name, "StreamingHistory") {
 			continue
 		}
 		if e != nil {
-			return nil, fmt.Errorf("%s: %w", member.Name, e)
+			return nil, fmt.Errorf("%s: %w", member.name, e)
 		}
 		parts = append(parts, part)
 	}
+	success = true
 	if len(parts) == 0 {
 		return nil, ErrUnsupportedFile
 	}

@@ -20,6 +20,7 @@ type ProjectionResult struct {
 	Undated    int64  `json:"undated"`
 }
 type spotifyItem struct {
+	Platform    string   `json:"platform,omitempty"`
 	Tags        []string `json:"-"`
 	Timestamp   string   `json:"ts"`
 	Title       string   `json:"master_metadata_track_name"`

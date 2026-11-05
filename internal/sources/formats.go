@@ -3,6 +3,7 @@ package sources
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -19,11 +20,13 @@ const LastfmJSONL = "lastfm-jsonl-v1"
 var ErrUnsupportedFile = errors.New("Unsupported file.")
 
 type parsedFile struct {
-	file      File
-	records   []json.RawMessage
-	service   string
-	parser    string
-	snapshots []parsedSnapshot
+	recordFile  string
+	recordCount int
+	file        File
+	records     []json.RawMessage
+	service     string
+	parser      string
+	snapshots   []parsedSnapshot
 }
 
 // CSV records keep every original column and value. The original file remains
@@ -33,19 +36,41 @@ type csvRecord struct {
 	Values  []string `json:"values"`
 }
 
-func (s *Store) parseFile(f File, filenames ...string) (parsedFile, error) {
+func (s *Store) parseFile(ctx context.Context, f File, filenames ...string) (parsedFile, error) {
 	p, _ := s.FilePath(f.Hash)
+	probe, e := os.Open(p)
+	if e != nil {
+		return parsedFile{}, e
+	}
+	var magic [16]byte
+	_, _ = io.ReadFull(probe, magic[:])
+	probe.Close()
+	if string(magic[:]) == "SQLite format 3\x00" {
+		return s.parseSQLite(ctx, f, File{})
+	}
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return parsedFile{}, err
 	}
 	clean := bytes.TrimSpace(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}))
-	if len(clean) == 0 {
-		return parsedFile{}, ErrUnsupportedFile
-	}
 	filename := ""
 	if len(filenames) > 0 {
 		filename = filenames[0]
+	}
+	if part, e := parseMultiHistory(f, clean, filename); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
+	if len(clean) == 0 {
+		if strings.Contains(strings.ToLower(baseFilename(filename)), ".db") {
+			return parsedFile{file: f, service: "database", parser: EmptyDB, records: []json.RawMessage{json.RawMessage(`{"kind":"database","table":"schema","key":"schema","fields":{"empty":true}}`)}}, nil
+		}
+		return parsedFile{}, ErrUnsupportedFile
+	}
+	if part, e := parseNormalizedHistory(f, clean); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
+	if part, e := parseLegacyHistory(f, clean); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
 	}
 	if part, e := parseSnapshots(f, clean, filename); !errors.Is(e, ErrUnsupportedFile) {
 		return part, e

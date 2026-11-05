@@ -17,6 +17,10 @@ func timeSchema() filters.Schema {
 	s.Choices = map[string][]filters.Choice{"time.spotify_basis": {{Label: "Reported end", Value: "end"}, {Label: "Estimated start", Value: "estimated_start"}}}
 	s.Labels = map[string]string{"original.time_text": "Original timestamp text", "record.played_ms": "Played milliseconds", "time.zone": "Last.fm timezone", "time.spotify_basis": "Spotify timestamps", "time.offset": "Time adjustment", "time.last_played": "Include last known play", "time.estimate_dates": "Estimate other play dates"}
 	s.Help = map[string]string{"time.zone": "Interpret local Last.fm timestamps using this timezone.", "time.spotify_basis": "Estimate starts using the reported end and played duration.", "time.offset": "Add this duration to the interpreted play time.", "time.last_played": "Use the last-played date recorded in the iTunes library export.", "time.estimate_dates": "Estimate missing play dates within the time range supported by the iTunes library export."}
+	s.Targets["time.meaning"] = filters.Text
+	s.Choices["time.meaning"] = []filters.Choice{{Label: "Playback start", Value: "start"}, {Label: "Playback end", Value: "end"}, {Label: "Submission", Value: "submission"}, {Label: "Unknown", Value: "unknown"}}
+	s.Labels["time.meaning"] = "Timestamp meaning"
+	s.Help["time.meaning"] = "Choose what this timestamp represents before comparing it with another source."
 	return s
 }
 
@@ -158,7 +162,7 @@ func resolveTimePrograms(ctx context.Context, config RuleConfig, r matchingRecor
 		if targets == nil {
 			targets = programTargets(program)
 		}
-		relevant := targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"]
+		relevant := targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"]
 		if library {
 			relevant = targets["time.last_played"] || targets["time.estimate_dates"]
 		}
@@ -178,6 +182,12 @@ func resolveTimePrograms(ctx context.Context, config RuleConfig, r matchingRecor
 		env["original.time_text"] = filters.String(r.Values.TimeText)
 		env["record.played_ms"] = filters.Integer(r.Values.PlayedMS)
 		result, err := compiled.Run(ctx, env)
+		// Retained service payloads use that service's existing time filters.
+		// A filter that explicitly addresses the wrapper still evaluates first.
+		if err == nil && len(result.Values) == 0 && len(result.Issues) == 0 && r.Values.OriginalFormat != "" && r.Values.OriginalService != "" && r.Values.OriginalService != r.Service {
+			env["source.service"] = filters.String(r.Values.OriginalService)
+			result, err = compiled.Run(ctx, env)
+		}
 		if err != nil {
 			out.Issues = append(out.Issues, FilterIssue{original.ID, original.Name, filters.Issue{Path: "steps", Reason: err.Error()}})
 			continue
@@ -252,7 +262,7 @@ func hasObservedTimePrograms(config RuleConfig) bool {
 			if targets == nil {
 				targets = programTargets(r.Program)
 			}
-			if targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] {
+			if targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"] {
 				return true
 			}
 		}
@@ -289,6 +299,14 @@ func applyObservedTime(r *matchingRecord, config RuleConfig) string {
 	if value, exists := resolved.Values["time.offset"]; exists {
 		if span, valid := value.Span(); valid {
 			r.timeOffset = &span
+		}
+	}
+	if value, exists := resolved.Values["time.meaning"]; exists {
+		if meaning, ok := value.Text(); ok {
+			switch meaning {
+			case "start", "end", "submission", "unknown":
+				r.Basis = meaning
+			}
 		}
 	}
 	return basis

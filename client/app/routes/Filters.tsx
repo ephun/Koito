@@ -194,7 +194,7 @@ export default function Filters() {
       </section>
       <section aria-labelledby="inference-title" className="space-y-3">
         <div className="flex items-center gap-2"><h2 id="inference-title">Inference</h2><FieldHelp label="Inference">Derive missing quantities, dates, or context from available evidence.</FieldHelp></div>
-        {saved.sources.some(source => source.service === "itunes" && source.records > 0) && <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} />}
+        {saved.sources.some(source => ["itunes", "navidrome"].includes(source.service) && source.records > 0) && <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="count" embedded onChange={upsert} onRemove={remove} />}
         <ProgramFilterManager state={saved} config={draft} busy={saving} type="inference" subtype="time" embedded onChange={upsert} onRemove={remove} />
       </section>
       {saved.sources.some(source => source.records > 0) && <section aria-labelledby="attribution-title" className="space-y-3">

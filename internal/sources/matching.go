@@ -117,7 +117,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		if snapshotParser(r.Parser) {
 			r.ExternalID = snapshotExternalID(r)
 		}
-		if countPrograms && r.Service == "itunes" {
+		if countPrograms && (r.Service == "itunes" || r.Service == "navidrome") {
 			if err = retainCountRaw(&r); err != nil {
 				return nil, err
 			}
@@ -150,6 +150,7 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
 	r.Start = r.Values.Time
 	r.Basis = r.Values.TimeMeaning
+	r.Device, r.LibraryID, r.TrackID = r.Values.Device, r.Values.NativeLibraryID, r.Values.NativeTrackID
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal([]byte(r.Payload), &fields)
 	for _, key := range []string{"device_name", "device", "platform"} {
@@ -167,7 +168,7 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	}
 	basis := applyObservedTime(r, config)
 	applyCompletion(r, config)
-	if r.Service == "spotify" && basis == "estimated_start" && r.Values.Reason == "counted" {
+	if (r.Service == "spotify" || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard) && r.Values.TimeMeaning == "end" && basis == "estimated_start" && r.Values.Reason == "counted" {
 		// Subtract actual played time, never an assumed recording duration. Guard
 		// duration conversion against overflow and implausible pre-epoch results.
 		if r.Values.PlayedMS > r.Start.UnixMilli() || r.Values.PlayedMS > int64((1<<63-1)/int64(time.Millisecond)) {
@@ -270,7 +271,7 @@ func comparisonMusic(v recordValues, rule Rule) music.MatchIdentity {
 }
 
 func timeCompatible(a, b matchingRecord, tolerance time.Duration) bool {
-	if (a.Basis == "end") != (b.Basis == "end") {
+	if !comparableTimeBasis(a.Basis, b.Basis) {
 		return false
 	}
 	ae := a.Start.Add(time.Duration(a.Values.Precision))
@@ -279,6 +280,18 @@ func timeCompatible(a, b matchingRecord, tolerance time.Duration) bool {
 		return true
 	}
 	return tolerance > 0 && !a.Start.After(be.Add(tolerance)) && !b.Start.After(ae.Add(tolerance))
+}
+
+func comparableTimeBasis(a, b string) bool {
+	// Preserve established estimated-start and adjusted-time behavior. A
+	// submission or unknown timestamp needs an explicit interpretation first.
+	if a == "unknown" || b == "unknown" {
+		return false
+	}
+	if a == "submission" || b == "submission" {
+		return a == b
+	}
+	return (a == "end") == (b == "end")
 }
 
 // calculateMatches does not write catalog, rules, decisions or display rows.
@@ -366,6 +379,18 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 		}
 	}
 	if playRule.Enabled {
+		events := map[string][]int{}
+		for i, r := range records {
+			if r.Values.Reason == "counted" && r.Values.EventID != "" {
+				key := fmt.Sprintf("%d:%s", r.SourceID, r.Values.EventID)
+				for _, other := range events[key] {
+					if resolvePlayPair(ctx, config, r, records[other]).Match {
+						join(i, other)
+					}
+				}
+				events[key] = append(events[key], i)
+			}
+		}
 		exact := map[string][]int{}
 		for i, r := range records {
 			if r.Values.Reason != "counted" {
@@ -499,8 +524,57 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 				}
 			}
 		}
-		// Evaluate the graph before changing any groups, so a chain cannot become
-		// unambiguous merely because an earlier pair was removed.
+		// Evaluate complete components before joining. Three services can all
+		// describe one event, but a chain or competing event remains ambiguous.
+		visited := map[int]bool{}
+		for first := range candidates {
+			if visited[first] {
+				continue
+			}
+			component := []int{first}
+			visited[first] = true
+			for pos := 0; pos < len(component); pos++ {
+				for next := range candidates[component[pos]] {
+					if !visited[next] {
+						visited[next] = true
+						component = append(component, next)
+					}
+				}
+			}
+			if len(component) < 3 {
+				continue
+			}
+			complete := true
+			sources := map[int64]int{}
+			for _, a := range component {
+				if len(candidates[a]) != len(component)-1 {
+					complete = false
+				}
+				for _, index := range members[a] {
+					source := records[index].SourceID
+					if previous, exists := sources[source]; exists && previous != a {
+						complete = false
+					}
+					sources[source] = a
+				}
+				for _, b := range component {
+					if a != b && (!canJoin(a, b) || blockedPairs[candidatePair(a, b)]) {
+						complete = false
+					}
+				}
+			}
+			if complete {
+				sort.Ints(component)
+				for _, next := range component[1:] {
+					join(component[0], next)
+				}
+				for _, node := range component {
+					delete(candidates, node)
+				}
+			}
+		}
+		// Remaining components are evaluated before changing any groups, so a
+		// chain cannot become unique because an earlier pair was removed.
 		pairs := [][2]int{}
 		for a, partners := range candidates {
 			if len(partners) == 1 {

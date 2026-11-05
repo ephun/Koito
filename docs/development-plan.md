@@ -758,7 +758,8 @@ Phase 4 is complete. See [the Phase 4 notes](phase-4.md) and
 [requirement audit](phase-4-audit.md) for implementation and verification.
 
 Phase 5 is complete. See [its notes](phase-5.md) and [closing audit](phase-5-audit.md).
-Phase 6 covers Navidrome, Multi-Scrobbler, and the remaining historical export formats.
+Phase 6 is complete. See [its notes](phase-6.md) and [closing audit](phase-6-audit.md).
+Phase 7 covers concerts, gameplay, and their reconciliation with the preserved history.
 
 Field-specific source preference also needs concrete examples before controls
 return to Filters. Keep original music identities and source album associations

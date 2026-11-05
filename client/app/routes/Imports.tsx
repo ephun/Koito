@@ -4,6 +4,7 @@ import { useAppContext } from "~/providers/AppProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import RecordInspector from "~/components/RecordInspector";
+import { sourceName } from "~/utils/filterRules";
 
 type Source = { id: number; service: string; records: number; plays: number; undated: number; first: string; last: string };
 type Receipt = { id: number; source_id: number; hash: string; filename: string; status: string; error: string; created_at: number };
@@ -104,11 +105,11 @@ export default function Imports() {
     {!!overview?.sources.some(s => s.records > 0) && <section className={panel}>
       <h2>Sources</h2>
       <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left [&_th]:pr-4 [&_td]:pr-4"><thead><tr><th>Source</th><th>Records</th><th>Plays</th><th>Dates (UTC)</th><th>Inspect</th></tr></thead><tbody>
-        {overview.sources.filter(s => s.records > 0).map(s => <tr key={s.id} className="border-t border-(--color-bg-tertiary)"><td className="py-3">{sourceName(s)}</td><td>{s.records.toLocaleString()}</td><td>{(s.plays + (s.undated || 0)).toLocaleString()}{!!s.undated && <span className="block text-xs text-(--color-fg-secondary)">{s.undated.toLocaleString()} undated</span>}</td><td>{s.first ? `${s.first} – ${s.last}` : "—"}</td><td><button className={button} disabled={busy || loadingRecords} onClick={() => loadRecords(s)}>Records</button></td></tr>)}
+        {overview.sources.filter(s => s.records > 0).map(s => <tr key={s.id} className="border-t border-(--color-bg-tertiary)"><td className="py-3">{sourceName(s.service)}</td><td>{s.records.toLocaleString()}</td><td>{(s.plays + (s.undated || 0)).toLocaleString()}{!!s.undated && <span className="block text-xs text-(--color-fg-secondary)">{s.undated.toLocaleString()} undated</span>}</td><td>{s.first ? `${s.first} – ${s.last}` : "—"}</td><td><button className={button} disabled={busy || loadingRecords} onClick={() => loadRecords(s)}>Records</button></td></tr>)}
       </tbody></table></div>
     </section>}
     {source && <section className={panel}>
-      <h2>Records · {sourceName(source)}</h2>
+      <h2>Records · {sourceName(source.service)}</h2>
       <div className="space-y-2">{records.map(r => <details key={r.id} className="rounded border border-(--color-bg-tertiary) p-3"><summary className="cursor-pointer">#{r.id} · {r.kind} · {r.reason} · row {r.ordinal}</summary><p className="text-sm break-all">File: {r.file_hash}{r.play_key && ` · Play: ${r.play_key}`}</p><a className="underline" href={`/imports?record=${r.id}`}>Inspect matching</a><pre className="overflow-auto max-h-80 p-3 text-sm">{formatPayload(r.payload)}</pre><a className="underline" href={`${base}/file?hash=${r.file_hash}`}>Download original source file</a></details>)}</div>
       {hasMore && <button className={`${button} mt-4`} disabled={busy || loadingRecords} onClick={() => loadRecords(source, records.at(-1)?.id)}>Load more</button>}
     </section>}
@@ -121,4 +122,3 @@ export default function Imports() {
 
 function formatPayload(payload: string) { try { return JSON.stringify(JSON.parse(payload), null, 2); } catch { return payload; } }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service === "itunes" ? "iTunes" : source.service === "discogs" ? "Discogs" : source.service; }

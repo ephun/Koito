@@ -73,6 +73,9 @@ func preparePlayPrograms(config RuleConfig) error {
 }
 
 func exactSourcePair(a, b matchingRecord) bool {
+	if a.SourceID == b.SourceID && a.Values.EventID != "" && a.Values.EventID == b.Values.EventID {
+		return true
+	}
 	if a.SourceID != b.SourceID || !a.Values.Time.Equal(b.Values.Time) || a.Values.Precision != b.Values.Precision {
 		return false
 	}
@@ -114,7 +117,7 @@ func pairEnvironment(a, b matchingRecord) filters.Env {
 	span, _ := filters.From(gap)
 	env["pair.gap"] = span
 	env["pair.exact"] = filters.Bool(exactSourcePair(a, b))
-	env["pair.same_time_basis"] = filters.Bool((a.Basis == "end") == (b.Basis == "end"))
+	env["pair.same_time_basis"] = filters.Bool(comparableTimeBasis(a.Basis, b.Basis))
 	env["pair.overlap"] = filters.Bool(a.Start.Before(bEnd) && b.Start.Before(aEnd))
 	return env
 }

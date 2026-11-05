@@ -20,7 +20,7 @@ export default function MusicStates({ kind, id }: { kind: "track" | "album"; id:
   const playlists = states.filter(state => state.kind === "playlist");
   const music = states.filter(state => state.kind !== "playlist");
   const stateLink = (state: MusicState) => {
-      const label = state.kind === "playlist" ? state.name : ({ saved_tracks: kind === "album" ? "Saved tracks" : "Saved", saved_albums: "Saved album", owned: "Owned", wanted: "Wanted", inventory: "Inventory", contributions: "Contributed" } as Record<string, string>)[state.kind] || state.kind;
+      const label = state.kind === "playlist" ? state.name : ({ saved_tracks: kind === "album" ? "Saved tracks" : "Saved", saved_albums: "Saved album", catalog: "Navidrome library", owned: "Owned", wanted: "Wanted", inventory: "Inventory", contributions: "Contributed" } as Record<string, string>)[state.kind] || state.kind;
       return <Link key={`${state.kind}:${state.name}`} className="inline-block max-w-full rounded-xs bg-(--color-bg-secondary) px-2 py-0.5 text-sm leading-5 [overflow-wrap:anywhere] hover:underline" to={`/imports?record=${state.records[0]}`} title="View source records">
         {label}{state.kind === "owned" && state.quantity > 1 ? ` ×${state.quantity}` : ""}
       </Link>;

@@ -65,6 +65,17 @@ func applyCompletion(r *matchingRecord, config RuleConfig) {
 			}
 		}
 		result, err := compiled.Run(context.Background(), env)
+		if err == nil && len(result.Values) == 0 && len(result.Issues) == 0 && r.Values.OriginalFormat != "" {
+			originalEnv := filters.Env{}
+			for field, value := range env {
+				originalEnv[field] = value
+			}
+			originalEnv["source.format"] = filters.String(r.Values.OriginalFormat)
+			if r.Values.OriginalService != "" {
+				originalEnv["source.service"] = filters.String(r.Values.OriginalService)
+			}
+			result, err = compiled.Run(context.Background(), originalEnv)
+		}
 		if err != nil {
 			r.CompletionIssues = append(r.CompletionIssues, FilterIssue{rule.ID, rule.Name, filters.Issue{Path: "steps", Reason: err.Error()}})
 			continue

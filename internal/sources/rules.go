@@ -295,7 +295,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	schema.Choices = map[string][]filters.Choice{"catalog.kind": {{Label: "Record", Value: "record"}, {Label: "Artist", Value: "artist"}, {Label: "Album", Value: "album"}, {Label: "Track", Value: "track"}}}
 	for _, source := range state.Sources {
 		if source.Records > 0 {
-			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs"}[source.Service]
+			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs", "navidrome": "Navidrome", "multi-scrobbler": "Multi-Scrobbler", "listenbrainz": "ListenBrainz", "maloja": "Maloja", "koito": "Koito", "legacy": "Earlier exports", "database": "Database"}[source.Service]
 			if name == "" {
 				name = source.Service
 			}
@@ -332,7 +332,10 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		}
 		other.Choices["source.service"] = schema.Choices["source.service"]
 		other.Choices["source.format"] = []filters.Choice{{Label: "Spotify account history", Value: SpotifyStandard}, {Label: "Spotify extended history", Value: Parser}, {Label: "Spotify playlists JSON", Value: SpotifyPlaylist}, {Label: "Spotify library JSON", Value: SpotifyLibrary}, {Label: "Spotify playlists and library CSV", Value: SpotifyCSV}, {Label: "Spotify account context", Value: SpotifyContext}, {Label: "Discogs CSV", Value: DiscogsCSV}, {Label: "Last.fm CSV", Value: LastfmCSV}, {Label: "Last.fm JSON", Value: LastfmJSON}, {Label: "Last.fm JSONL", Value: LastfmJSONL}, {Label: "iTunes XML", Value: ITunesXML}, {Label: "iTunes JSON", Value: ITunesJSON}, {Label: "iTunes expanded JSON", Value: ITunesExpanded}}
+		other.Choices["source.format"] = append(other.Choices["source.format"], filters.Choice{Label: "Navidrome SQLite", Value: NavidromeDB}, filters.Choice{Label: "Multi-Scrobbler SQLite", Value: MultiDB}, filters.Choice{Label: "Multi-Scrobbler cache", Value: MultiCache}, filters.Choice{Label: "Multi-Scrobbler logs", Value: MultiLog}, filters.Choice{Label: "ListenBrainz JSON", Value: ListenBrainzJSON}, filters.Choice{Label: "ListenBrainz JSONL", Value: ListenBrainzJSONL}, filters.Choice{Label: "Maloja JSON", Value: MalojaJSON}, filters.Choice{Label: "Koito JSON", Value: KoitoJSON}, filters.Choice{Label: "Koito SQLite", Value: KoitoDB}, filters.Choice{Label: "Earlier SQLite", Value: NormalizedDB}, filters.Choice{Label: "Earlier JSONL", Value: NormalizedJSONL}, filters.Choice{Label: "Listening ledger SQLite", Value: LedgerDB})
 		other.Choices["file.hash"] = schema.Choices["file.hash"]
+		other.Choices["source.original_format"] = other.Choices["source.format"]
+		other.Choices["item:/source_service"] = schema.Choices["source.service"]
 		if key == "presentation:grouping" {
 			other.Choices["source.service"] = append(append([]filters.Choice{}, schema.Choices["source.service"]...), filters.Choice{Label: "Koito", Value: "koito"})
 		}
@@ -384,7 +387,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Scope.SourceID < 0 || rule.Scope.RecordID < 0 {
 			return errors.New("Invalid source scope.")
 		}
-		if rule.Scope.Service != "" && rule.Scope.Service != "spotify" && rule.Scope.Service != "lastfm" && rule.Scope.Service != "itunes" {
+		if rule.Scope.Service != "" && rule.Scope.Service != "spotify" && rule.Scope.Service != "lastfm" && rule.Scope.Service != "itunes" && rule.Scope.Service != "navidrome" && rule.Scope.Service != "multi-scrobbler" && rule.Scope.Service != "listenbrainz" && rule.Scope.Service != "maloja" && rule.Scope.Service != "koito" && rule.Scope.Service != "legacy" {
 			return errors.New("Invalid service scope.")
 		}
 		if rule.Scope.FileHash != "" {

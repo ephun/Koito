@@ -19,6 +19,9 @@ const SpotifyContext = "spotify-account-context-v1"
 const DiscogsCSV = "discogs-csv-v1"
 
 func sourceFormat(parser string) string {
+	if family := databaseFormat(parser); family != "" {
+		return family
+	}
 	if strings.HasPrefix(parser, SpotifyCSV) {
 		return SpotifyCSV
 	}

@@ -13,22 +13,20 @@ import (
 func countSchema() filters.Schema {
 	minimum, maximum := int64(0), int64(math.MaxInt64)
 	return filters.Schema{
-		Help:           map[string]string{"library.snapshots": "Records for the same track across iTunes library exports.", "library.counts": "Valid counts from the selected supporting records.", "library.latest_count": "Read the count from the newest dated export record.", "library.reset_total": "Add each completed counter total when a later record reports a smaller count.", "count.snapshot": "Use this record's metadata when assigning names and dates.", "count.undated": "Use an undated total when the count spans uncertain dates."},
+		Help:           map[string]string{"library.matched_repeats": "Navidrome scrobble records matched to an already counted play.", "library.snapshots": "Records for the same track across library exports.", "library.counts": "Valid counts from the selected supporting records.", "library.latest_count": "Read the count from the newest dated export record.", "library.reset_total": "Add each completed counter total when a later record reports a smaller count.", "count.snapshot": "Use this record's metadata when assigning names and dates.", "count.undated": "Use an undated total when the count spans uncertain dates."},
 		SnapshotFields: true,
-		ItemFields:     map[string]filters.Type{"item:/count": filters.Number, "item:/count_valid": filters.Boolean, "item:/date": filters.Date, "item:/dated": filters.Boolean, "item:/added": filters.Date, "item:/last_played": filters.Date, "item:/file_hash": filters.Text, "item:/artist": filters.Text, "item:/album": filters.Text, "item:/title": filters.Text, "item:/persistent_id": filters.Text, "item:/record_id": filters.Number, "item:/source_id": filters.Number, "item:/library_id": filters.Text},
-		ItemLabels:     map[string]string{"item:/count": "Reported count", "item:/count_valid": "Count available", "item:/date": "Export date", "item:/dated": "Export date available", "item:/added": "Date added", "item:/last_played": "Last played", "item:/file_hash": "File", "item:/artist": "Original artist", "item:/album": "Original album", "item:/title": "Original track title", "item:/persistent_id": "Persistent track identifier", "item:/record_id": "Record identifier", "item:/source_id": "Source identifier", "item:/library_id": "Library identifier"},
-		Fields:         map[string]filters.Type{"library.snapshots": filters.List, "library.counts": filters.List, "library.id": filters.Text, "library.artist": filters.Text, "library.album": filters.Text, "library.title": filters.Text, "library.maximum_snapshot": filters.Object, "library.latest_snapshot": filters.Object, "library.reset_snapshot": filters.Object, "library.latest_count": filters.Number, "library.reset_total": filters.Number},
+		ItemFields:     map[string]filters.Type{"item:/count": filters.Number, "item:/count_valid": filters.Boolean, "item:/date": filters.Date, "item:/dated": filters.Boolean, "item:/added": filters.Date, "item:/last_played": filters.Date, "item:/file_hash": filters.Text, "item:/artist": filters.Text, "item:/album": filters.Text, "item:/title": filters.Text, "item:/persistent_id": filters.Text, "item:/record_id": filters.Number, "item:/source_id": filters.Number, "item:/source_service": filters.Text, "item:/library_id": filters.Text},
+		ItemLabels:     map[string]string{"item:/count": "Reported count", "item:/count_valid": "Count available", "item:/date": "Export date", "item:/dated": "Export date available", "item:/added": "Date added", "item:/last_played": "Last played", "item:/file_hash": "File", "item:/artist": "Original artist", "item:/album": "Original album", "item:/title": "Original track title", "item:/persistent_id": "Persistent track identifier", "item:/record_id": "Record identifier", "item:/source_id": "Source identifier", "item:/source_service": "Source", "item:/library_id": "Library identifier"},
+		Fields:         map[string]filters.Type{"library.matched_repeats": filters.Number, "library.snapshots": filters.List, "library.counts": filters.List, "library.id": filters.Text, "library.artist": filters.Text, "library.album": filters.Text, "library.title": filters.Text, "library.maximum_snapshot": filters.Object, "library.latest_snapshot": filters.Object, "library.reset_snapshot": filters.Object, "library.latest_count": filters.Number, "library.reset_total": filters.Number},
 		Targets:        map[string]filters.Type{"count.snapshots": filters.List, "count.total": filters.Number, "count.snapshot": filters.Object, "count.undated": filters.Boolean},
 		Bounds:         map[string]filters.NumberBounds{"count.total": {Min: &minimum, Max: &maximum, Whole: true}},
-		Labels:         map[string]string{"library.snapshots": "iTunes library export records", "library.counts": "Reported counts", "library.id": "Library identifier", "library.artist": "Library artist", "library.album": "Library album", "library.title": "Library track title", "library.maximum_snapshot": "Record with the largest count", "library.latest_snapshot": "Latest dated export record", "library.reset_snapshot": "Latest record for reset totals", "library.latest_count": "Latest reported count", "library.reset_total": "Total assuming counter resets", "count.snapshots": "Supporting records", "count.total": "Cumulative count", "count.snapshot": "Record for names and dates", "count.undated": "Keep count undated"},
+		Labels:         map[string]string{"library.matched_repeats": "Matched scrobble duplicates", "library.snapshots": "Library export records", "library.counts": "Reported counts", "library.id": "Library identifier", "library.artist": "Library artist", "library.album": "Library album", "library.title": "Library track title", "library.maximum_snapshot": "Record with the largest count", "library.latest_snapshot": "Latest dated export record", "library.reset_snapshot": "Latest record for reset totals", "library.latest_count": "Latest reported count", "library.reset_total": "Total assuming counter resets", "count.snapshots": "Supporting records", "count.total": "Cumulative count", "count.snapshot": "Record for names and dates", "count.undated": "Keep count undated"},
 	}
 }
 
 func snapshotScopeExpression(scope RuleScope) filters.Expr {
-	// This stage receives iTunes library snapshots only.
-	scope.Service = ""
 	expression := scopeExpression(scope)
-	fields := map[string]string{"source.id": "source_id", "file.hash": "file_hash", "record.id": "record_id", "library.id": "library_id", "track.persistent_id": "persistent_id", "original.artist": "artist", "record.device": "device"}
+	fields := map[string]string{"source.service": "source_service", "source.id": "source_id", "file.hash": "file_hash", "record.id": "record_id", "library.id": "library_id", "track.persistent_id": "persistent_id", "original.artist": "artist", "record.device": "device"}
 	var rewrite func(filters.Expr) filters.Expr
 	rewrite = func(e filters.Expr) filters.Expr {
 		if e.Op == "field" {
@@ -46,7 +44,7 @@ func snapshotScopeExpression(scope RuleScope) filters.Expr {
 
 func countProgram(mode string, scope RuleScope) *filters.Program {
 	input := fieldExpr("library.snapshots")
-	if scope.SourceID != 0 || scope.FileHash != "" || scope.LibraryID != "" || scope.TrackID != "" || scope.RecordID != 0 || scope.Artist != "" || scope.Device != "" || scope.From != "" || scope.Until != "" {
+	if scope != (RuleScope{}) {
 		input = operation("where", input, snapshotScopeExpression(scope))
 	}
 	total := operation("max", fieldExpr("library.counts"))
@@ -60,7 +58,8 @@ func countProgram(mode string, scope RuleScope) *filters.Program {
 		snapshot = fieldExpr("library.reset_snapshot")
 	}
 	condition := operation("gt", operation("count", fieldExpr("count.snapshots")), literalExpr(0))
-	actions := []filters.Statement{{Set: "count.total", Value: &total}, {Set: "count.snapshot", Value: &snapshot}}
+	total = operation("subtract", total, fieldExpr("library.matched_repeats"))
+	actions := []filters.Statement{{Set: "count.snapshot", Value: &snapshot}, {Set: "count.total", Value: &total}}
 	if mode == "reset_total" {
 		undated := literalExpr(true)
 		actions = append(actions, filters.Statement{Set: "count.undated", Value: &undated})
@@ -134,7 +133,7 @@ func snapshotValue(s LibrarySnapshot, r matchingRecord, library LibraryEvidence)
 	if s.Count != nil {
 		count = filters.Integer(*s.Count)
 	}
-	fields := map[string]any{"record_id": r.ID, "source_id": r.SourceID, "file_hash": s.FileHash, "library_id": library.LibraryID, "persistent_id": r.TrackID, "artist": r.Values.Artist, "album": r.Values.Album, "title": r.Values.Title, "device": r.Device, "count": count, "count_valid": s.Count != nil, "date_text": s.Snapshot, "dated": !libraryDate(s.Snapshot).IsZero()}
+	fields := map[string]any{"record_id": r.ID, "source_id": r.SourceID, "source_service": r.Service, "file_hash": s.FileHash, "library_id": library.LibraryID, "persistent_id": r.TrackID, "artist": r.Values.Artist, "album": r.Values.Album, "title": r.Values.Title, "device": r.Device, "count": count, "count_valid": s.Count != nil, "date_text": s.Snapshot, "dated": !libraryDate(s.Snapshot).IsZero()}
 	for key, text := range map[string]string{"date": s.Snapshot, "added": s.Added, "last_played": s.LastPlayed} {
 		if date := libraryDate(text); !date.IsZero() {
 			fields[key] = date
@@ -172,7 +171,7 @@ func selectedSnapshots(value filters.Value, all []LibrarySnapshot) ([]LibrarySna
 	return out, nil
 }
 
-func countEnvironment(track LibraryTrack, library LibraryEvidence, byID map[int64]matchingRecord) filters.Env {
+func countEnvironment(track LibraryTrack, library LibraryEvidence, byID map[int64]matchingRecord, plans ...*matchPlan) filters.Env {
 	all := append([]LibrarySnapshot(nil), track.Snapshots...)
 	sort.Slice(all, func(i, j int) bool { return all[i].RecordID < all[j].RecordID })
 	values := []filters.Value{}
@@ -180,6 +179,9 @@ func countEnvironment(track LibraryTrack, library LibraryEvidence, byID map[int6
 		values = append(values, snapshotValue(s, byID[s.RecordID], library))
 	}
 	env := filters.Env{"library.snapshots": filters.Values(values...), "library.id": filters.String(library.LibraryID), "library.artist": filters.String(track.Artist), "library.album": filters.String(track.Album), "library.title": filters.String(track.Title)}
+	env["library.matched_repeats"] = filters.Deferred(func(ctx context.Context, current filters.Env) filters.Value {
+		return matchedScrobbleRepeats(track, library, byID, current, plans...)
+	})
 	inputs := func(current filters.Env) ([]LibrarySnapshot, error) {
 		if value, exists := current["count.snapshots"]; exists {
 			return selectedSnapshots(value, all)
@@ -241,7 +243,7 @@ func countSelectionsConflict(left, right countSelection) bool {
 	return left.Valid != right.Valid || left.Amount != right.Amount || left.Undated != right.Undated || left.Selected.RecordID != right.Selected.RecordID
 }
 
-func chooseCountRule(ctx context.Context, config RuleConfig, library LibraryEvidence, track LibraryTrack, byID map[int64]matchingRecord) (*countSelection, bool, error) {
+func chooseCountRule(ctx context.Context, config RuleConfig, library LibraryEvidence, track LibraryTrack, byID map[int64]matchingRecord, plans ...*matchPlan) (*countSelection, bool, error) {
 	var selected *countSelection
 	best, conflict := -1, false
 	for _, original := range config.Rules {
@@ -249,6 +251,11 @@ func chooseCountRule(ctx context.Context, config RuleConfig, library LibraryEvid
 			continue
 		}
 		candidate := countSelection{Rule: original, Snapshots: append([]LibrarySnapshot(nil), track.Snapshots...)}
+		if original.Migration != nil && original.Migration.Scope != nil && legacyComparison(original) != "" && original.Migration.Scope.Service != "" {
+			if len(track.Snapshots) == 0 || byID[track.Snapshots[0].RecordID].Service != original.Migration.Scope.Service {
+				continue
+			}
+		}
 		candidate.Rule.legacyComparison = legacyComparison(original)
 		if original.Program == nil {
 			candidate.Snapshots = nil
@@ -274,7 +281,7 @@ func chooseCountRule(ctx context.Context, config RuleConfig, library LibraryEvid
 					return nil, false, err
 				}
 			}
-			outcome, err := compiled.Run(ctx, countEnvironment(track, library, byID))
+			outcome, err := compiled.Run(ctx, countEnvironment(track, library, byID, plans...))
 			if err != nil {
 				return nil, false, err
 			}

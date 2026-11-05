@@ -33,12 +33,14 @@ func namingSchema() filters.Schema {
 			"original.aliases": filters.List, "original.primary_artist_ids": filters.List, "original.artists": filters.List, "catalog.artist_ids": filters.List, "catalog.kind": filters.Text, "catalog.id": filters.Number, "catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
+			"source.original_service": filters.Text, "source.original_format": filters.Text, "record.forwarder": filters.Text, "record.endpoint": filters.Text, "record.event_id": filters.Text,
 			"record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text,
-			"library.id": filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
+			"track.duration_ms": filters.Number,
+			"library.id":        filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
 		Targets: map[string]filters.Type{"display.aliases": filters.List, "display.artist_ids": filters.List, "display.primary_artist_ids": filters.List, "display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
 		Help:    map[string]string{"display.aliases": "Choose alternate names used by search.", "display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
-		Labels:  map[string]string{"source.format": "Source format", "record.played_ms": "Played milliseconds", "record.completed": "Reported complete", "display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
+		Labels:  map[string]string{"source.format": "Source format", "source.original_service": "Original service", "source.original_format": "Original format", "record.forwarder": "Forwarding app", "record.endpoint": "Destination", "record.event_id": "Source event identifier", "record.played_ms": "Played milliseconds", "track.duration_ms": "Track duration in milliseconds", "record.completed": "Reported complete", "display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	})
 }
 
@@ -174,7 +176,7 @@ func recordEnvironment(r matchingRecord) filters.Env {
 		"source.format":  filters.String(sourceFormat(r.Parser)),
 		"display.artist": filters.String(r.Values.Artist), "display.album": filters.String(r.Values.Album), "display.title": filters.String(r.Values.Title),
 	}
-	if r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) {
+	if r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard || r.Values.PlayedMS > 0 {
 		env["record.played_ms"] = filters.Integer(r.Values.PlayedMS)
 		if r.Values.ReportedComplete != nil {
 			env["record.completed"] = filters.Bool(*r.Values.ReportedComplete)
@@ -182,6 +184,9 @@ func recordEnvironment(r matchingRecord) filters.Env {
 	}
 	if r.Values.Artist != "" {
 		env["original.artists"] = filters.Values(filters.String(r.Values.Artist))
+	}
+	if r.Values.DurationMS > 0 {
+		env["track.duration_ms"] = filters.Integer(r.Values.DurationMS)
 	}
 	for key, value := range r.LibraryFields {
 		env[key] = value
@@ -199,7 +204,7 @@ func recordEnvironment(r matchingRecord) filters.Env {
 	if !r.Start.IsZero() {
 		env["record.time"] = filters.Timestamp(r.Start)
 	}
-	for key, value := range map[string]string{"record.device": r.Device, "library.id": r.LibraryID, "track.persistent_id": r.TrackID, "track.spotify_uri": r.Values.URI, "track.recording_id": r.Values.RecordingID} {
+	for key, value := range map[string]string{"record.device": r.Device, "library.id": r.LibraryID, "track.persistent_id": r.TrackID, "track.spotify_uri": r.Values.URI, "track.recording_id": r.Values.RecordingID, "source.original_service": r.Values.OriginalService, "source.original_format": r.Values.OriginalFormat, "record.forwarder": r.Values.Forwarder, "record.endpoint": r.Values.Endpoint, "record.event_id": r.Values.EventID} {
 		if value != "" {
 			env[key] = filters.String(value)
 		}
