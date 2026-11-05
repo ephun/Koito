@@ -1,21 +1,13 @@
 import { getCfg, type User } from "api/api";
 import { createContext, useContext, useEffect, useState } from "react";
-import pkg from "../../package.json";
-import semver from "semver";
 import { themes } from "~/styles/themes.css";
 import Loading from "~/components/Loading";
-
-function isNewerVersion(current: string, latest: string): boolean {
-  return !!semver.valid(current) && !!semver.valid(latest) && semver.gt(latest, current);
-}
 
 interface AppContextType {
   user: User | null | undefined;
   configurableHomeActivity: boolean;
   homeItems: number;
   defaultTheme: string;
-  currentVersion: string;
-  updateAvailable: boolean;
   firstActivity: Date | undefined;
   setConfigurableHomeActivity: (value: boolean) => void;
   setHomeItems: (value: number) => void;
@@ -47,9 +39,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     setUser({ ...user, username: value });
   };
 
-  const currentVersion = import.meta.env.VITE_KOITO_VERSION || pkg.version;
-
-  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
   const [firstActivity, setFirstActivity] = useState<Date | undefined>();
 
   useEffect(() => {
@@ -88,15 +77,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
   }, []);
 
-  useEffect(() => {
-    fetch("https://api.github.com/repos/gabehf/koito/releases/latest")
-      .then((r) => r.json())
-      .then((r) => {
-        setUpdateAvailable(isNewerVersion(currentVersion, r.tag_name));
-      })
-      .catch(() => {});
-  }, []);
-
   if (user === undefined) {
     return <Loading />;
   }
@@ -106,8 +86,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     configurableHomeActivity,
     homeItems,
     defaultTheme,
-    currentVersion,
-    updateAvailable,
     firstActivity,
     setConfigurableHomeActivity,
     setHomeItems,
