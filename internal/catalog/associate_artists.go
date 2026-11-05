@@ -79,7 +79,7 @@ func matchArtistsByMBIDMappings(ctx context.Context, d db.ArtistStore, opts Asso
 	var result []*models.Artist
 
 	for _, a := range opts.ArtistMbidMap {
-		artist, err := d.GetArtist(ctx, db.GetArtistOpts{
+		artist, err := d.GetArtist(ctx, db.GetArtistOpts{Original: true,
 			MusicBrainzID: a.Mbid,
 		})
 		if err == nil {
@@ -91,12 +91,16 @@ func matchArtistsByMBIDMappings(ctx context.Context, d db.ArtistStore, opts Asso
 			return nil, fmt.Errorf("matchArtistsByMBIDMappings: %w", err)
 		}
 
-		artist, err = d.GetArtist(ctx, db.GetArtistOpts{
+		artist, err = d.GetArtist(ctx, db.GetArtistOpts{Original: true,
 			Name: a.Artist,
 		})
+		if err == nil && artist.MbzID != nil && *artist.MbzID != uuid.Nil && *artist.MbzID != a.Mbid {
+			err = db.ErrNotFound
+		}
+
 		if err == nil {
 			l.Debug().Msgf("Artist '%s' found by Name", a.Artist)
-			if artist.MbzID == nil {
+			if artist.MbzID == nil || *artist.MbzID == uuid.Nil {
 				err := d.UpdateArtist(ctx, db.UpdateArtistOpts{
 					ID:            artist.ID,
 					MusicBrainzID: a.Mbid,
@@ -106,15 +110,11 @@ func matchArtistsByMBIDMappings(ctx context.Context, d db.ArtistStore, opts Asso
 					return nil, fmt.Errorf("matchArtistsByMBIDMappings: %w", err)
 				}
 				l.Debug().Msgf("Updated artist '%s' with MusicBrainz ID", artist.Name)
+				artist.MbzID = &a.Mbid
 			} else {
 				l.Warn().Msgf("Attempted to update artist %s with MusicBrainz ID, but an existing ID was already found", artist.Name)
 			}
-			err = d.UpdateArtist(ctx, db.UpdateArtistOpts{ID: artist.ID, MusicBrainzID: a.Mbid})
-			if err != nil {
-				l.Err(err).Msgf("matchArtistsByMBIDMappings: Failed to associate artist '%s' with MusicBrainz ID", artist.Name)
-			} else {
-				artist.MbzID = &a.Mbid
-			}
+
 			result = append(result, artist)
 			continue
 		}
@@ -174,7 +174,7 @@ func matchArtistsByMBID(ctx context.Context, d db.ArtistStore, opts AssociateArt
 			l.Warn().Msg("Provided artist has uuid.Nil MusicBrainzID")
 			return matchArtistsByNames(ctx, opts.ArtistNames, result, d, opts)
 		}
-		a, err := d.GetArtist(ctx, db.GetArtistOpts{
+		a, err := d.GetArtist(ctx, db.GetArtistOpts{Original: true,
 			MusicBrainzID: id,
 		})
 		if err == nil {
@@ -212,7 +212,7 @@ func resolveAliasOrCreateArtist(ctx context.Context, mbzID uuid.UUID, names []st
 	l.Debug().Msgf("Got aliases %v from MusicBrainz", aliases)
 
 	for _, alias := range aliases {
-		a, err := d.GetArtist(ctx, db.GetArtistOpts{
+		a, err := d.GetArtist(ctx, db.GetArtistOpts{Original: true,
 			Name: alias,
 		})
 		if err == nil && (a.MbzID == nil || *a.MbzID == uuid.Nil) {
@@ -279,7 +279,7 @@ func matchArtistsByNames(ctx context.Context, names []string, existing []*models
 			l.Debug().Msgf("Artist '%s' already found, skipping...", name)
 			continue
 		}
-		a, err := d.GetArtist(ctx, db.GetArtistOpts{
+		a, err := d.GetArtist(ctx, db.GetArtistOpts{Original: true,
 			Name: name,
 		})
 		if err == nil {

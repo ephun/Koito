@@ -1080,3 +1080,22 @@ The two-action editor passed at 390 and 320 pixels without page errors.
 Restoration returned the original configuration, album state and checked fingerprints.
 Main activation passed after a backup and a 63.125-second rebuild.
 It retained 191,473 records, 168,424 plays, three original-file hashes and the checked album associations.
+
+## Native identity lookup reads original metadata
+
+Native association now explicitly requests original catalog data.
+Displayed names, identifier corrections, artist-credit replacements and Various Artists classification remain view data.
+They no longer replace the original evidence used to associate an incoming native submission.
+
+A regression reproduces the previous failure: a displayed recording identifier matched a new submission,
+which incorrectly attached the new recording to the original appearance.
+The corrected path retains both recording identifiers through repeated native submissions, Rebuild and restoration.
+Original-read regressions also cover artist/album names, aliases, identifiers, credits and classification.
+Conflicting artist identifier mappings and release identifiers preserve separate entities and the original identifiers.
+The existing conflicting-release test now requires both releases to survive instead of discarding the incoming release ID.
+
+Native identity lookup regressions and the full Go suite pass.
+The legacy Koito importer also requests original catalog metadata.
+Main activation passed after a database backup.
+The unchanged view retained 191,473 records, 168,424 plays, the checked album associations,
+and all three original-file hashes. Desktop, 390-pixel and 320-pixel checks passed without page errors.

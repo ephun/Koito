@@ -8,6 +8,7 @@ import (
 )
 
 type GetAlbumOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	ArtistID      int32
@@ -17,6 +18,7 @@ type GetAlbumOpts struct {
 }
 
 type GetArtistOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	Name          string
@@ -24,6 +26,7 @@ type GetArtistOpts struct {
 }
 
 type GetTrackOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	Title         string

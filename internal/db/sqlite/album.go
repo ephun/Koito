@@ -52,6 +52,9 @@ func (s *Sqlite) GetAlbum(ctx context.Context, opts db.GetAlbumOpts) (*models.Al
 		opts.ID = id
 	}
 
+	if opts.Original {
+		return s.originalAlbum(ctx, opts.ID)
+	}
 	return s.getAlbumByID(ctx, opts.ID)
 }
 

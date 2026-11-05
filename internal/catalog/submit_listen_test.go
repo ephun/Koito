@@ -334,7 +334,7 @@ func TestSubmitListen_DoNotOverwriteMbzIDs(t *testing.T) {
 	require.NoError(t, store.QueryRow(`SELECT musicbrainz_id FROM tracks WHERE id=1`).Scan(&original))
 	assert.Equal(t, "00000000-0000-0000-0000-000000001001", original)
 
-	// Release and artist associations retain their existing identifiers.
+	// Conflicting releases remain separate while original identifiers survive.
 	count, err := store.Count(`
 	SELECT COUNT(*) FROM tracks_with_title WHERE musicbrainz_id = $1
 	`, trackMbzID)
@@ -344,7 +344,7 @@ func TestSubmitListen_DoNotOverwriteMbzIDs(t *testing.T) {
 	SELECT COUNT(*) FROM releases_with_title WHERE musicbrainz_id = $1
 	`, releaseMbzID)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "duplicate release group created")
+	assert.Equal(t, 1, count, "conflicting release identifier should retain its own release")
 	count, err = store.Count(`
 	SELECT COUNT(*) FROM releases_with_title WHERE musicbrainz_id = $1
 	`, existingReleaseMbzID)

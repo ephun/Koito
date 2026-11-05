@@ -42,6 +42,9 @@ func (s *Sqlite) GetTrack(ctx context.Context, opts db.GetTrackOpts) (*models.Tr
 		opts.ID = id
 	}
 
+	if opts.Original {
+		return s.originalTrack(ctx, opts.ID)
+	}
 	return s.getTrackByID(ctx, opts.ID)
 }
 

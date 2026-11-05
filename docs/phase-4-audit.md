@@ -11,18 +11,18 @@ Passing a narrower test does not close a broader requirement.
 | Additive catalog migration with retained original track/listen links | Migration 008, `internal/music/identity.go`, `TestMusicHistorySpansAlbumsWithoutCombiningPlays` | Verified |
 | Track pages span album appearances while each play keeps its album | `internal/db/sqlite/music_test.go`, actual track 271 with 519 and 2 plays on separate albums | Verified |
 | Recording identity remains distinct from name-based history | `TestNameHistoryKeepsRecordingVariantsDistinct`, `TestMusicAliasKeepsDisplayAndRecordingIdentitySeparateAndReverses` | Verified for imports and ordinary native capture |
-| Native capture preserves different recording identifiers even after display corrections | Isolated audit submitted two different recording IDs after a display-identifier correction. Two plays retained only one recording identity | **Needs work** |
+| Native capture preserves different recording identifiers even after display corrections | `TestDisplayedRecordingIdentifierDoesNotReidentifyIncomingNativePlays`, original-read regressions and corrected isolated reproducer retain both IDs | Verified in tests and activated locally |
 | Singles, compilations, missing albums, remasters, live/acoustic versions, untitled tracks | `TestLiveRecordingKeepsEachSubmittedAlbum`, `TestNameHistoryKeepsRecordingVariantsDistinct`, edition-template tests | Verified |
 | Case-sensitive and insensitive comparisons preserve original capitalization | Music program migration, source comparison overrides, Unicode case/history tests | Verified for track histories |
 | Case matching also produces clean artist and album statistics | Isolated case-insensitive fixture retains two artists and two albums while sharing one track history | **Needs work** |
 | Independent displayed names | Catalog Naming caches and source Naming programs, real-data naming acceptance | Verified |
 | Optional regex edition grouping with source, field, artist and release conditions | Typed Grouping schema, grouping/source-exception tests, native incoming-release tests | Verified |
 | Grouped reporting retains original releases and recordings | Album report views, group member tables, actual-import grouping checks | Verified |
-| Corrected names and credits feed grouping consistently | Current worktree adds shared display environments, source refresh and exact projected previews. New source and native regressions pass | Implemented, final runtime activation pending |
+| Corrected names and credits feed grouping consistently | Current worktree adds shared display environments, source refresh and exact projected previews. New source and native regressions pass | Verified in tests and current-build real-data acceptance |
 | Bulk names, aliases, whitespace/punctuation and artist-credit corrections | Naming operators, catalog alias/credit caches, native search tests, original-preservation checks | Verified |
 | Before/after previews and reversible corrections | Shared preview/publication path, savepoint rollback, version restoration and failure regressions | Verified for implemented actions |
 | Structured multi-artist credits and names containing commas remain intact | Native history, catalog credits, classification and grouping tests | Verified |
-| Explicit corrections survive future imports and rebuilds | Source reimport/rebuild tests and native capture/enrichment regressions | Verified, subject to the native identifier gap above |
+| Explicit corrections survive future imports and rebuilds | Source reimport/rebuild tests and native capture/enrichment regressions | Verified in tests |
 | Source genres remain separate from manual assignments | `source_genres`, derived `artist_genres`, provenance and conflict-selection tests | Verified |
 | Artist genres filter charts, including undated totals and date bounds | `TestGenreChartsConstrainCountsBeforeRanking`, actual genre-chart browser checks | Verified |
 | Richer source tags remain available without requiring a visualization | Original payloads, raw-field discovery and record inspection | Verified for supported importers |
@@ -44,10 +44,8 @@ Passing a narrower test does not close a broader requirement.
 
 ## Remaining work
 
-1. Finish activating and checking the current corrected-display grouping changes.
-2. Keep native ingestion identity decisions separate from displayed identifier corrections.
-3. Make artist and album statistics follow configured music identity matching while preserving raw entities and source associations.
-4. Verify the resulting behavior against this complete matrix, run closing checks, and push the final revision.
+1. Make artist and album statistics follow configured music identity matching while preserving raw entities and source associations.
+2. Verify the resulting behavior against this complete matrix, run closing checks, and push the final revision.
 
 The deferred Records styling, alternative missing-album wording and artwork providers remain deferred.
 They are not substitutes for the correctness items above.

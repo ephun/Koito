@@ -40,6 +40,9 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		opts.ID = id
 	}
 
+	if opts.Original {
+		return s.originalArtist(ctx, opts.ID)
+	}
 	var mbzID, image, imageSrc sql.NullString
 	var name, aliasesConcat sql.NullString
 	err := s.db.QueryRowContext(ctx, `
