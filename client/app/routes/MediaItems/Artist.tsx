@@ -42,7 +42,7 @@ export default function Artist() {
       listenCount={artist.listen_count}
       firstListen={artist.first_listen}
       imgItemId={artist.id}
-      subContent={<div className="flex max-w-full flex-wrap gap-2">{artist.genres?.map(genre => <Link key={genre} className="rounded border border-(--color-bg-tertiary) px-2 py-1 text-sm hover:underline" to={`/chart/top/artists?period=all_time&genre=${encodeURIComponent(genre)}`}>{genre}</Link>)}{user?.role === "admin" && <Link className="text-sm underline" to={`/filters?artist=${artist.id}`}>Edit genres</Link>}</div>}
+      subContent={<div className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">{artist.genres?.map(genre => <Link key={genre} className="inline-flex max-w-full items-center rounded border border-(--color-bg-tertiary) px-2 py-0.5 text-sm leading-5 [overflow-wrap:anywhere] hover:underline" to={`/chart/top/artists?period=all_time&genre=${encodeURIComponent(genre)}`}>{genre}</Link>)}{user?.role === "admin" && <Link className="inline-flex shrink-0 items-center py-0.5 text-sm leading-5 underline underline-offset-2" to={`/filters?artist=${artist.id}`}>Edit genres</Link>}</div>}
     >
       {!!artist.genre_issues?.length && <details className="mt-6 rounded border border-(--color-bg-tertiary) p-3">
         <summary className="cursor-pointer text-sm">Unresolved genre filters</summary>

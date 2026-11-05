@@ -43,7 +43,7 @@ export default function ListensTable({
                 />
               </Link>
             </td>
-            <td className="max-w-0 w-full px-2 py-2">
+            <td className="max-w-0 w-full px-2 py-2 align-middle">
               <div>
                 {!hideArtists && (
                   <>
@@ -99,7 +99,7 @@ export default function ListensTable({
                 {item.evidence === "last_played" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Last played<FieldHelp label="Last-played evidence">Reported as the library's most recent play.</FieldHelp></span>}
                 {item.attribution_basis === "heuristic" && <span className="ml-2 inline-flex items-center gap-1 text-xs text-(--color-fg-tertiary)">Heuristic<FieldHelp label="Heuristic attribution">Assigned to you using the enabled heuristic.</FieldHelp></span>}
               </div>
-              {!!item.tags?.length && <ul aria-label="Listening tags" className="mt-1 flex min-w-0 max-w-full flex-wrap gap-1">{item.tags.map((tag,index) => <li key={index} className="min-w-0 max-w-full [overflow-wrap:anywhere] rounded border border-(--color-bg-tertiary) px-1.5 py-0.5 text-xs text-(--color-fg-secondary)">{tag}</li>)}</ul>}
+              {!!item.tags?.length && <ul aria-label="Listening tags" className="mt-1 flex min-w-0 max-w-full flex-wrap items-center gap-1">{item.tags.map((tag,index) => <li key={index} className="inline-flex min-w-0 max-w-full items-center [overflow-wrap:anywhere] rounded border border-(--color-bg-tertiary) px-2 py-0.5 text-xs leading-4 text-(--color-fg-secondary)">{tag}</li>)}</ul>}
               {showAlbums && item.album_id && <Link className="mt-1 block truncate text-xs text-(--color-fg-secondary) hover:underline" to={`/album/${item.album_id}`}>{item.album}</Link>}
             </td>
             <td
@@ -111,8 +111,8 @@ export default function ListensTable({
               {user?.role === "admin" && <Link aria-label="Edit play inclusion" title="Edit play inclusion" to={`/filters?listen_track=${item.track.id}&listen_time=${encodeURIComponent(item.time)}&listen_key=${encodeURIComponent(item.play_key || "")}${item.record_id && (!item.evidence || item.evidence === "observed") ? `&play_record=${item.record_id}` : ""}`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"><EyeOff size={14} /></Link>}
               </span>
             </td>
-            <td className="hidden sm:table">
-              {user?.role === "admin" && !!item.record_id && <Link className="text-sm underline" to={`/imports?record=${item.record_id}`}>Records</Link>}
+            <td className="hidden whitespace-nowrap py-2 pl-2 align-middle sm:table-cell">
+              {user?.role === "admin" && !!item.record_id && <Link className="inline-flex items-center py-1 text-sm leading-5 underline underline-offset-2" to={`/imports?record=${item.record_id}`}>Records</Link>}
             </td>
           </tr>
         ))}
