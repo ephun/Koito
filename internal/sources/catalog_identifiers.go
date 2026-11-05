@@ -26,7 +26,7 @@ type catalogIdentifierProgram struct {
 func compileCatalogIdentifiers(config RuleConfig) ([]catalogIdentifierProgram, error) {
 	programs := []catalogIdentifierProgram{}
 	for _, rule := range config.Rules {
-		if !rule.Enabled || rule.Type != "matching" || rule.Subtype != "music" || rule.Program == nil || !statementsRead(rule.Program.Steps, "catalog.kind") {
+		if !rule.Enabled || rule.Type != "matching" || rule.Subtype != "music" || rule.Program == nil || !statementsRead(rule.Program.Steps, "catalog.kind") || !programTargets(rule.Program)["music.identifier"] {
 			continue
 		}
 		compiled, err := filters.CompileProgram(*rule.Program, music.MatchingSchema())
@@ -124,7 +124,14 @@ func publishCatalogIdentifiers(ctx context.Context, tx *sql.Tx, config RuleConfi
 		}
 	}
 	for _, item := range items {
-		value, assigned, issues, e := resolveCatalogIdentifier(ctx, programs, item.kind, item.id, item.original)
+		contextID := item.id
+		if item.kind == "track" {
+			contextID, err = music.TrackOrigin(ctx, tx, item.id)
+			if err != nil {
+				return err
+			}
+		}
+		value, assigned, issues, e := resolveCatalogIdentifier(ctx, programs, item.kind, contextID, item.original)
 		if e != nil {
 			return e
 		}

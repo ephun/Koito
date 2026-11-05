@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Sqlite) GetGenres(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT genre FROM artist_genres ORDER BY genre`)
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT genre FROM displayed_artist_genres ORDER BY genre`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +32,8 @@ func (s *Sqlite) artistGenreEvidence(ctx context.Context, artistID int32) ([]mod
 	rows, err := s.db.QueryContext(ctx, `SELECT g.record_id,r.source_id,g.value,g.field
  FROM source_genres g JOIN source_records r ON r.id=g.record_id
  WHERE json_type(r.payload,'$.fields.Artist')='text'
- AND EXISTS(SELECT 1 FROM artist_aliases a WHERE a.artist_id=? AND a.alias=json_extract(r.payload,'$.fields.Artist'))
- AND NOT EXISTS(SELECT 1 FROM artist_aliases a WHERE a.artist_id<>? AND a.alias=json_extract(r.payload,'$.fields.Artist'))
+ AND EXISTS(SELECT 1 FROM artist_aliases a LEFT JOIN music_artist_matches m ON m.artist_id=a.artist_id WHERE COALESCE(m.matched_artist_id,a.artist_id)=? AND a.alias=json_extract(r.payload,'$.fields.Artist'))
+ AND NOT EXISTS(SELECT 1 FROM artist_aliases a LEFT JOIN music_artist_matches m ON m.artist_id=a.artist_id WHERE COALESCE(m.matched_artist_id,a.artist_id)<>? AND a.alias=json_extract(r.payload,'$.fields.Artist'))
  ORDER BY g.record_id,g.position`, artistID, artistID)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (s *Sqlite) artistGenreEvidence(ctx context.Context, artistID int32) ([]mod
 }
 
 func (s *Sqlite) artistGenres(ctx context.Context, id int32) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT genre FROM artist_genres WHERE artist_id=? ORDER BY genre`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT genre FROM displayed_artist_genres WHERE artist_id=? ORDER BY genre`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +69,9 @@ func (s *Sqlite) artistGenres(ctx context.Context, id int32) ([]string, error) {
 
 func (s *Sqlite) genreChartRows(ctx context.Context, query, genre string, artistChart bool, args ...any) (*sql.Rows, error) {
 	if genre != "" {
-		predicate := `EXISTS(SELECT 1 FROM artist_genres ag JOIN displayed_artist_tracks gat ON gat.artist_id=ag.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
+		predicate := `EXISTS(SELECT 1 FROM displayed_artist_genres ag JOIN displayed_artist_tracks gat ON gat.artist_id=ag.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
 		if artistChart {
-			predicate = `EXISTS(SELECT 1 FROM artist_genres ag WHERE ag.artist_id=at2.artist_id AND ag.genre=?)`
+			predicate = `EXISTS(SELECT 1 FROM displayed_artist_genres ag WHERE ag.artist_id=at2.artist_id AND ag.genre=?)`
 		}
 		query = strings.Replace(query, "WHERE ", "WHERE "+predicate+" AND ", 1)
 		args = append([]any{genre}, args...)

@@ -3,12 +3,58 @@ package sources
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/gabehf/koito/internal/filters"
 	"github.com/gabehf/koito/internal/music"
 )
+
+// Comparison changes can combine or separate source genre evidence. Reapply
+// catalog Naming and genre assignments over the resulting artist families.
+func RefreshMatchedCatalog(ctx context.Context, tx *sql.Tx) error {
+	version, err := readRuleVersion(ctx, tx, 0)
+	if err != nil {
+		return err
+	}
+	if err = publishCatalogNames(ctx, tx, version.Config); err != nil {
+		return err
+	}
+	if err = publishArtistGenres(ctx, tx, version.Config); err != nil {
+		return err
+	}
+	grouping := false
+	for _, r := range version.Config.Rules {
+		grouping = grouping || r.Enabled && r.Type == "presentation" && r.Subtype == "grouping"
+	}
+	if !grouping {
+		return nil
+	}
+	records, err := loadMatchingRecords(ctx, tx, version.Config)
+	if err != nil {
+		return err
+	}
+	byID := map[int64]*matchingRecord{}
+	for i := range records {
+		byID[records[i].ID] = &records[i]
+	}
+	naming, err := compileNaming(version.Config)
+	if err != nil {
+		return err
+	}
+	if err = publishAlbumClassification(ctx, tx, version.Config); err != nil {
+		return err
+	}
+	if err = publishAlbumGroups(ctx, tx, version.Config, byID, naming); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(version.Config)
+	if err != nil {
+		return err
+	}
+	return music.RefreshCatalogMatches(ctx, tx, string(raw))
+}
 
 // RefreshNativeCatalog evaluates saved catalog corrections inside the capture
 // transaction. Shared aliases also refresh affected artists' source genres.
@@ -225,5 +271,12 @@ func nativeCatalogItem(ctx context.Context, tx *sql.Tx, kind string, id int64) (
 	err = rows.Err()
 	rows.Close()
 	item.metadata["catalog.available_artist_ids"] = filters.Values(available...)
+	if kind == "track" {
+		origin, e := music.TrackOrigin(ctx, tx, id)
+		if e != nil {
+			return item, identifier, e
+		}
+		item.metadata["catalog.id"] = filters.Integer(origin)
+	}
 	return item, identifier, err
 }

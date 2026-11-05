@@ -58,6 +58,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	for _, query := range []string{
 		`DELETE FROM source_play_tags`,
 		`DELETE FROM track_history_overrides`,
+		`DELETE FROM track_catalog_comparisons`,
 		`DELETE FROM source_aggregate_records`,
 		`DELETE FROM source_aggregates`,
 		`DELETE FROM source_play_records`,
@@ -99,7 +100,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		byID[r.ID] = r
 	}
 	tracks := map[string]int64{}
-	historyAssignments := map[int64]string{}
+	historyAssignments, err := nativeHistoryAssignments(ctx, tx, version.Config, legacyKeys)
+	if err != nil {
+		return result, err
+	}
 	// Reserve unchanged appearances before source-scoped comparison variants.
 	// Disabling an alias can then reuse the original appearance identifiers.
 	warm := []*matchingRecord{}
@@ -303,17 +307,26 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = refreshSourceGenres(ctx, tx); err != nil {
 		return result, err
 	}
+	if err = music.RefreshArtistMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
 	if err = publishCatalogNames(ctx, tx, config); err != nil {
 		return result, err
 	}
 	musicRule, _ := config.matchingRules()
-	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
-		return result, err
-	}
 	if err = publishAlbumClassification(ctx, tx, config); err != nil {
 		return result, err
 	}
+	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
 	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {
+		return result, err
+	}
+	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
+	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
 		return result, err
 	}
 	if err = publishArtistGenres(ctx, tx, config); err != nil {

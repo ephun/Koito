@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strconv"
 
@@ -45,7 +46,7 @@ func migrateMusicPrograms(config RuleConfig) RuleConfig {
 func compileMusicPrograms(config RuleConfig) (music.IdentityPrograms, error) {
 	rules := []music.IdentityFilter{}
 	for _, r := range config.Rules {
-		rules = append(rules, music.IdentityFilter{ID: r.ID, Name: r.Name, Type: r.Type, Subtype: r.Subtype, Enabled: r.Enabled, Priority: r.Priority, Program: r.Program})
+		rules = append(rules, music.IdentityFilter{ID: r.ID, Name: r.Name, Type: r.Type, Subtype: r.Subtype, Enabled: r.Enabled, Priority: r.Priority, Program: r.Program, Settings: &music.IdentitySettings{CaseSensitive: r.Settings.CaseSensitive, MatchMissingAlbum: r.Settings.MatchMissingAlbum}})
 	}
 	return music.CompileIdentityPrograms(rules)
 }
@@ -70,7 +71,7 @@ func historyComparisonKey(r matchingRecord) string {
 		return ""
 	}
 	value := r.Values.Music
-	key, _ := json.Marshal([]string{"matching", value.Artist, value.Title})
+	key, _ := json.Marshal([]string{"matching", value.Artist, value.Title, value.Album})
 	return string(key)
 }
 
@@ -110,4 +111,55 @@ func previewMusic(ctx context.Context, reader sqlReader, plan matchPlan, before,
 		}
 	}
 	return examples, nil
+}
+
+func previewCatalogMusic(ctx context.Context, tx *sql.Tx, before, after RuleConfig) ([]NamingExample, error) {
+	old, err := compileMusicPrograms(before)
+	if err != nil {
+		return nil, err
+	}
+	next, err := compileMusicPrograms(after)
+	if err != nil {
+		return nil, err
+	}
+	old, next = old.Catalog(), next.Catalog()
+	result := []NamingExample{}
+	if !old.Active() && !next.Active() {
+		return result, nil
+	}
+	items, err := catalogNameItems(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[[3]string]bool{}
+	for _, item := range items {
+		env := filters.Env{"catalog.kind": filters.String(item.kind), "catalog.id": filters.Integer(item.id), "source.service": filters.String("koito"), "original.artist": filters.String(""), "original.album": filters.String(""), "original.title": filters.String("")}
+		for key, value := range item.metadata {
+			env[key] = value
+		}
+		field := map[string]string{"artist": "artist", "album": "album", "track": "title"}[item.kind]
+		env["original."+field] = filters.String(item.name)
+		original := music.MatchIdentity{}
+		original.Artist, _ = env["original.artist"].Text()
+		original.Album, _ = env["original.album"].Text()
+		original.Title, _ = env["original.title"].Text()
+		a, _, err := old.Resolve(ctx, env, original)
+		if err != nil {
+			return nil, err
+		}
+		b, _, err := next.Resolve(ctx, env, original)
+		if err != nil {
+			return nil, err
+		}
+		for _, change := range [][3]string{{"Artist comparison", a.Artist, b.Artist}, {"Album comparison", a.Album, b.Album}, {"Track comparison", a.Title, b.Title}} {
+			if change[1] != change[2] && !seen[change] {
+				seen[change] = true
+				result = append(result, NamingExample{Field: change[0] + ": " + item.name, Before: change[1], After: change[2]})
+				if len(result) == 12 {
+					return result, nil
+				}
+			}
+		}
+	}
+	return result, nil
 }

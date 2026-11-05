@@ -52,7 +52,7 @@ func refreshNativeSourceGroups(ctx context.Context, tx *sql.Tx, config RuleConfi
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT p.play_key,'',p.representative_record,p.track_id FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE t.release_id=? UNION ALL SELECT '',a.aggregate_key,a.representative_record,a.track_id FROM source_aggregates a JOIN tracks t ON t.id=a.track_id WHERE t.release_id=?`, album, album)
+	rows, err := tx.QueryContext(ctx, `SELECT p.play_key,'',p.representative_record,p.track_id,COALESCE(c.artist_credits,'') FROM source_plays p JOIN tracks t ON t.id=p.track_id LEFT JOIN music_album_comparisons c ON c.track_id=p.track_id WHERE t.release_id=? UNION ALL SELECT '',a.aggregate_key,a.representative_record,a.track_id,COALESCE(c.artist_credits,'') FROM source_aggregates a JOIN tracks t ON t.id=a.track_id LEFT JOIN music_album_comparisons c ON c.track_id=a.track_id WHERE t.release_id=?`, album, album)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func refreshNativeSourceGroups(ctx context.Context, tx *sql.Tx, config RuleConfi
 	for rows.Next() {
 		var input music.AlbumGroupingInput
 		var record, track int64
-		if err = rows.Scan(&input.PlayKey, &input.AggregateKey, &record, &track); err != nil {
+		if err = rows.Scan(&input.PlayKey, &input.AggregateKey, &record, &track, &input.Credits); err != nil {
 			rows.Close()
 			return err
 		}

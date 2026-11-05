@@ -30,7 +30,11 @@ func AssignSourceAlbumGroups(ctx context.Context, db Database, programs Grouping
 		}
 		var id int64
 		if label != "" {
-			groupKey := albumGroupKey(credits, label)
+			reportCredits := credits
+			if input.Credits != "" {
+				reportCredits = input.Credits
+			}
+			groupKey := albumGroupKey(reportCredits, label)
 			if _, err = db.ExecContext(ctx, `INSERT INTO album_groups(group_key,title,canonical_release_id) VALUES(?,?,?) ON CONFLICT(group_key) DO NOTHING`, groupKey, label, album); err != nil {
 				return err
 			}

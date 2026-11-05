@@ -1099,3 +1099,42 @@ The legacy Koito importer also requests original catalog metadata.
 Main activation passed after a database backup.
 The unchanged view retained 191,473 records, 168,424 plays, the checked album associations,
 and all three original-file hashes. Desktop, 390-pixel and 320-pixel checks passed without page errors.
+
+
+## Artist and album comparison totals
+
+The closing implementation extends music comparison to artist contributions and
+album reports. Migration 023 adds derived links, comparison caches, and native
+appearance origins. Source files, records, original aliases and listen/release
+associations stay independently available.
+
+Case comparison now affects all three statistics: tracks, artists and albums.
+Artist and release identifier conflicts retain their distinctions. Album report
+groups preserve their member releases and each play's selected release.
+Explicit Grouping exceptions take precedence over matching defaults.
+Source-specific artist comparisons also supply their contribution's grouping credits.
+
+Naming remains independent of comparison spelling. Explicit catalog names and
+contributing appearances determine reporting labels. A cached selection keeps
+track statistics from repeating this choice for every play. Old inactive catalog
+appearances cannot hide a current record Naming correction.
+
+Matched artists consume combined genre evidence. A manual genre assignment can
+replace or clear the combined result. Original labels and provenance remain
+available. Reversal restores the prior artist families and their genres.
+
+Native listens retain their own comparison context when an imported appearance
+has source-specific comparisons. Origin links carry catalog corrections across
+these appearances. Repeated native submissions reuse the same appearance.
+Native identifier enrichment refreshes affected histories and groups.
+Legacy case settings and legacy/import overlap reporting remain supported.
+
+The full requirement matrix and regression names are in
+[the Phase 4 audit](phase-4-audit.md).
+
+Actual-import verification combined the two Over the Garden Wall spellings into
+597 plays. Fetch the Bolt Cutters retained its 17-play and 1,089-play release
+appearances while reporting 1,106 album plays. Restoring the original settings
+restored exact statistics. The original view has 191,473 records, 168,424 plays
+and three retained files. These are measurements of the supplied acceptance
+imports, rather than a claim about complete lifetime listening.

@@ -183,6 +183,11 @@ func previewChange(ctx context.Context, tx *sql.Tx, change FilterChange) (Filter
 		return preview, plan, config, added, err
 	}
 	preview.MusicExamples = append(preview.MusicExamples, identifiers...)
+	comparisons, err := previewCatalogMusic(ctx, tx, current.Config, config)
+	if err != nil {
+		return preview, plan, config, added, err
+	}
+	preview.MusicExamples = append(preview.MusicExamples, comparisons...)
 	preview.ScopeExamples, preview.GroupingExamples, err = previewProjectedViews(ctx, tx, current.ID, current.Config, config, plan)
 	if err != nil {
 		return preview, plan, config, added, err

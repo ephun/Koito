@@ -43,6 +43,9 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 	if opts.Original {
 		return s.originalArtist(ctx, opts.ID)
 	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT matched_artist_id FROM music_artist_matches WHERE artist_id=?),?)`, opts.ID, opts.ID).Scan(&opts.ID); err != nil {
+		return nil, err
+	}
 	var mbzID, image, imageSrc sql.NullString
 	var name, aliasesConcat sql.NullString
 	err := s.db.QueryRowContext(ctx, `

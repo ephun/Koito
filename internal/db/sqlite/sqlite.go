@@ -12,6 +12,7 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
@@ -104,6 +105,16 @@ func initializeMusic(db *sql.DB) error {
 	defer tx.Rollback()
 	sensitive, err := music.CaseSensitive(ctx, tx)
 	if err != nil {
+		return err
+	}
+	var config string
+	if err = tx.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config); err != nil {
+		return err
+	}
+	if err = music.RefreshCatalogMatches(ctx, tx, config); err != nil {
+		return err
+	}
+	if err = sources.RefreshMatchedCatalog(ctx, tx); err != nil {
 		return err
 	}
 	if err = music.RefreshHistories(ctx, tx, sensitive); err != nil {

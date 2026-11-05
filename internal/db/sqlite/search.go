@@ -41,7 +41,8 @@ func (s *Sqlite) SearchArtists(ctx context.Context, q string) ([]*models.Artist,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT a.id, COALESCE(cn.display_name,awn.name), NULLIF(COALESCE((SELECT identifier FROM catalog_identifiers ci WHERE ci.kind='artist' AND ci.item_id=a.id),a.musicbrainz_id),''), a.image
 		FROM artists a_search LEFT JOIN displayed_artist_aliases aa ON aa.artist_id=a_search.id
-		JOIN artists_with_name awn ON a_search.id = awn.id
+		LEFT JOIN music_artist_matches m ON m.artist_id=a_search.id
+		JOIN artists_with_name awn ON COALESCE(m.matched_artist_id,a_search.id) = awn.id
 		JOIN artists a ON a.id = awn.id
  LEFT JOIN catalog_names cn ON cn.kind='artist' AND cn.item_id=a.id
 		WHERE aa.alias LIKE ? OR aa.alias LIKE ? OR COALESCE(cn.display_name,awn.name) LIKE ?

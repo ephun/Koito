@@ -12,6 +12,7 @@ import (
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/google/uuid"
 )
 
@@ -31,11 +32,63 @@ func (s *Sqlite) SaveListen(ctx context.Context, opts db.SaveListenOpts) error {
 		return err
 	}
 	defer tx.Rollback()
+	native, created, err := music.NativeAppearance(ctx, tx, int64(opts.TrackID))
+	if err != nil {
+		return err
+	}
+	opts.TrackID = int32(native)
+	if created {
+		if err = refreshNativeCatalogItem(ctx, tx, "track", native); err != nil {
+			return err
+		}
+	}
+	var first bool
+	if err = tx.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM listens WHERE track_id=?)`, native).Scan(&first); err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT OR IGNORE INTO listens (track_id, listened_at, user_id, client) VALUES (?,?,?,?)`,
 		opts.TrackID, opts.Time.Unix(), opts.UserID, client,
 	)
 	if err != nil {
+		return err
+	}
+	if first {
+		var config string
+		if err = tx.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config); err != nil {
+			return err
+		}
+		if err = music.AssignCatalogMatches(ctx, tx, config, "track", native); err != nil {
+			return err
+		}
+	}
+	var split bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM music_album_comparisons c JOIN artist_tracks a ON a.track_id=c.track_id JOIN music_artist_matches m ON m.artist_id=a.artist_id WHERE c.track_id=? AND (SELECT COUNT(*) FROM artist_tracks b WHERE b.track_id=c.track_id)=1 AND (c.artist<>m.comparison_key OR (m.matched_artist_id<>a.artist_id AND NOT EXISTS(SELECT 1 FROM catalog_names n WHERE n.kind='artist' AND n.item_id=m.matched_artist_id) AND NOT EXISTS(SELECT 1 FROM artist_tracks x JOIN listens l ON l.track_id=x.track_id WHERE x.artist_id=m.matched_artist_id) AND NOT EXISTS(SELECT 1 FROM artist_tracks x JOIN source_aggregates g ON g.track_id=x.track_id WHERE x.artist_id=m.matched_artist_id AND g.undated_count>0))))`, native).Scan(&split); err != nil {
+		return err
+	}
+	if split {
+		var config string
+		if err = tx.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config); err != nil {
+			return err
+		}
+		if err = music.RefreshCatalogMatches(ctx, tx, config); err != nil {
+			return err
+		}
+		if err = sources.RefreshMatchedCatalog(ctx, tx); err != nil {
+			return err
+		}
+		sensitive, err := music.CaseSensitive(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if err = music.RefreshHistories(ctx, tx, sensitive, config); err != nil {
+			return err
+		}
+		if err = music.RefreshScope(ctx, tx, 0, config); err != nil {
+			return err
+		}
+	}
+	if err = music.RefreshHistoryCanonicalForTrack(ctx, tx, native); err != nil {
 		return err
 	}
 	if err = music.RefreshListenScope(ctx, tx, int64(opts.TrackID), opts.Time.Unix()); err != nil {

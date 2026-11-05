@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 	"strings"
 )
 
@@ -463,6 +464,11 @@ func catalogNameItems(ctx context.Context, tx *sql.Tx) ([]catalogNameItem, error
 			item.metadata["original.artist"] = credits[i][0]
 		}
 		if item.kind == "track" {
+			origin, e := music.TrackOrigin(ctx, tx, item.id)
+			if e != nil {
+				return nil, e
+			}
+			item.metadata["catalog.id"] = filters.Integer(origin)
 			if album, ok := indices["album"][item.albumID]; ok {
 				item.metadata["original.album"] = filters.String(items[album].name)
 			}

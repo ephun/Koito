@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/gabehf/koito/internal/filters"
 )
@@ -34,6 +36,16 @@ type groupingProgram struct {
 type GroupingPrograms struct{ programs []groupingProgram }
 
 func (p GroupingPrograms) Active() bool { return len(p.programs) > 0 }
+
+func CompileGroupingProgramsFromConfig(config string) (GroupingPrograms, error) {
+	var settings struct {
+		Rules []IdentityFilter `json:"rules"`
+	}
+	if err := json.Unmarshal([]byte(config), &settings); err != nil {
+		return GroupingPrograms{}, err
+	}
+	return CompileGroupingPrograms(settings.Rules)
+}
 
 func CompileGroupingPrograms(rules []IdentityFilter) (GroupingPrograms, error) {
 	p := GroupingPrograms{}
@@ -173,6 +185,7 @@ type AlbumGroupingInput struct {
 	PlayKey      string
 	AggregateKey string
 	ReleaseID    int64
+	Credits      string
 	Env          func() filters.Env
 }
 type groupingRelease struct {
@@ -220,10 +233,28 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	if err != nil {
 		return err
 	}
+	reportArtists := map[int64][]string{}
+	creditRows, err := db.QueryContext(ctx, `SELECT release_id,artist_id FROM displayed_artist_releases ORDER BY release_id,artist_id`)
+	if err != nil {
+		return err
+	}
+	for creditRows.Next() {
+		var release, artist int64
+		if err = creditRows.Scan(&release, &artist); err != nil {
+			creditRows.Close()
+			return err
+		}
+		reportArtists[release] = append(reportArtists[release], strconv.FormatInt(artist, 10))
+	}
+	err = creditRows.Err()
+	creditRows.Close()
+	if err != nil {
+		return err
+	}
 	rows, err := db.QueryContext(ctx, `SELECT r.id,r.title,
  COALESCE((SELECT group_concat(artist_id,',') FROM (SELECT artist_id FROM artist_releases WHERE release_id=r.id ORDER BY artist_id)),''),
  COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_releases ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.release_id=r.id ORDER BY ar.artist_id)),'[]')
- ,r.various_artists,COALESCE((SELECT group_concat(artist_id,',') FROM(SELECT DISTINCT artist_id FROM displayed_artist_releases WHERE release_id=r.id ORDER BY artist_id)),'') FROM releases_with_title r ORDER BY r.id`)
+ ,r.various_artists FROM releases_with_title r ORDER BY r.id`)
 	if err != nil {
 		return err
 	}
@@ -232,7 +263,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 	for rows.Next() {
 		var r groupingRelease
 		var raw string
-		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw, &r.various, &r.reportCredits); err != nil {
+		if err = rows.Scan(&r.id, &r.title, &r.credits, &raw, &r.various); err != nil {
 			rows.Close()
 			return err
 		}
@@ -247,6 +278,7 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 			r.artist = raw
 		}
 		r.displayTitle, _ = displays[r.id]["display.album"].Text()
+		r.reportCredits = strings.Join(reportArtists[r.id], ",")
 		releases[r.id] = r
 		order = append(order, r.id)
 	}
@@ -277,6 +309,9 @@ func RefreshAlbumGroups(ctx context.Context, db Database, config string, inputs 
 		r, ok := releases[input.ReleaseID]
 		if !ok {
 			return fmt.Errorf("Grouping release %d is unavailable.", input.ReleaseID)
+		}
+		if input.Credits != "" {
+			r.reportCredits = input.Credits
 		}
 		env := input.Env()
 		env["catalog.album_id"] = filters.Integer(r.id)
@@ -594,18 +629,19 @@ func pruneAlbumMemberships(ctx context.Context, db Database, releaseID int64) er
 // Explicit source labels survive enrichment. Their credit-based group key follows
 // the release's newly known credits while their label and exception remain intact.
 func rekeySourceAlbumAssignments(ctx context.Context, db Database, releaseID int64, credits string) error {
-	rows, err := db.QueryContext(ctx, `SELECT DISTINCT g.id,g.title FROM album_groups g JOIN source_play_groupings s ON s.group_id=g.id JOIN source_plays p ON p.play_key=s.play_key JOIN tracks t ON t.id=p.track_id WHERE t.release_id=? UNION SELECT DISTINCT g.id,g.title FROM album_groups g JOIN source_aggregate_groupings s ON s.group_id=g.id JOIN source_aggregates a ON a.aggregate_key=s.aggregate_key JOIN tracks t ON t.id=a.track_id WHERE t.release_id=?`, releaseID, releaseID)
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT g.id,g.title,COALESCE(c.artist_credits,?) FROM album_groups g JOIN source_play_groupings s ON s.group_id=g.id JOIN source_plays p ON p.play_key=s.play_key JOIN tracks t ON t.id=p.track_id LEFT JOIN music_album_comparisons c ON c.track_id=p.track_id WHERE t.release_id=? UNION SELECT DISTINCT g.id,g.title,COALESCE(c.artist_credits,?) FROM album_groups g JOIN source_aggregate_groupings s ON s.group_id=g.id JOIN source_aggregates a ON a.aggregate_key=s.aggregate_key JOIN tracks t ON t.id=a.track_id LEFT JOIN music_album_comparisons c ON c.track_id=a.track_id WHERE t.release_id=?`, credits, releaseID, credits, releaseID)
 	if err != nil {
 		return err
 	}
 	type assignment struct {
-		id    int64
-		label string
+		id      int64
+		label   string
+		credits string
 	}
 	items := []assignment{}
 	for rows.Next() {
 		var a assignment
-		if err = rows.Scan(&a.id, &a.label); err != nil {
+		if err = rows.Scan(&a.id, &a.label, &a.credits); err != nil {
 			rows.Close()
 			return err
 		}
@@ -617,7 +653,7 @@ func rekeySourceAlbumAssignments(ctx context.Context, db Database, releaseID int
 		return err
 	}
 	for _, a := range items {
-		key := albumGroupKey(credits, a.label)
+		key := albumGroupKey(a.credits, a.label)
 		if _, err = db.ExecContext(ctx, `INSERT INTO album_groups(group_key,title,canonical_release_id) VALUES(?,?,?) ON CONFLICT(group_key) DO NOTHING`, key, a.label, releaseID); err != nil {
 			return err
 		}
@@ -625,10 +661,10 @@ func rekeySourceAlbumAssignments(ctx context.Context, db Database, releaseID int
 		if err = db.QueryRowContext(ctx, `SELECT id FROM album_groups WHERE group_key=?`, key).Scan(&id); err != nil {
 			return err
 		}
-		if _, err = db.ExecContext(ctx, `UPDATE source_play_groupings SET group_id=? WHERE group_id=? AND play_key IN(SELECT p.play_key FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE t.release_id=?)`, id, a.id, releaseID); err != nil {
+		if _, err = db.ExecContext(ctx, `UPDATE source_play_groupings SET group_id=? WHERE group_id=? AND play_key IN(SELECT p.play_key FROM source_plays p JOIN tracks t ON t.id=p.track_id LEFT JOIN music_album_comparisons c ON c.track_id=p.track_id WHERE t.release_id=? AND COALESCE(c.artist_credits,?)=?)`, id, a.id, releaseID, credits, a.credits); err != nil {
 			return err
 		}
-		if _, err = db.ExecContext(ctx, `UPDATE source_aggregate_groupings SET group_id=? WHERE group_id=? AND aggregate_key IN(SELECT p.aggregate_key FROM source_aggregates p JOIN tracks t ON t.id=p.track_id WHERE t.release_id=?)`, id, a.id, releaseID); err != nil {
+		if _, err = db.ExecContext(ctx, `UPDATE source_aggregate_groupings SET group_id=? WHERE group_id=? AND aggregate_key IN(SELECT p.aggregate_key FROM source_aggregates p JOIN tracks t ON t.id=p.track_id LEFT JOIN music_album_comparisons c ON c.track_id=p.track_id WHERE t.release_id=? AND COALESCE(c.artist_credits,?)=?)`, id, a.id, releaseID, credits, a.credits); err != nil {
 			return err
 		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO album_group_members(group_id,release_id) VALUES(?,?) ON CONFLICT DO NOTHING`, id, releaseID); err != nil {

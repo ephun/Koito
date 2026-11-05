@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -39,11 +40,11 @@ func (s *Sqlite) topAlbumReports(ctx context.Context, opts db.GetItemsOpts) (*db
 	artist := ""
 	args := []any{t1.Unix(), t2.Unix()}
 	if opts.ArtistID != 0 {
-		artist = ` AND EXISTS(SELECT 1 FROM displayed_artist_releases ar WHERE ar.release_id=l.release_id AND ar.artist_id=?)`
+		artist = ` AND EXISTS(SELECT 1 FROM displayed_artist_tracks ar WHERE ar.track_id=l.track_id AND ar.artist_id=?)`
 		args = append(args, opts.ArtistID)
 	}
 	if opts.Genre != "" {
-		artist += ` AND EXISTS(SELECT 1 FROM displayed_artist_tracks gat JOIN artist_genres ag ON ag.artist_id=gat.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
+		artist += ` AND EXISTS(SELECT 1 FROM displayed_artist_tracks gat JOIN displayed_artist_genres ag ON ag.artist_id=gat.artist_id WHERE gat.track_id=l.track_id AND ag.genre=?)`
 		args = append(args, opts.Genre)
 	}
 	args = append(args, opts.Limit, offset)
@@ -86,6 +87,12 @@ func (s *Sqlite) topAlbumReports(ctx context.Context, opts db.GetItemsOpts) (*db
 		if err != nil {
 			return nil, err
 		}
+		if item.Item.AlbumGroupID > 0 {
+			item.Item.Artists, err = s.albumGroupArtists(ctx, item.Item.AlbumGroupID, item.Item.Artists)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return &db.PaginatedResponse[db.RankedItem[*models.Album]]{Items: items, TotalCount: total, ItemsPerPage: int32(opts.Limit), HasNextPage: int64(offset+len(items)) < total, CurrentPage: int32(opts.Page)}, nil
 }
@@ -105,6 +112,10 @@ func (s *Sqlite) GetAlbumGroup(ctx context.Context, id int32) (*models.Album, er
 		return nil, err
 	}
 	album.AlbumGroupID = id
+	album.Artists, err = s.albumGroupArtists(ctx, id, album.Artists)
+	if err != nil {
+		return nil, err
+	}
 	album.Title = title
 	album.MbzID = nil
 	if err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount),0),COALESCE(MIN(listened_at),0) FROM album_report_counts WHERE album_group_id=?`, id).Scan(&album.ListenCount, &album.FirstListen); err != nil {
@@ -132,4 +143,41 @@ func (s *Sqlite) GetAlbumGroup(ctx context.Context, id int32) (*models.Album, er
 	err = rows.Err()
 	rows.Close()
 	return album, err
+}
+
+func (s *Sqlite) albumGroupArtists(ctx context.Context, id int32, fallback []models.SimpleArtist) ([]models.SimpleArtist, error) {
+	var raw string
+	if err := s.db.QueryRowContext(ctx, `SELECT group_key FROM album_groups WHERE id=?`, id).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var key []string
+	if err := json.Unmarshal([]byte(raw), &key); err != nil {
+		return nil, err
+	}
+	if len(key) == 0 {
+		return fallback, nil
+	}
+	credits := key[0]
+	if len(key) == 3 && key[0] == "music" {
+		var comparison []string
+		if err := json.Unmarshal([]byte(key[1]), &comparison); err != nil {
+			return nil, err
+		}
+		credits = comparison[0]
+	}
+	var ids []int32
+	if err := json.Unmarshal([]byte("["+credits+"]"), &ids); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return fallback, nil
+	}
+	if len(fallback) == 1 && fallback[0].ID == ids[0] {
+		return fallback, nil
+	}
+	artist, err := s.GetArtist(ctx, db.GetArtistOpts{ID: ids[0]})
+	if err != nil {
+		return nil, err
+	}
+	return []models.SimpleArtist{{ID: artist.ID, Name: artist.Name}}, nil
 }

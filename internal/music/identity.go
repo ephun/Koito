@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
-
-	"github.com/gabehf/koito/internal/filters"
 )
 
 type Database interface {
@@ -52,6 +50,13 @@ func AssignHistory(ctx context.Context, db Database, trackID int64, caseSensitiv
 }
 
 func histories(ctx context.Context, db Database, caseSensitive bool, trackID int64, config ...string) error {
+	var previous int64
+	if trackID != 0 {
+		err := db.QueryRowContext(ctx, `SELECT music_track_id FROM track_histories WHERE track_id=?`, trackID).Scan(&previous)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+	}
 	var raw string
 	if len(config) > 0 {
 		raw = config[0]
@@ -67,6 +72,17 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return err
 	}
+	for i := range settings.Rules {
+		r := &settings.Rules[i]
+		if r.Type == "matching" && r.Subtype == "music" && r.Program == nil {
+			legacy := IdentitySettings{}
+			if r.Settings != nil {
+				legacy = *r.Settings
+			}
+			legacy.CaseSensitive = caseSensitive
+			r.Settings = &legacy
+		}
+	}
 	programs, err := CompileIdentityPrograms(settings.Rules)
 	if err != nil {
 		return err
@@ -74,7 +90,8 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 	query := `SELECT t.id,t.title,COALESCE((SELECT group_concat(artist_id,',') FROM
 	    (SELECT artist_id FROM artist_tracks WHERE track_id=t.id ORDER BY artist_id)),'')
 	    ,COALESCE((SELECT json_group_array(name) FROM (SELECT a.name FROM artist_tracks ar JOIN artists_with_name a ON a.id=ar.artist_id WHERE ar.track_id=t.id ORDER BY ar.artist_id)),'[]'),COALESCE(r.title,''),COALESCE(o.comparison_key,'')
-	    FROM tracks_with_title t LEFT JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_history_overrides o ON o.track_id=t.id`
+	    ,c.artist,COALESCE((SELECT group_concat(artist_id,',') FROM(SELECT DISTINCT COALESCE(mt.artist_id,ma.matched_artist_id,a.artist_id) AS artist_id FROM artist_tracks a LEFT JOIN music_track_artists mt ON mt.track_id=a.track_id AND mt.original_artist_id=a.artist_id LEFT JOIN music_artist_matches ma ON ma.artist_id=a.artist_id WHERE a.track_id=t.id ORDER BY artist_id)),'')
+	    FROM tracks_with_title t LEFT JOIN releases_with_title r ON r.id=t.release_id LEFT JOIN track_history_overrides o ON o.track_id=t.id LEFT JOIN music_album_comparisons c ON c.track_id=t.id`
 	var args []any
 	if trackID != 0 {
 		query += ` WHERE t.id=?`
@@ -89,11 +106,13 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 		id                     int64
 		title, artists         string
 		names, album, override string
+		comparisonArtist       *string
+		matchedArtists         string
 	}
 	var items []item
 	for rows.Next() {
 		var v item
-		if err = rows.Scan(&v.id, &v.title, &v.artists, &v.names, &v.album, &v.override); err != nil {
+		if err = rows.Scan(&v.id, &v.title, &v.artists, &v.names, &v.album, &v.override, &v.comparisonArtist, &v.matchedArtists); err != nil {
 			rows.Close()
 			return err
 		}
@@ -120,7 +139,11 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 			if album == "Unknown Album" {
 				album = ""
 			}
-			env := filters.Env{"original.artist": filters.String(artist), "original.album": filters.String(album), "original.title": filters.String(v.title), "source.service": filters.String("koito")}
+			origin, e := TrackOrigin(ctx, db, v.id)
+			if e != nil {
+				return e
+			}
+			env := comparisonEnvironment("track", origin, artist, album, v.title, "")
 			value, _, err := programs.Resolve(ctx, env, MatchIdentity{Artist: artist, Album: album, Title: v.title})
 			if err != nil {
 				return err
@@ -132,6 +155,27 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 		}
 		if v.override != "" {
 			key = []byte(v.override)
+			var comparison []string
+			if err := json.Unmarshal(key, &comparison); err != nil {
+				return err
+			}
+			if len(comparison) == 4 && comparison[0] == "matching" {
+				key, _ = json.Marshal(comparison[:3])
+			}
+		}
+		if programs.Active() {
+			var comparison []string
+			if err := json.Unmarshal(key, &comparison); err != nil {
+				return err
+			}
+			if comparison[0] == "matching" && v.comparisonArtist != nil {
+				comparison[1] = *v.comparisonArtist
+			}
+			if comparison[0] == "matching-multi" {
+				comparison[1] = v.matchedArtists
+			}
+			comparison = append(comparison, "artists", v.matchedArtists)
+			key, _ = json.Marshal(comparison)
 		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO music_tracks(identity_key) VALUES(?) ON CONFLICT DO NOTHING`, string(key)); err != nil {
 			return err
@@ -142,7 +186,15 @@ func histories(ctx context.Context, db Database, caseSensitive bool, trackID int
 			return err
 		}
 	}
-	return nil
+	if trackID == 0 {
+		return refreshAllHistoryCanonicals(ctx, db)
+	}
+	if previous != 0 {
+		if err := refreshHistoryCanonical(ctx, db, previous); err != nil {
+			return err
+		}
+	}
+	return RefreshHistoryCanonicalForTrack(ctx, db, trackID)
 }
 
 func RecordingKey(trackID int64, mbid, uri string) string {

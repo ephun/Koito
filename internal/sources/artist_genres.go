@@ -99,6 +99,13 @@ func resolveGenreArtist(ctx context.Context, programs []namingProgram, artist ge
 }
 
 func publishArtistGenres(ctx context.Context, tx *sql.Tx, config RuleConfig, targets ...int64) error {
+	if len(targets) > 0 {
+		var canonical int64
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT matched_artist_id FROM music_artist_matches WHERE artist_id=?),?)`, targets[0], targets[0]).Scan(&canonical); err != nil {
+			return err
+		}
+		targets = []int64{canonical}
+	}
 	programs, err := compileNamingDomain(config, true)
 	if err != nil {
 		return err
@@ -161,7 +168,7 @@ type genreArtist struct {
 }
 
 func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx, targets ...int64) ([]genreArtist, error) {
-	query := `SELECT a.id,a.name FROM artists_with_name a`
+	query := `SELECT a.id,a.name,COALESCE(m.matched_artist_id,a.id) FROM artists_with_name a LEFT JOIN music_artist_matches m ON m.artist_id=a.id`
 	args := []any{}
 	if len(targets) > 0 {
 		query += ` WHERE a.id=?`
@@ -173,14 +180,15 @@ func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx, targets ...int64) ([
 		return nil, err
 	}
 	artists := []genreArtist{}
-	indices := map[int64]int{}
+	indices := map[int64][]int{}
 	for rows.Next() {
 		var a genreArtist
-		if err = rows.Scan(&a.id, &a.name); err != nil {
+		var canonical int64
+		if err = rows.Scan(&a.id, &a.name, &canonical); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		indices[a.id] = len(artists)
+		indices[canonical] = append(indices[canonical], len(artists))
 		artists = append(artists, a)
 	}
 	err = rows.Err()
@@ -188,11 +196,12 @@ func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx, targets ...int64) ([
 	if err != nil {
 		return nil, err
 	}
-	query = `SELECT DISTINCT a.artist_id,g.record_id,g.position,g.value,r.source_id,r.file_hash,g.field FROM source_genres g JOIN source_records r ON r.id=g.record_id JOIN artist_aliases a ON a.alias=json_extract(r.payload,'$.fields.Artist') WHERE json_type(r.payload,'$.fields.Artist')='text' AND NOT EXISTS(SELECT 1 FROM artist_aliases other WHERE other.alias=a.alias AND other.artist_id<>a.artist_id)`
+	query = `SELECT DISTINCT COALESCE(m.matched_artist_id,a.artist_id),g.record_id,g.position,g.value,r.source_id,r.file_hash,g.field FROM source_genres g JOIN source_records r ON r.id=g.record_id JOIN artist_aliases a ON a.alias=json_extract(r.payload,'$.fields.Artist') LEFT JOIN music_artist_matches m ON m.artist_id=a.artist_id WHERE json_type(r.payload,'$.fields.Artist')='text' AND NOT EXISTS(SELECT 1 FROM artist_aliases other LEFT JOIN music_artist_matches om ON om.artist_id=other.artist_id WHERE other.alias=a.alias AND COALESCE(om.matched_artist_id,other.artist_id)<>COALESCE(m.matched_artist_id,a.artist_id))`
 	if len(targets) > 0 {
-		query += ` AND a.artist_id=?`
+		query += ` AND COALESCE(m.matched_artist_id,a.artist_id)=COALESCE((SELECT matched_artist_id FROM music_artist_matches WHERE artist_id=?),?)`
+		args = append(args, targets[0])
 	}
-	query += ` ORDER BY a.artist_id,g.record_id,g.position`
+	query += ` ORDER BY 1,g.record_id,g.position`
 	rows, err = tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -204,7 +213,7 @@ func loadArtistGenreInputs(ctx context.Context, tx *sql.Tx, targets ...int64) ([
 			rows.Close()
 			return nil, err
 		}
-		if index, ok := indices[id]; ok {
+		for _, index := range indices[id] {
 			artists[index].labels = append(artists[index].labels, label)
 			raw, e := json.Marshal(map[string]any{"record_id": record, "source_id": sourceID, "file_hash": fileHash, "field": field, "value": label})
 			if e != nil {

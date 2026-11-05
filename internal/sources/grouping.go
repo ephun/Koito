@@ -48,8 +48,8 @@ func publishAlbumGroups(ctx context.Context, tx *sql.Tx, config RuleConfig, byID
 		if e != nil {
 			return e
 		}
-		rows, e := tx.QueryContext(ctx, `SELECT p.play_key,'',t.release_id,p.representative_record,p.track_id FROM source_plays p JOIN tracks t ON t.id=p.track_id WHERE p.policy='filters-v1'
-  UNION ALL SELECT '',a.aggregate_key,t.release_id,a.representative_record,a.track_id FROM source_aggregates a JOIN tracks t ON t.id=a.track_id`)
+		rows, e := tx.QueryContext(ctx, `SELECT p.play_key,'',t.release_id,p.representative_record,p.track_id,COALESCE(c.artist_credits,'') FROM source_plays p JOIN tracks t ON t.id=p.track_id LEFT JOIN music_album_comparisons c ON c.track_id=p.track_id WHERE p.policy='filters-v1'
+  UNION ALL SELECT '',a.aggregate_key,t.release_id,a.representative_record,a.track_id,COALESCE(c.artist_credits,'') FROM source_aggregates a JOIN tracks t ON t.id=a.track_id LEFT JOIN music_album_comparisons c ON c.track_id=a.track_id`)
 		if e != nil {
 			return e
 		}
@@ -57,7 +57,7 @@ func publishAlbumGroups(ctx context.Context, tx *sql.Tx, config RuleConfig, byID
 		for rows.Next() {
 			var input music.AlbumGroupingInput
 			var recordID, trackID int64
-			if e = rows.Scan(&input.PlayKey, &input.AggregateKey, &input.ReleaseID, &recordID, &trackID); e != nil {
+			if e = rows.Scan(&input.PlayKey, &input.AggregateKey, &input.ReleaseID, &recordID, &trackID, &input.Credits); e != nil {
 				rows.Close()
 				return e
 			}

@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -45,5 +46,15 @@ func historyVariant(ctx context.Context, tx *sql.Tx, base int64, key string, ass
 		return 0, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO track_history_overrides(track_id,comparison_key) VALUES(?,?) ON CONFLICT(track_id) DO UPDATE SET comparison_key=excluded.comparison_key`, selected, key)
+	if err != nil {
+		return 0, err
+	}
+	var values []string
+	if err = json.Unmarshal([]byte(key), &values); err != nil {
+		return 0, err
+	}
+	if len(values) == 4 && values[0] == "matching" {
+		_, err = tx.ExecContext(ctx, `INSERT INTO track_catalog_comparisons(track_id,artist,album) VALUES(?,?,?) ON CONFLICT(track_id) DO UPDATE SET artist=excluded.artist,album=excluded.album`, selected, values[1], values[3])
+	}
 	return selected, err
 }

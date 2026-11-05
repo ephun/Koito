@@ -2,8 +2,10 @@ package music
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/gabehf/koito/internal/filters"
 )
@@ -16,13 +18,34 @@ type MatchIdentity struct {
 }
 
 type IdentityFilter struct {
-	ID       string           `json:"id"`
-	Name     string           `json:"name"`
-	Type     string           `json:"type"`
-	Subtype  string           `json:"subtype"`
-	Enabled  bool             `json:"enabled"`
-	Priority *int             `json:"priority,omitempty"`
-	Program  *filters.Program `json:"program,omitempty"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Type     string            `json:"type"`
+	Subtype  string            `json:"subtype"`
+	Enabled  bool              `json:"enabled"`
+	Priority *int              `json:"priority,omitempty"`
+	Program  *filters.Program  `json:"program,omitempty"`
+	Settings *IdentitySettings `json:"settings,omitempty"`
+}
+
+type IdentitySettings struct {
+	CaseSensitive     bool `json:"case_sensitive"`
+	MatchMissingAlbum bool `json:"match_missing_album"`
+}
+
+func ComparisonProgram(sensitive, missing bool) *filters.Program {
+	steps := []filters.Statement{}
+	for _, field := range []string{"artist", "album", "title"} {
+		value := filters.Expr{Op: "field", Field: "original." + field}
+		if !sensitive {
+			value = filters.Expr{Op: "casefold", Args: []filters.Expr{value}}
+		}
+		steps = append(steps, filters.Statement{Set: "music." + field, Value: &value})
+	}
+	flag, _ := json.Marshal(missing)
+	value := filters.Expr{Op: "literal", Value: flag}
+	steps = append(steps, filters.Statement{Set: "music.missing_album", Value: &value})
+	return &filters.Program{Steps: steps}
 }
 
 type IdentityIssue struct {
@@ -46,8 +69,15 @@ func MatchingSchema() filters.Schema {
 func CompileIdentityPrograms(rules []IdentityFilter) (IdentityPrograms, error) {
 	programs := IdentityPrograms{}
 	for _, rule := range rules {
-		if !rule.Enabled || rule.Type != "matching" || rule.Subtype != "music" || rule.Program == nil {
+		if !rule.Enabled || rule.Type != "matching" || rule.Subtype != "music" {
 			continue
+		}
+		if rule.Program == nil {
+			settings := IdentitySettings{}
+			if rule.Settings != nil {
+				settings = *rule.Settings
+			}
+			rule.Program = ComparisonProgram(settings.CaseSensitive, settings.MatchMissingAlbum)
 		}
 		compiled, err := filters.CompileProgram(*rule.Program, MatchingSchema())
 		if err != nil {
@@ -117,3 +147,43 @@ func (p IdentityPrograms) Resolve(ctx context.Context, env filters.Env, original
 }
 
 func (p IdentityPrograms) Active() bool { return len(p.programs) > 0 }
+
+func catalogExpression(e *filters.Expr) bool {
+	if e == nil {
+		return false
+	}
+	if e.Op == "field" && strings.HasPrefix(e.Field, "catalog.") {
+		return true
+	}
+	for _, arg := range e.Args {
+		if catalogExpression(&arg) {
+			return true
+		}
+	}
+	return false
+}
+func catalogStatements(steps []filters.Statement) bool {
+	for _, step := range steps {
+		if catalogExpression(step.If) || catalogExpression(step.Value) || catalogStatements(step.Then) || catalogStatements(step.Else) {
+			return true
+		}
+		for _, branch := range step.ElseIf {
+			if catalogExpression(&branch.If) || catalogStatements(branch.Then) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Explicit catalog comparisons run after a contribution's source comparisons.
+// Source-only conditions continue to see their original record environment.
+func (p IdentityPrograms) Catalog() IdentityPrograms {
+	result := IdentityPrograms{}
+	for _, program := range p.programs {
+		if catalogStatements(program.rule.Program.Steps) {
+			result.programs = append(result.programs, program)
+		}
+	}
+	return result
+}

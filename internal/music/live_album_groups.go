@@ -48,6 +48,12 @@ func pruneInactiveAlbumGroups(ctx context.Context, db Database, programs Groupin
 
 func albumGroupHasAssignment(ctx context.Context, db Database, programs GroupingPrograms, group int64) (bool, error) {
 	var source bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM music_release_groups WHERE group_id=?)`, group).Scan(&source); err != nil {
+		return false, err
+	}
+	if source {
+		return true, nil
+	}
 	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM source_play_groupings s JOIN source_plays p ON p.play_key=s.play_key WHERE s.group_id=?) OR EXISTS(SELECT 1 FROM source_aggregate_groupings s JOIN source_aggregates a ON a.aggregate_key=s.aggregate_key WHERE s.group_id=?)`, group, group).Scan(&source); err != nil {
 		return false, err
 	}
