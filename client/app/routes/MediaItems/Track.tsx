@@ -5,6 +5,7 @@ import MediaLayout from "./MediaLayout";
 import ActivityGrid from "~/components/ActivityGrid";
 import { timeListenedString } from "~/utils/utils";
 import InterestGraph from "~/components/InterestGraph";
+import MusicStates from "~/components/MusicStates";
 
 export async function clientLoader({ params }: LoaderFunctionArgs) {
   const res = await fetch(`/apis/web/v1/track/${params.id}`);
@@ -33,6 +34,7 @@ export default function Track() {
       imgItemId={track.album_id}
       subContent={
         <>
+          <MusicStates kind="track" id={track.id} />
           {track.artists.length > 0 && (
             <p>
               By{" "}

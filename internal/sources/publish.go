@@ -307,6 +307,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = refreshSourceGenres(ctx, tx); err != nil {
 		return result, err
 	}
+	if err = publishSnapshots(ctx, tx, byID, naming, historyAssignments); err != nil {
+		return result, err
+	}
 	if err = music.RefreshArtistMatches(ctx, tx, rawConfig); err != nil {
 		return result, err
 	}

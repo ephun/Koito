@@ -21,7 +21,7 @@ func TestAttributionSourceRecordDeviceAndDateScopes(t *testing.T) {
 	saveTestRules(t, s, Rule{ID: "record", Type: "attribution", Subtype: "direct", Enabled: true, Scope: RuleScope{RecordID: 2}, Settings: RuleSettings{Listener: "self"}})
 	require.Equal(t, 2, count(t, s, "listens"))
 	change := currentChange(t, s)
-	change.Config.Rules[5].Settings.Listener = "unknown"
+	testRule(t, &change.Config, "record").Settings.Listener = "unknown"
 	_, err := s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(t, s, "listens"))
@@ -45,7 +45,7 @@ func TestAttributionMatchedListenerConflictsRemainInspectable(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, inspection.Contributors, 2)
 	change := currentChange(t, s)
-	change.Config.Rules[3].Enabled = false
+	testRule(t, &change.Config, "spotify-other").Enabled = false
 	_, err = s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(t, s, "listens"))
@@ -60,7 +60,7 @@ func TestAttributionHeuristicUsesDistinctPersonallyAttributedPlays(t *testing.T)
 	saveTestRules(t, s, Rule{ID: "mine", Type: "attribution", Subtype: "direct", Enabled: true, Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Listener: "self"}}, Rule{ID: "shared", Type: "attribution", Subtype: "heuristic", Enabled: true, Scope: RuleScope{Service: "spotify"}, Settings: RuleSettings{EvidenceSourceID: source, MinimumMatches: 2}})
 	require.Equal(t, 1, count(t, s, "listens"))
 	change := currentChange(t, s)
-	change.Config.Rules[4].Settings.MinimumMatches = 1
+	testRule(t, &change.Config, "shared").Settings.MinimumMatches = 1
 	_, err := s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.Equal(t, 2, count(t, s, "listens"))

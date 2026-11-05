@@ -19,10 +19,11 @@ const LastfmJSONL = "lastfm-jsonl-v1"
 var ErrUnsupportedFile = errors.New("Unsupported file.")
 
 type parsedFile struct {
-	file    File
-	records []json.RawMessage
-	service string
-	parser  string
+	file      File
+	records   []json.RawMessage
+	service   string
+	parser    string
+	snapshots []parsedSnapshot
 }
 
 // CSV records keep every original column and value. The original file remains
@@ -32,7 +33,7 @@ type csvRecord struct {
 	Values  []string `json:"values"`
 }
 
-func (s *Store) parseFile(f File) (parsedFile, error) {
+func (s *Store) parseFile(f File, filenames ...string) (parsedFile, error) {
 	p, _ := s.FilePath(f.Hash)
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -42,21 +43,34 @@ func (s *Store) parseFile(f File) (parsedFile, error) {
 	if len(clean) == 0 {
 		return parsedFile{}, ErrUnsupportedFile
 	}
+	filename := ""
+	if len(filenames) > 0 {
+		filename = filenames[0]
+	}
+	if part, e := parseSnapshots(f, clean, filename); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
 	if clean[0] == '<' || ((clean[0] == '[' || clean[0] == '{') && (bytes.Contains(clean, []byte(`"Tracks"`)) || bytes.Contains(clean, []byte(`"Track ID"`)))) {
 		records, parser, e := parseITunes(clean)
 		if e == nil || clean[0] == '<' || !errors.Is(e, ErrUnsupportedFile) {
-			return parsedFile{f, records, "itunes", parser}, e
+			return parsedFile{file: f, records: records, service: "itunes", parser: parser}, e
 		}
 	}
 	if clean[0] == '[' {
+		if bytes.Equal(clean, []byte("[]")) && strings.HasPrefix(baseFilename(filename), "StreamingHistory") {
+			return parsedFile{file: f, service: "spotify", parser: SpotifyStandard}, nil
+		}
+		if records, e := parseSpotifyStandard(clean); e == nil {
+			return parsedFile{file: f, records: records, service: "spotify", parser: SpotifyStandard}, nil
+		}
 		if records, e := s.parseSpotify(f); e == nil {
-			return parsedFile{f, records, "spotify", Parser}, nil
+			return parsedFile{file: f, records: records, service: "spotify", parser: Parser}, nil
 		}
 	}
 	if clean[0] == '[' || clean[0] == '{' {
 		if json.Valid(clean) {
 			records, e := parseLastfmJSON(clean)
-			return parsedFile{f, records, "lastfm", LastfmJSON}, e
+			return parsedFile{file: f, records: records, service: "lastfm", parser: LastfmJSON}, e
 		}
 		scanner := bufio.NewScanner(bytes.NewReader(clean))
 		scanner.Buffer(make([]byte, 4096), 8<<20)
@@ -76,12 +90,12 @@ func (s *Store) parseFile(f File) (parsedFile, error) {
 			return parsedFile{}, err
 		}
 		if len(records) > 0 {
-			return parsedFile{f, records, "lastfm", LastfmJSONL}, nil
+			return parsedFile{file: f, records: records, service: "lastfm", parser: LastfmJSONL}, nil
 		}
 		return parsedFile{}, ErrUnsupportedFile
 	}
 	records, err := parseLastfmCSV(clean)
-	return parsedFile{f, records, "lastfm", LastfmCSV}, err
+	return parsedFile{file: f, records: records, service: "lastfm", parser: LastfmCSV}, err
 }
 
 func parseLastfmJSON(data []byte) ([]json.RawMessage, error) {

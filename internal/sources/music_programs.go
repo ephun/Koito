@@ -52,6 +52,7 @@ func compileMusicPrograms(config RuleConfig) (music.IdentityPrograms, error) {
 }
 
 func applyMusicPrograms(ctx context.Context, r *matchingRecord, programs music.IdentityPrograms) error {
+	r.MusicIssues = nil
 	if !programs.Active() {
 		return nil
 	}

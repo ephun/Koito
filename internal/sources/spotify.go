@@ -66,6 +66,18 @@ func (s *Store) parseSpotify(f File) ([]json.RawMessage, error) {
 func spotifyKind(raw json.RawMessage) string {
 	var v map[string]any
 	_ = json.Unmarshal(raw, &v)
+	if _, standard := v["endTime"]; standard {
+		if v["trackName"] != nil {
+			return "play"
+		}
+		if v["episodeName"] != nil {
+			return "podcast"
+		}
+		if v["audiobookTitle"] != nil || v["chapterName"] != nil {
+			return "audiobook"
+		}
+		return "unknown"
+	}
 	if title, ok := v["master_metadata_track_name"].(string); ok && title != "" {
 		return "play"
 	}

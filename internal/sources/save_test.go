@@ -63,7 +63,7 @@ func TestSaveFailurePreservesRulesAndView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Current.ID != 1 || count(t, s, "filter_versions") != 1 || count(t, s, "listens") != 1 || count(t, s, "source_records") != 1 {
+	if state.Current.ID != 2 || count(t, s, "filter_versions") != 2 || count(t, s, "listens") != 1 || count(t, s, "source_records") != 1 {
 		t.Fatal("failed save changed rules or view")
 	}
 }

@@ -119,7 +119,7 @@ func TestLocalPhase3Libraries(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count(t, s, "listens"))
 	change = currentChange(t, s)
-	change.Config.Rules[3].Enabled = false
+	testRule(t, &change.Config, "library-count").Enabled = false
 	_, err = s.Save(ctx, change)
 	require.NoError(t, err)
 	require.Zero(t, count(t, s, "source_aggregates"))

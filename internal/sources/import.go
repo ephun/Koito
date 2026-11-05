@@ -55,7 +55,7 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 		return result, err
 	}
 	result.Hash = f.Hash
-	parts, parseErr := s.readUpload(ctx, f)
+	parts, parseErr := s.readUpload(ctx, f, filename)
 	service := expected
 	if service == "" {
 		service = "unknown"
@@ -127,6 +127,12 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 		if e != nil {
 			return result, e
 		}
+		kinds := map[int]string{}
+		for _, snapshot := range part.snapshots {
+			for _, ordinal := range snapshot.Ordinals {
+				kinds[ordinal] = snapshot.Kind
+			}
+		}
 		for ordinal, raw := range part.records {
 			kind := "play"
 			if part.service == "itunes" {
@@ -136,6 +142,9 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 					return result, e
 				}
 				kind = row.Kind
+			} else if snapshotParser(part.parser) {
+				kind = "context"
+				kind = kinds[ordinal]
 			} else if part.service == "spotify" {
 				kind = spotifyKind(raw)
 			} else if normalizeRecord(raw, part.parser, "").NowPlaying {
@@ -149,6 +158,9 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 			result.Added++
 		}
 		stmt.Close()
+		if e = storeSnapshots(ctx, tx, sources[i], part); e != nil {
+			return result, e
+		}
 		_, e = tx.ExecContext(ctx, `INSERT INTO source_extractions(source_id,file_hash,parser,record_count) VALUES(?,?,?,?)`, sources[i], part.file.Hash, part.parser, len(part.records))
 		if e != nil {
 			return result, e
@@ -158,7 +170,7 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 	return result, err
 }
 
-func (s *Store) readUpload(ctx context.Context, f File) ([]parsedFile, error) {
+func (s *Store) readUpload(ctx context.Context, f File, filenames ...string) ([]parsedFile, error) {
 	p, _ := s.FilePath(f.Hash)
 	probe, err := os.Open(p)
 	if err != nil {
@@ -171,7 +183,7 @@ func (s *Store) readUpload(ctx context.Context, f File) ([]parsedFile, error) {
 		return nil, err
 	}
 	if string(signature[:]) != "PK\x03\x04" && string(signature[:]) != "PK\x05\x06" {
-		part, e := s.parseFile(f)
+		part, e := s.parseFile(f, filenames...)
 		if e != nil {
 			return nil, e
 		}
@@ -211,7 +223,7 @@ func (s *Store) readUpload(ctx context.Context, f File) ([]parsedFile, error) {
 		if e != nil {
 			return nil, e
 		}
-		part, e := s.parseFile(child)
+		part, e := s.parseFile(child, member.Name)
 		if errors.Is(e, ErrUnsupportedFile) && !strings.HasPrefix(filepath.Base(strings.ReplaceAll(member.Name, "\\", "/")), "Streaming_History_") {
 			continue
 		}

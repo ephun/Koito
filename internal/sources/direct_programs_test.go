@@ -42,7 +42,7 @@ func TestDirectBlocksApplyElseAndRestoreExistingHistory(t *testing.T) {
 	program := namingFixture(t, `{"steps":[{"if":{"op":"eq","args":[{"op":"field","field":"source.service"},{"op":"literal","value":"spotify"}]},"then":[{"set":"listener","value":{"op":"literal","value":"other"}}],"else":[{"set":"listener","value":{"op":"literal","value":"self"}}]}]}`)
 	for _, enabled := range []bool{true, false} {
 		change := currentChange(t, s)
-		if len(change.Config.Rules) == 3 {
+		if len(change.Config.Rules) == 4 {
 			change.Config.Rules = append(change.Config.Rules, Rule{ID: "listener", Type: "attribution", Subtype: "direct", Enabled: enabled, Program: program})
 		} else {
 			change.Config.Rules[len(change.Config.Rules)-1].Enabled = enabled

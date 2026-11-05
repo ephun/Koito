@@ -133,12 +133,14 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	state.Blocks.Schemas["inclusion:scope"] = music.ScopeSchema()
 	state.Blocks.Schemas["matching:play"] = playSchema()
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
+	state.Blocks.Schemas["qualification:completion"] = completionSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
 	state.Blocks.Templates["presentation:naming"] = []ProgramTemplate{{"names", "Displayed names", displayedNameProgram()}, {"genres", "Artist genres", artistGenreProgram(0)}, {"source-tags", "Source tags", sourceTagProgram()}}
 	state.Blocks.Templates["presentation:grouping"] = []ProgramTemplate{{"editions", "Group edition suffixes", editionGroupingProgram()}}
 	state.Blocks.Templates["matching:play"] = []ProgramTemplate{{"overlap", "Overlapping timestamp ranges", defaultPlayProgram(0)}, {"tolerance", "Timestamp ranges within 30 seconds", defaultPlayProgram(30)}}
 	state.Blocks.Templates["matching:music"] = []ProgramTemplate{{"exact", "Exact comparison names", defaultMusicProgram(true, true)}, {"case", "Case-insensitive comparison names", defaultMusicProgram(false, true)}}
+	state.Blocks.Templates["qualification:completion"] = []ProgramTemplate{{"standard", "Spotify account history", standardCompletionProgram()}, {"extended", "Spotify extended history", extendedCompletionProgram()}}
 	var err error
 	state.Current, err = readRuleVersion(ctx, s.DB, 0)
 	if err != nil {
@@ -293,7 +295,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	schema.Choices = map[string][]filters.Choice{"catalog.kind": {{Label: "Record", Value: "record"}, {Label: "Artist", Value: "artist"}, {Label: "Album", Value: "album"}, {Label: "Track", Value: "track"}}}
 	for _, source := range state.Sources {
 		if source.Records > 0 {
-			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes"}[source.Service]
+			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs"}[source.Service]
 			if name == "" {
 				name = source.Service
 			}
@@ -329,6 +331,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 			other.Choices["catalog.kind"] = schema.Choices["catalog.kind"]
 		}
 		other.Choices["source.service"] = schema.Choices["source.service"]
+		other.Choices["source.format"] = []filters.Choice{{Label: "Spotify account history", Value: SpotifyStandard}, {Label: "Spotify extended history", Value: Parser}, {Label: "Spotify playlists JSON", Value: SpotifyPlaylist}, {Label: "Spotify library JSON", Value: SpotifyLibrary}, {Label: "Spotify playlists and library CSV", Value: SpotifyCSV}, {Label: "Spotify account context", Value: SpotifyContext}, {Label: "Discogs CSV", Value: DiscogsCSV}, {Label: "Last.fm CSV", Value: LastfmCSV}, {Label: "Last.fm JSON", Value: LastfmJSON}, {Label: "Last.fm JSONL", Value: LastfmJSONL}, {Label: "iTunes XML", Value: ITunesXML}, {Label: "iTunes JSON", Value: ITunesJSON}, {Label: "iTunes expanded JSON", Value: ITunesExpanded}}
 		other.Choices["file.hash"] = schema.Choices["file.hash"]
 		if key == "presentation:grouping" {
 			other.Choices["source.service"] = append(append([]filters.Choice{}, schema.Choices["source.service"]...), filters.Choice{Label: "Koito", Value: "koito"})
@@ -371,7 +374,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
+		if rule.Program != nil && !(rule.Type == "qualification" && rule.Subtype == "completion" || rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -415,6 +418,16 @@ func validateRules(config RuleConfig) error {
 			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
+		case rule.Type == "qualification" && rule.Subtype == "completion":
+			if rule.Program == nil {
+				return errors.New("Completion filters need IF and SET blocks.")
+			}
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Completion conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, completionSchema()); err != nil {
+				return err
+			}
 		case rule.Type == "inclusion" && rule.Subtype == "scope":
 			if rule.Program == nil {
 				return errors.New("Scope filters need IF and SET blocks.")

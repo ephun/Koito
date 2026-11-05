@@ -14,24 +14,27 @@ import (
 )
 
 type matchingRecord struct {
-	MusicIssues []FilterIssue `json:"-"`
-	TimeIssues  []FilterIssue `json:"-"`
-	timeOffset  *time.Duration
-	ID          int64        `json:"id"`
-	SourceID    int64        `json:"source_id"`
-	Service     string       `json:"service"`
-	FileHash    string       `json:"file_hash"`
-	Ordinal     int          `json:"ordinal"`
-	Parser      string       `json:"parser"`
-	Payload     string       `json:"payload,omitempty"`
-	UserID      int32        `json:"-"`
-	Values      recordValues `json:"values"`
-	Start       time.Time    `json:"time"`
-	Basis       string       `json:"time_basis"`
-	Device      string       `json:"device,omitempty"`
-	LibraryID   string       `json:"library_id,omitempty"`
-	TrackID     string       `json:"track_id,omitempty"`
-	RawFields   filters.Env  `json:"-"`
+	LibraryFields    filters.Env   `json:"-"`
+	ExternalID       string        `json:"external_id,omitempty"`
+	CompletionIssues []FilterIssue `json:"-"`
+	MusicIssues      []FilterIssue `json:"-"`
+	TimeIssues       []FilterIssue `json:"-"`
+	timeOffset       *time.Duration
+	ID               int64        `json:"id"`
+	SourceID         int64        `json:"source_id"`
+	Service          string       `json:"service"`
+	FileHash         string       `json:"file_hash"`
+	Ordinal          int          `json:"ordinal"`
+	Parser           string       `json:"parser"`
+	Payload          string       `json:"payload,omitempty"`
+	UserID           int32        `json:"-"`
+	Values           recordValues `json:"values"`
+	Start            time.Time    `json:"time"`
+	Basis            string       `json:"time_basis"`
+	Device           string       `json:"device,omitempty"`
+	LibraryID        string       `json:"library_id,omitempty"`
+	TrackID          string       `json:"track_id,omitempty"`
+	RawFields        filters.Env  `json:"-"`
 }
 
 type MatchDecision struct {
@@ -65,6 +68,9 @@ type matchPlan struct {
 }
 
 func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig, extra ...RuleConfig) ([]matchingRecord, error) {
+	if err := prepareCompletionPrograms(config); err != nil {
+		return nil, err
+	}
 	if err := prepareDirectPrograms(config); err != nil {
 		return nil, err
 	}
@@ -107,9 +113,9 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		if err = retainRawFields(&r, rawFields); err != nil {
 			return nil, fmt.Errorf("Read source fields for record %d: %w", r.ID, err)
 		}
-		interpretMatchingRecord(&r, config)
-		if err = applyMusicPrograms(ctx, &r, musicPrograms); err != nil {
-			return nil, err
+		r.Values = normalizeRecord([]byte(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
+		if snapshotParser(r.Parser) {
+			r.ExternalID = snapshotExternalID(r)
 		}
 		if countPrograms && r.Service == "itunes" {
 			if err = retainCountRaw(&r); err != nil {
@@ -118,10 +124,24 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		}
 		// Matching needs interpreted values; inspection reads the original payload
 		// separately. Avoid retaining a second full copy of large history exports.
-		r.Payload = ""
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err = attachRecordMemberships(ctx, reader, out); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		r := &out[i]
+		interpretMatchingRecord(r, config)
+		if err = applyMusicPrograms(ctx, r, musicPrograms); err != nil {
+			return nil, err
+		}
+		r.Payload = ""
+	}
+	return out, nil
 }
 
 func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
@@ -146,6 +166,7 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 		r.Device = libraryText(row.Fields, "Device")
 	}
 	basis := applyObservedTime(r, config)
+	applyCompletion(r, config)
 	if r.Service == "spotify" && basis == "estimated_start" && r.Values.Reason == "counted" {
 		// Subtract actual played time, never an assumed recording duration. Guard
 		// duration conversion against overflow and implausible pre-epoch results.
@@ -366,7 +387,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 		for _, key := range exactKeys {
 			indices := exact[key]
 			first := records[indices[0]]
-			if first.Service == "lastfm" && first.Values.Precision > int64(time.Second) {
+			if first.Values.Precision > int64(time.Second) {
 				counts := map[string]int{}
 				uncertain := false
 				for _, i := range indices {
@@ -516,6 +537,9 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 		for _, i := range indices {
 			play.Records = append(play.Records, records[i].ID)
 			if records[i].Service == playRule.Settings.PreferredSource && records[representative].Service != playRule.Settings.PreferredSource {
+				representative = i
+			}
+			if records[i].Service == records[representative].Service && records[i].Values.Precision < records[representative].Values.Precision {
 				representative = i
 			}
 		}

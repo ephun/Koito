@@ -22,6 +22,14 @@ func ImportsHandler(store *sources.Store) http.HandlerFunc {
 		var value any
 		var err error
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/imports/music":
+			track, _ := strconv.ParseInt(r.URL.Query().Get("track"), 10, 64)
+			album, _ := strconv.ParseInt(r.URL.Query().Get("album"), 10, 64)
+			if (track <= 0 && album <= 0) || (track > 0 && album > 0) {
+				http.Error(w, "music is required", 400)
+				return
+			}
+			value, err = store.MusicStates(r.Context(), track, album)
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/web/v1/imports":
 			receipts, e := store.Receipts(r.Context())
 			if e != nil {

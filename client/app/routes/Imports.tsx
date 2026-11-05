@@ -121,4 +121,4 @@ export default function Imports() {
 
 function formatPayload(payload: string) { try { return JSON.stringify(JSON.parse(payload), null, 2); } catch { return payload; } }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service === "itunes" ? "iTunes" : source.service; }
+function sourceName(source: Source) { return source.service === "spotify" ? "Spotify" : source.service === "lastfm" ? "Last.fm" : source.service === "itunes" ? "iTunes" : source.service === "discogs" ? "Discogs" : source.service; }

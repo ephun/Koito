@@ -12,20 +12,21 @@ import (
 )
 
 type recordValues struct {
-	Music       *music.MatchIdentity `json:"music,omitempty"`
-	Title       string               `json:"title"`
-	Artist      string               `json:"artist"`
-	Album       string               `json:"album"`
-	URI         string               `json:"uri,omitempty"`
-	RecordingID string               `json:"recording_id,omitempty"`
-	TimeText    string               `json:"time_text"`
-	TimeMeaning string               `json:"time_meaning"`
-	Precision   int64                `json:"precision_ns"`
-	Time        time.Time            `json:"-"`
-	PlayedMS    int64                `json:"played_ms,omitempty"`
-	Reason      string               `json:"reason"`
-	Origin      string               `json:"origin"`
-	NowPlaying  bool                 `json:"now_playing,omitempty"`
+	ReportedComplete *bool                `json:"reported_complete,omitempty"`
+	Music            *music.MatchIdentity `json:"music,omitempty"`
+	Title            string               `json:"title"`
+	Artist           string               `json:"artist"`
+	Album            string               `json:"album"`
+	URI              string               `json:"uri,omitempty"`
+	RecordingID      string               `json:"recording_id,omitempty"`
+	TimeText         string               `json:"time_text"`
+	TimeMeaning      string               `json:"time_meaning"`
+	Precision        int64                `json:"precision_ns"`
+	Time             time.Time            `json:"-"`
+	PlayedMS         int64                `json:"played_ms,omitempty"`
+	Reason           string               `json:"reason"`
+	Origin           string               `json:"origin"`
+	NowPlaying       bool                 `json:"now_playing,omitempty"`
 }
 
 func rawString(raw json.RawMessage) string {
@@ -55,6 +56,12 @@ func itemText(raw json.RawMessage) string {
 }
 
 func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
+	if snapshotParser(parser) {
+		return normalizeSnapshot(raw, parser)
+	}
+	if parser == SpotifyStandard {
+		return normalizeSpotifyStandard(raw)
+	}
 	if parser == ITunesXML || parser == ITunesJSON || parser == ITunesExpanded {
 		return normalizeITunes(raw)
 	}
@@ -70,6 +77,10 @@ func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
 		v.Album = item.Album
 		v.URI = item.URI
 		v.PlayedMS = item.Played
+		if item.ReasonEnd != "" {
+			complete := item.ReasonEnd == "trackdone"
+			v.ReportedComplete = &complete
+		}
 		v.TimeText = item.Timestamp
 		v.TimeMeaning = "end"
 		v.Time, v.Precision = explicitTime(v.TimeText)

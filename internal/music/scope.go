@@ -10,7 +10,7 @@ import (
 )
 
 func ScopeSchema() filters.Schema {
-	return filters.Schema{
+	return LibraryFields(filters.Schema{
 		Fields: map[string]filters.Type{"play.key": filters.Text, "play.time": filters.Date, "play.client": filters.Text, "play.record_ids": filters.List,
 			"catalog.track_ids": filters.List, "catalog.track_id": filters.Number, "catalog.appearance_id": filters.Number, "catalog.album_id": filters.Number, "catalog.artist_ids": filters.List,
 			"original.title": filters.Text, "original.album": filters.Text, "original.artist": filters.Text, "original.artists": filters.List,
@@ -23,7 +23,7 @@ func ScopeSchema() filters.Schema {
 			"display.title": "Displayed track title", "display.album": "Displayed album", "display.artist": "Displayed artist", "display.artists": "Displayed artist credits", "view.include": "Include in the view",
 		},
 		Help: map[string]string{"play.key": "Identifies one play, including an inferred play.", "play.record_ids": "Original records supporting this play.", "play.time": "The timestamp used for this displayed play.", "play.client": "The client stored with this play.", "view.include": "Choose whether matching music or plays contribute to history and totals.", "catalog.track_id": "Identifies the shared track history across album appearances."},
-	}
+	})
 }
 
 type scopeProgram struct {
@@ -251,8 +251,18 @@ func ScopeItems(ctx context.Context, db Database, trackID int64) ([]ScopeItem, e
 			addMember(historyKeys[item.ID], item.ID)
 		}
 	}
+	library, err := CatalogLibraryEnvironment(ctx, db)
+	if err != nil {
+		return nil, err
+	}
 	for i := range items {
 		item := &items[i]
+		for key, value := range EmptyLibraryEnvironment() {
+			item.Env[key] = value
+		}
+		for key, value := range library[item.ID] {
+			item.Env[key] = value
+		}
 		item.Env["catalog.track_id"] = filters.Integer(canonical[historyKeys[item.ID]])
 		item.Env["catalog.track_ids"] = filters.Values(groups[historyKeys[item.ID]]...)
 		item.Env["catalog.artist_ids"] = filters.Values(artistIDs[item.ID]...)

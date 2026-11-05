@@ -202,6 +202,10 @@ export default function Filters() {
         {["direct", "heuristic", "aggregate"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="attribution" subtype={subtype} embedded onChange={upsert} onRemove={remove} />)}
       </section>}
     </>}
+    {saved && draft && <section aria-labelledby="qualification-title" className="space-y-3">
+      <div className="flex items-center gap-2"><h2 id="qualification-title">Qualification</h2><FieldHelp label="Qualification">Choose which listening meets your counting criteria.</FieldHelp></div>
+      <ProgramFilterManager state={saved} config={draft} busy={saving} type="qualification" subtype="completion" embedded onChange={upsert} onRemove={remove} onMove={move} />
+    </section>}
     {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
       {["naming", "grouping"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={(subtype === "grouping" ? focusedGrouping : !focusedMatching && !focusedGrouping && !focusedScope) ? focusedFilter : undefined} />)}

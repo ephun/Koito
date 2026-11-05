@@ -19,6 +19,7 @@ type InspectedRecord struct {
 }
 
 type RecordInspection struct {
+	Snapshots     []RecordSnapshot        `json:"snapshots,omitempty"`
 	SourceGenres  []SourceGenre           `json:"source_genres"`
 	Record        InspectedRecord         `json:"record"`
 	Contributors  []InspectedRecord       `json:"contributors"`
@@ -38,6 +39,7 @@ type FilterIssue struct {
 // filters see earlier naming changes. Direct attribution reads original fields.
 func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex, catalogAlbumID int64) ([]FilterIssue, error) {
 	issues := append(append([]FilterIssue{}, r.TimeIssues...), r.MusicIssues...)
+	issues = append(issues, r.CompletionIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
 	for _, rule := range config.Rules {
@@ -141,7 +143,25 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	records := make([]matchingRecord, len(out))
+	for i := range out {
+		records[i] = out[i].matchingRecord
+	}
+	if err = attachRecordMemberships(ctx, reader, records); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].matchingRecord = records[i]
+		interpretMatchingRecord(&out[i].matchingRecord, config)
+		if err = applyMusicPrograms(ctx, &out[i].matchingRecord, musicPrograms); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error) {
@@ -163,6 +183,10 @@ func (s *Store) Inspect(ctx context.Context, id int64) (RecordInspection, error)
 		return result, fmt.Errorf("Unknown record.")
 	}
 	result.Record = rows[0]
+	result.Snapshots, err = recordSnapshots(ctx, tx, id)
+	if err != nil {
+		return result, err
+	}
 	result.SourceGenres, err = SourceGenres(result.Record.Parser, []byte(result.Record.Payload))
 	if err != nil {
 		return result, err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gabehf/koito/internal/filters"
+	"github.com/gabehf/koito/internal/music"
 )
 
 // The editor receives its supported operators and writable fields from the
@@ -25,9 +26,10 @@ type ProgramTemplate struct {
 }
 
 func namingSchema() filters.Schema {
-	return filters.Schema{
+	return music.LibraryFields(filters.Schema{
 		RawFields: true,
 		Fields: map[string]filters.Type{
+			"source.format": filters.Text, "record.played_ms": filters.Number, "record.completed": filters.Boolean,
 			"original.aliases": filters.List, "original.primary_artist_ids": filters.List, "original.artists": filters.List, "catalog.artist_ids": filters.List, "catalog.kind": filters.Text, "catalog.id": filters.Number, "catalog.artist_id": filters.Number, "source.genres": filters.List, "source.genre_records": filters.List,
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
@@ -36,8 +38,8 @@ func namingSchema() filters.Schema {
 		},
 		Targets: map[string]filters.Type{"display.aliases": filters.List, "display.artist_ids": filters.List, "display.primary_artist_ids": filters.List, "display.artist": filters.Text, "display.album": filters.Text, "display.title": filters.Text, "artist.genres": filters.List, "display.tags": filters.List},
 		Help:    map[string]string{"display.aliases": "Choose alternate names used by search.", "display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
-		Labels:  map[string]string{"display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
-	}
+		Labels:  map[string]string{"source.format": "Source format", "record.played_ms": "Played milliseconds", "record.completed": "Reported complete", "display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
+	})
 }
 
 type namingProgram struct {
@@ -169,10 +171,20 @@ func recordEnvironment(r matchingRecord) filters.Env {
 		"catalog.kind":    filters.String("record"),
 		"original.artist": filters.String(r.Values.Artist), "original.album": filters.String(r.Values.Album), "original.title": filters.String(r.Values.Title),
 		"source.service": filters.String(r.Service), "source.id": filters.Integer(r.SourceID), "file.hash": filters.String(r.FileHash), "record.id": filters.Integer(r.ID),
+		"source.format":  filters.String(sourceFormat(r.Parser)),
 		"display.artist": filters.String(r.Values.Artist), "display.album": filters.String(r.Values.Album), "display.title": filters.String(r.Values.Title),
+	}
+	if r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) {
+		env["record.played_ms"] = filters.Integer(r.Values.PlayedMS)
+		if r.Values.ReportedComplete != nil {
+			env["record.completed"] = filters.Bool(*r.Values.ReportedComplete)
+		}
 	}
 	if r.Values.Artist != "" {
 		env["original.artists"] = filters.Values(filters.String(r.Values.Artist))
+	}
+	for key, value := range r.LibraryFields {
+		env[key] = value
 	}
 	for key, value := range r.RawFields {
 		env[key] = value

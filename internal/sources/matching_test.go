@@ -18,6 +18,17 @@ func importLastfm(t *testing.T, s *Store, raw string) {
 func lf(title, album string, unix int64) string {
 	return fmt.Sprintf(`{"name":%q,"artist":{"#text":"Artist"},"album":{"#text":%q},"date":{"uts":%q},"extra":{"kept":true}}`, title, album, fmt.Sprint(unix))
 }
+func testRule(t *testing.T, config *RuleConfig, id string) *Rule {
+	t.Helper()
+	for i := range config.Rules {
+		if config.Rules[i].ID == id {
+			return &config.Rules[i]
+		}
+	}
+	t.Fatalf("missing filter %s", id)
+	return nil
+}
+
 func currentChange(t *testing.T, s *Store) FilterChange {
 	t.Helper()
 	state, err := s.Filters(context.Background())
@@ -72,7 +83,7 @@ func TestMatchPreviewApplyManualSplitAndRestore(t *testing.T) {
 	if p.Before != 1 || p.After != 2 || p.Changed != 2 || len(p.Examples) != 2 {
 		t.Fatal("split preview", p)
 	}
-	if count(t, s, "listens") != 1 || count(t, s, "match_decisions") != 0 || count(t, s, "filter_versions") != 1 {
+	if count(t, s, "listens") != 1 || count(t, s, "match_decisions") != 0 || count(t, s, "filter_versions") != 2 {
 		t.Fatal("preview mutated state")
 	}
 	c.Token = p.Token
@@ -104,7 +115,7 @@ func TestMatchPreviewApplyManualSplitAndRestore(t *testing.T) {
 	if err = s.DB.QueryRow(`SELECT payload FROM source_records WHERE id=1`).Scan(&after); err != nil || original != after {
 		t.Fatal("records changed", err)
 	}
-	if count(t, s, "match_decisions") != 2 || count(t, s, "filter_versions") != 4 {
+	if count(t, s, "match_decisions") != 2 || count(t, s, "filter_versions") != 5 {
 		t.Fatal("change history lost")
 	}
 }
@@ -279,7 +290,7 @@ func TestStalePreviewAndAtomicFailure(t *testing.T) {
 	if _, err = s.Apply(ctx, c); err == nil {
 		t.Fatal("expected publication failure")
 	}
-	if count(t, s, "listens") != 1 || count(t, s, "filter_versions") != 1 || count(t, s, "source_records") != 2 || count(t, s, "source_interpretations") != 1 {
+	if count(t, s, "listens") != 1 || count(t, s, "filter_versions") != 2 || count(t, s, "source_records") != 2 || count(t, s, "source_interpretations") != 1 {
 		t.Fatal("failed apply changed previous view")
 	}
 	if _, err = s.DB.Exec(`DROP TRIGGER fail_apply`); err != nil {

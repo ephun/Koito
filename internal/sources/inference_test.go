@@ -47,13 +47,13 @@ func TestInferenceUndatedCountsAndDisabledRules(t *testing.T) {
 	require.Zero(t, count(t, s, "listens"))
 	before := count(t, s, "source_records")
 	change := currentChange(t, s)
-	change.Config.Rules[3].Enabled = false
+	testRule(t, &change.Config, "library-count").Enabled = false
 	_, err := s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.Zero(t, count(t, s, "source_aggregates"))
 	require.Equal(t, before, count(t, s, "source_records"))
 	change = currentChange(t, s)
-	change.Config.Rules[3].Enabled = true
+	testRule(t, &change.Config, "library-count").Enabled = true
 	_, err = s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.EqualValues(t, 7, readAggregate(t, s).Undated)
@@ -117,7 +117,7 @@ func TestInferenceObservedOverlapDeterminismAndLineage(t *testing.T) {
 		require.Equal(t, fingerprint, current)
 	}
 	change := currentChange(t, s)
-	change.Config.Rules[5].Enabled = false
+	change.Config.Rules[len(change.Config.Rules)-1].Enabled = false
 	_, err = s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(t, s, "listens"))
@@ -287,7 +287,7 @@ func TestInferenceDateScopeContainsTheWholeCountInterval(t *testing.T) {
 	saveTestRules(t, s, rules...)
 	require.Zero(t, readAggregate(t, s).Attributed)
 	change := currentChange(t, s)
-	change.Config.Rules[4].Scope.Until = "2012-01-01T00:00:00Z"
+	testRule(t, &change.Config, "library-listener").Scope.Until = "2012-01-01T00:00:00Z"
 	_, err := s.Save(context.Background(), change)
 	require.NoError(t, err)
 	require.EqualValues(t, 7, readAggregate(t, s).Attributed)

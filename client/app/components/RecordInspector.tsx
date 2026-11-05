@@ -20,7 +20,7 @@ type Contribution = {
   overlap: number; last_played: number; estimated: number; undated: number;
   attribution: Attribution; reason: string; from: string; until: string; records: number[];
 };
-type Inspection = { source_genres?: { value: string; field: string }[]; record: SourceRecord; contributors: SourceRecord[]; candidates: SourceRecord[]; attribution?: Attribution; contributions: Contribution[]; filter_issues?: { filter_id: string; name: string; path: string; reason: string }[] };
+type Inspection = { snapshots?: { id: number; name: string; kind: string; position: number; metadata: unknown }[]; source_genres?: { value: string; field: string }[]; record: SourceRecord; contributors: SourceRecord[]; candidates: SourceRecord[]; attribution?: Attribution; contributions: Contribution[]; filter_issues?: { filter_id: string; name: string; path: string; reason: string }[] };
 const button = "rounded border border-(--color-bg-tertiary) px-3 py-2 hover:bg-(--color-bg-tertiary) disabled:opacity-50";
 
 export default function RecordInspector({ id, onClose, onSaved }: { id: number; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -83,6 +83,13 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
           <span className="whitespace-pre-wrap">{genre.value || "Empty"}</span>
           <span className="ml-2 text-(--color-fg-secondary)">{genre.field.replace(/^raw:\/fields\//, "").replace(/\/\$plist_repeated\//, " / ")}</span>
         </li>)}</ul>
+      </details>}
+      {!!inspection.snapshots?.length && <details className="rounded border border-(--color-bg-tertiary) p-3">
+        <summary className="cursor-pointer text-sm">Snapshot</summary>
+        {inspection.snapshots.map(snapshot => <div className="mt-2 space-y-2" key={snapshot.id}>
+          <p className="text-sm">{snapshot.name} ? Item {snapshot.position + 1}</p>
+          <pre className="max-h-80 overflow-auto text-sm">{JSON.stringify(snapshot.metadata, null, 2)}</pre>
+        </div>)}
       </details>}
       {inspection.attribution && <p className="text-sm">Listener: {listenerName(inspection.attribution)}{inspection.attribution.basis === "heuristic" && " (Heuristic)"}</p>}
       {!!inspection.contributions?.length && <div className="space-y-3">{inspection.contributions.map(contribution => <div key={contribution.key} className="space-y-3 rounded border border-(--color-bg-tertiary) p-3">

@@ -5,6 +5,7 @@ import LastPlayed from "~/components/LastPlayed";
 import MediaLayout from "./MediaLayout";
 import ActivityGrid from "~/components/ActivityGrid";
 import InterestGraph from "~/components/InterestGraph";
+import MusicStates from "~/components/MusicStates";
 
 export async function clientLoader({ params }: LoaderFunctionArgs) {
   const res = await fetch(`/apis/web/v1/album/${params.id}`);
@@ -36,6 +37,7 @@ export default function Album() {
       imgItemId={album.id}
       subContent={
         <>
+          <MusicStates kind="album" id={album.id} />
           {album.artists.length > 0 && !album.is_various_artists && (
             <p>
               By{" "}
