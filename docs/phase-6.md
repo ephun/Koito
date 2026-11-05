@@ -82,6 +82,8 @@ Original database, WAL, archive, cache, and log bytes remain downloadable. Table
 
 Private acceptance logs, browser captures, databases, and source files remain in ignored local storage. Reproducible public fixtures and opt-in private-data acceptance tests are in `internal/sources`.
 
+The subsequent [Spotify coverage and interface audit](spotify-import-audit.md) records the full-history backfill and supersedes these local record and play totals.
+
 ## Boundaries for later phases
 
 Game/score files, concert/setlist interpretation, Clone Hero binary formats, and live capture remain in their planned phases. Earlier processed estimates remain distinguishable from observations. This phase does not deploy to the server or claim complete capture for configured but unused sources.
