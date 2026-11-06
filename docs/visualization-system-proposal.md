@@ -44,6 +44,31 @@ Existing Presentation filters still control music names and grouping. Chart appe
 Reuse the existing typed field registry, expression editor, boolean operators, and validation where their semantics agree.
 Keep separate targets and execution contexts. Chart expressions produce calculations and graphical values, not record changes.
 
+### Existing primitives to reuse
+
+The existing `internal/filters` package already supplies a substantial expression foundation.
+Its package name should not imply that charts need a second expression language.
+
+| Existing capability | Shared use |
+|---|---|
+| Typed values, including dates, durations, lists, missing values, and unresolved values | Field selection, calculations, validation, and consistent unknown-data behavior. |
+| Comparisons, boolean logic, membership, and missing-value predicates | Filter conditions and chart selections. |
+| Arithmetic, conversions, and text operations | Derived filter values and calculated chart fields. |
+| WHERE, MAP, COUNT, SUM, MIN, and MAX on collections | Reusable collection expressions and aggregate semantics. |
+| IF, ELSE IF, ELSE, and schema-controlled assignments | Conditional calculations and expressions, with consumer-specific writable outputs. |
+| Schema labels, choices, bounds, validation, and execution budgets | Shared expression-editor controls and diagnostics. |
+
+New analytical capabilities include grouped dataset execution, distinct aggregation, windows, ranking, segmentation, and statistical functions.
+The current evaluator handles values and supplied collections. It is not yet a general database query planner.
+Large queries should execute through backend plans while preserving shared operator semantics.
+For example, a grouped SQL SUM and the expression evaluator's SUM should agree on types and missing values.
+They need not share an implementation that loads every row into memory.
+
+Graphical marks, axes, scales, layers, and dashboard placement are new visualization concerns.
+Matching, attribution, inferred listening, and publication remain domain-specific Filter behavior.
+A later neutral package boundary can expose the common expression core without changing saved Filter definitions.
+This is a planned reuse/refactoring boundary, rather than a request to duplicate the existing engine.
+
 Examples:
 
 - Matching two track names affects every chart through the View.
