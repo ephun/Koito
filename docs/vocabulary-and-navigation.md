@@ -1,7 +1,9 @@
 # Vocabulary and navigation proposal
 
-Status: proposal for discussion. Existing data vocabulary and filter taxonomy are retained.
-This consolidates the earlier visualization proposal. No application navigation changes have been made.
+Status: working vocabulary and navigation design for the planned Visualization system.
+The user chose to continue with Koito on November 6, 2026. Existing data vocabulary and filter taxonomy are retained.
+The [development plan](development-plan.md) assigns implementation to Phases 9 through 11.
+Navigation changes belong to Phase 10 and remain subject to browser validation. None are included in this document change.
 
 ## Governing distinctions
 
@@ -12,7 +14,7 @@ This consolidates the earlier visualization proposal. No application navigation 
 - Equivalent concepts should use the same name and implementation.
 
 The main architectural vocabulary is File, Record, Source, Play, Filter, View, Widget, and Dashboard.
-The first six are existing vocabulary. Widget and Dashboard are proposed additions.
+The first six are existing vocabulary. Widget and Dashboard extend it for the Visualization system.
 
 ## Data vocabulary
 

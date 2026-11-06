@@ -1,23 +1,24 @@
 # Visualization system proposal
 
-Status: design proposal for discussion. No application behavior changes are included.
+Status: planned Visualization system for the Koito fork. The user chose Koito on November 6, 2026.
+This document specifies feature coverage and technical direction. No application behavior changes are included.
+The [development plan](development-plan.md) defines phases, completion criteria, and the next implementation goal.
 
 The [consolidated vocabulary and navigation proposal](vocabulary-and-navigation.md)
 supersedes the earlier separation between saved Chart and Widget objects.
 
 ## Recommendation
 
-The [Grafana comparison](grafana-comparison.md) narrows this recommendation to one application.
-Continue with Koito and prove a bounded native editor using an established rendering library.
-Grafana remains an alternative application foundation, which would require moving music behavior into plugins.
-This proposal does not recommend a separate Grafana dashboard beside Koito.
+The decision following the [Grafana comparison](grafana-comparison.md) is to continue with Koito.
+Build a native editor using an established rendering library, beginning with a bounded working system in Phase 9.
+The complete Visualization system spans Phases 9 through 11. Koito remains the application foundation.
 
 Build an editable chart system alongside Filters. Reference applications supply presets and acceptance examples.
 Each reference chart should be expressible as a saved definition, with editable fields, calculations, and appearance.
 The complete Last.fm Stats inventory is the baseline. LastWave is the next priority.
 
 Keep the existing File, Record, Play, Source, Filter, and View vocabulary.
-The following names are proposed additions, rather than previously agreed vocabulary:
+The following working names extend that vocabulary for the Visualization system:
 
 | Term | Meaning |
 |---|---|
@@ -321,21 +322,33 @@ Its exact interactive options are therefore unverified, and should not be invent
 Each milestone needs real-data examples and correctness checks. Presets should have expected outputs independent of renderer screenshots.
 Passing the first three chart examples does not establish full reference-feature coverage.
 Preserve the existing personal Filters until their previously agreed final redesign before deployment.
-This feature work precedes the existing Phase 9 migration and deployment plan. Numbering can be reconciled after agreement.
+The development plan now assigns this work to the following phases:
 
-## Scope boundaries and decisions for discussion
+| Phase | Scope |
+|---|---|
+| 9: Widgets and queries | Typed query contract, reusable calculations, saved definitions, editor, three working chart presets, caching, and real-data verification. |
+| 10: Dashboards, statistics, and Rewind | Home composition, publication, remaining analytical operators, complete Last.fm Stats baseline, richer Rewind, and Settings navigation. |
+| 11: Music exploration and exports | LastWave refinements, eras, album exploration, artwork/genre graphics, and designed exports from the remaining references. |
+| 12: Full-dump migration, backup, and performance | Complete corpus audit, restore, and application-wide performance verification. Former Phase 9. |
+| 13: Personal Filters and final data review | The user's final Filter redesign after all features and full-data verification. |
+| 14: Deployment rehearsal and server rollout | Tested production transition. Former Phase 10. |
+
+Caching and performance measurement begin in Phase 9. Phase 12 hardens and verifies the complete application.
+The detailed development plan controls phase completion. This document supplies the full feature inventory.
+
+## Scope boundaries and details to validate during implementation
 
 Feasible foundation: typed queries, composable drawing definitions, editable presets, reusable calculations, dashboards, and caching.
 Larger follow-on work: arbitrary relationship joins, unrestricted nested pipelines, complex animations, poster composition, and specialized label placement.
 Reusable operators can be implemented in stages while preserving the complete requested preset scope.
 
-The main decisions are:
+The working design uses the following boundaries. Validate their interface details through the working implementation:
 
-1. Does View → Widget → Dashboard describe the intended separation clearly, with queries inside Widgets?
-2. Should Home be a designated editable dashboard, retaining native playback widgets?
-3. Is a visual builder with advanced expressions the preferred editing experience?
-4. Should chart edits be shared by reference until explicitly duplicated?
-5. Should Imports and Filters eventually move under Settings, with contextual links retained?
+1. View → Widget → Dashboard, with queries inside Widgets.
+2. Home is the designated editable Dashboard, retaining native playback Widgets.
+3. A visual builder supports advanced expressions and ordinary edits without code.
+4. Widget edits are shared by reference until explicitly duplicated.
+5. Imports and Filters move under the usable Settings hub in Phase 10, with contextual links retained.
 
 ## Sources
 

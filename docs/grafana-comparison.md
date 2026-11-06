@@ -4,6 +4,12 @@ Status: architectural recommendation, based on source and documentation review o
 One application is required. Choosing Grafana means replacing Koito as the application.
 A separate Koito service feeding Grafana is outside this comparison.
 
+Decision after review: the user chose to continue developing Koito, including the
+complete requested Visualization system. The [development plan](development-plan.md)
+now assigns that work to Phases 9 through 11, followed by migration, final personal
+Filters, and deployment in Phases 12 through 14. The comparison below records the
+tradeoffs considered, rather than a requirement to reconsider Grafana before development.
+
 ## Recommendation
 
 Continue with Koito as the single application. Use an established visualization library for editable charts.
@@ -117,5 +123,6 @@ Do not reduce customization to a list of fixed chart components.
 If the native prototype requires rebuilding broad dashboard infrastructure before these examples work,
 reconsider replacing the application with Grafana plus the music plugin described above.
 Do not maintain both applications as the proposed product.
-Navigation and phase renumbering should follow the foundation decision and working prototype.
+The subsequent Koito decision establishes the foundation. Current phase numbering
+and planned navigation changes are defined in the development plan.
 This recommendation does not authorize deployment or changes to personal Filters.

@@ -1,16 +1,23 @@
 # Koito fork: development phases
 
-Updated November 5, 2026.
+Updated November 6, 2026.
 
 This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 through 7 are complete. Later phases are proposed
-work, not features that already exist. Specific matching thresholds, attribution
+Phases 1 through 8 are complete. The user has chosen to continue developing Koito
+as the single music and visualization application. Phases 9 through 14 below are
+planned work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
 defaults. There are no calendar estimates in this plan.
+
+The new feature area is called the **Visualization system**. Phases 9 through 11
+cover its foundation, public composition, statistics, and advanced outputs.
+The old Phase 9 becomes Phase 12. The old Phase 10 becomes Phase 14, with the
+personal filter redesign explicitly placed in Phase 13 immediately before it.
+Earlier implementation notes retain their historical phase references.
 
 The development order is **preserved imports first, then the first working
 Filters controls, then additional importers and rules together**. Supporting
@@ -41,6 +48,15 @@ without publishing those files.
 | Filter | One configurable instruction that interprets records or changes the view. |
 | View | The history, music metadata, collections, and statistics produced by the filters. |
 | Filters | The page where filters are managed, organized by the types below. |
+| Widget | A saved presentation with a data request, calculations, display, and exposed parameters. |
+| Dashboard | A saved arrangement of Widgets with placement and shared parameters. |
+| Preset | An editable starting configuration for a Filter, Widget, or Dashboard. |
+
+A chart is a graphical form of a Widget, rather than another saved object.
+Queries are internal data requests within Widgets initially. Home is the
+designated public Dashboard. Rewind is a recap Dashboard preset.
+The [vocabulary and navigation document](vocabulary-and-navigation.md) defines
+these boundaries and the planned placements in more detail.
 
 Use **filter** in the interface for each instruction. Existing code and older
 implementation notes use **rule** for the same instruction. These are not
@@ -69,7 +85,7 @@ can retain their own records while contributing to the same plays. Where a
 source cannot distinguish identical legitimate repeats from duplicated rows,
 retain the ambiguity rather than silently erasing occurrences.
 
-## 2. Rules and their types
+## 2. Filters and their types
 
 | Type | Subtypes | Examples |
 |---|---|---|
@@ -190,9 +206,13 @@ must remain attached to stable records or music identities across rebuilds.
 | 5 | Remaining Spotify exports, playlists, and Discogs | Complete |
 | 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | Complete |
 | 7 | Concert and gameplay data | Complete; see [Phase 7](phase-7.md) |
-| 8 | Complete live capture and remaining qualification/inclusion controls | After historical import behavior is established |
-| 9 | Full-dump migration, restore, and performance verification | After required importers and rules |
-| 10 | Local deployment rehearsal, then server deployment | After 9 |
+| 8 | Complete live capture and remaining qualification/inclusion controls | Complete; see [Phase 8](phase-8.md) |
+| 9 | Widgets and queries | Next; editable foundation using actual listening |
+| 10 | Dashboards, statistics, and Rewind | After 9; complete Last.fm Stats baseline |
+| 11 | Music exploration and exports | After the core primitives; LastWave refinements and remaining references |
+| 12 | Full-dump migration, restore, and performance verification | Former Phase 9; after feature coverage |
+| 13 | Personal filter redesign and final data review | After features and full-data verification |
+| 14 | Local deployment rehearsal, then server deployment | Former Phase 10; after final filter review |
 
 This is the working sequence. Importers that turn out to share most of their
 implementation can move earlier without changing the acceptance requirements.
@@ -650,18 +670,149 @@ consistently. This completes the capture portion of
 
 ### Checkpoint after Phase 8
 
-The [visualization system proposal](visualization-system-proposal.md) reviews the
-requested reference applications and proposes editable queries, charts, widgets,
-dashboards, and a richer Rewind. Its vocabulary and implementation sequence are
-under discussion. It does not authorize starting Phase 9 or replacing personal filters.
+The user chose Koito after the [Grafana comparison](grafana-comparison.md).
+The [visualization specification](visualization-system-proposal.md) supplies the
+reference inventory and technical direction. This plan supplies phase numbering
+and completion boundaries. The inventory remains the full acceptance scope,
+including all reviewed Last.fm Stats statistics and its richer Rewind.
 
-The user has additional features to address before Phase 9. Finish Phase 8,
-then review that feature list together before starting the full-dump migration.
-Keep the current personal filters during development. Rebuild the personal
-filter set as the last step before production deployment, after the requested
-features are available.
+Keep the current personal Filters and continuous live capture throughout development.
+Use isolated fixtures or a copied database for tests that change interpretation.
+Rebuild the personal filter set in Phase 13, after the requested features exist.
 
-## Phase 9: full-dump migration, backup, and performance
+## Phase 9: Widgets and queries
+
+**Outcome:** real listening can be explored through saved, editable Widgets that
+use Koito's existing visual style and shared expression vocabulary.
+
+**Status:** next development phase. This document update does not start implementation.
+
+### 9.1 Shared data and calculation contract
+
+- Define typed fields, relationships, row identities, units, unknown values,
+  timezone handling, parameter binding, and supported calculation order.
+- Reuse the existing expression operators, validation, and editor controls where
+  their meanings agree. Keep the six Filter types and their subtypes unchanged.
+- Start with the published View. Conditions within a Widget select its data.
+  Persistent Filters continue to determine the shared interpretation of evidence.
+- Implement server-side selection, date/entity grouping, count, distinct count,
+  sum, calculated fields, ordering, and bounded results for the initial examples.
+  More statistical operators follow in Phase 10 using the same contract.
+- Count distinct Plays when selecting overlapping Sources. Keep undated counts,
+  estimated dates, and duration coverage explicit. Do not convert missing values
+  into observed zeroes or invent dates for calendar charts.
+
+### 9.2 Working Widget editor
+
+- Evaluate an established declarative renderer, starting with Vega-Lite/Vega.
+  Record the choice against the working examples rather than building a renderer.
+- Provide saved definitions, validation, duplication, parameters, and editing
+  through a real admin interface. Ordinary edits must work without JSON or code.
+- Allow field/axis changes, measures, grouping, nested conditions, calculated
+  fields, sorting, chart form, and basic appearance within supported combinations.
+- Reuse expression controls from Filters. Keep query selection and graphical
+  configuration distinct from persistent changes to the View.
+- Supply editable time-series, calendar heatmap, and artist streamgraph presets.
+  Supply table and scalar displays over compatible results.
+- Preserve Koito's fonts, colors, spacing, cards, tooltips, and navigation patterns.
+  Keep brief field explanations in hover help. Preserve native music links.
+- Save stable music identifiers and route results to the existing artist, album,
+  track, or listening detail pages with the relevant selection.
+- Make authoring admin-only. Validate permissions on backend endpoints as well
+  as controls. Keep unpublished definitions and original evidence private.
+
+### 9.3 Query reuse and verification
+
+- Execute large calculations on the backend and return bounded results.
+- Cache calculations by published View revision, normalized query, parameters,
+  timezone, and relevant metadata/calculation versions. Graphical changes should
+  reuse results when they leave the calculation unchanged.
+- Use actual imported listening for the acceptance examples. Where test changes
+  are needed, verify invalidation against an isolated copy of the data.
+- Verify exact query outputs independently of screenshots. Check source overlap,
+  missing dates, estimated/undated evidence, changed matching, empty periods,
+  date boundaries, and save/reload behavior.
+- Measure cold queries, cached queries, render time, and View publication delay
+  separately. Record hardware and dataset size. Use measured problems to guide
+  early indexing and summaries. Broad performance hardening remains in Phase 12.
+
+**Done when:** the administrator can edit, save, reload, and duplicate each of
+the three presets using actual listening. A compatible query can appear in a
+different chart or table without another dedicated statistic component. Results
+and music links are correct, styling fits Koito, access checks pass, and cache
+reuse/invalidation have measured evidence. A written feasibility review identifies
+the additional reusable operators needed for the complete reference inventory.
+
+This phase establishes the working system. Full Dashboard composition, the full
+Last.fm Stats inventory, exact LastWave label placement, and designed exports
+remain assigned to the following phases.
+
+## Phase 10: Dashboards, statistics, and Rewind
+
+**Outcome:** the public site presents configurable music statistics through one
+Dashboard system, with Home and a substantially richer Rewind sharing Widgets.
+
+- Add saved Dashboard arrangements, Widget references, shared parameters,
+  publication, and admin editing. Allow independent duplication where desired.
+- Make Home the designated Dashboard, retaining now playing and Last Played.
+  Reuse Widgets on music detail pages with entity parameters supplied.
+- Add the remaining reusable analytical operators needed by the Last.fm Stats
+  inventory: windows, ranking, first occurrences, runs, gaps, sessions, distribution
+  statistics, diversity, comparisons, and result-bound narrative text.
+- Implement the complete reviewed Last.fm Stats inventory as editable presets.
+  Track every inventory row and adjustable option through an acceptance matrix.
+  This includes tables, lists, geography/genres, and animated rankings as well as charts.
+- Implement Rewind with totals, comparisons, discoveries, favorites, movers,
+  calendar activity, streaks/breaks, sessions/runs, and shareable output. Dashboard
+  and story presentation reuse the same definitions and calculations.
+- Define and test partial-period comparisons, coverage limits, ties, and sequence
+  boundaries. Keep observed and estimated listening distinguishable.
+- Store enrichment and acquisition dates through Sources. Opening a public page
+  must use stored results rather than fetch metadata separately for every item.
+- Expose only admin-selected viewing parameters publicly. Saving and publishing
+  remain admin-only. Check public query access independently of visible controls.
+- Implement the Settings hub and contextual editing links. Move Imports, Filters,
+  and the Widget library into admin Settings navigation as the hub becomes usable.
+  Preserve direct addresses. Avoid a second Statistics page duplicating Home.
+- Replace existing fixed charts only when equivalent reusable Widgets are verified.
+  Prepare common results in the background and deduplicate concurrent requests.
+
+**Done when:** Home, music details, and Rewind reuse the Widget system. Every
+Last.fm Stats inventory entry is implemented and checked against actual data or
+has an explicitly agreed scope change. Public viewing and admin authoring work
+in the browser, with consistent themes, useful drilldowns, and measured load times.
+
+## Phase 11: Music exploration and exports
+
+**Outcome:** the remaining requested visualization examples are editable
+compositions over the shared system, with reusable placement and export support.
+
+- Refine the streamgraph toward LastWave's artist/album/genre controls, labels,
+  interaction, and SVG/PNG output. Treat exact curved labels as renderer work,
+  while data selection and calculations remain shared.
+- Add Eras-style exploration using configurable bucketing, shares, smoothing,
+  thresholds, and interval segmentation.
+- Add album exploration by year, decade, and custom period. Verify the reference
+  application's interactive behavior before claiming exact feature parity.
+- Add artwork grids and color ordering, weighted tag clouds, receipt layouts,
+  iceberg tiers, and festival posters through reusable graphic operations.
+  The references are Rainbow Collage, Last.fm Tag Cloud, Receiptify, Iceberg,
+  and Instafest, as listed in the visualization specification.
+- Support editing the measures, conditions, weighting, thresholds, labels, ordering,
+  dimensions, and supported layout options in these presets.
+- Define external popularity separately from personal listening frequency.
+  Treat collections and playlists as their own inputs rather than implicit Plays.
+- Add image/vector/data exports as appropriate to each display. Reuse calculations,
+  theme bindings, stored artwork, and publication permissions.
+- Verify artwork failures, long labels, small screens, empty selections,
+  accessibility, export fidelity, and large result sets.
+
+**Done when:** every additional reference has verified coverage and editable
+presets, with reusable calculations and rendering operations. Remaining differences
+are documented and explicitly agreed. The application preserves Koito's visual
+style and keeps one authoring system across ordinary charts and designed outputs.
+
+## Phase 12: full-dump migration, backup, and performance
 
 **Outcome:** the complete collection of supported source data can be imported
 locally, explained, backed up, and rebuilt without relying on the old database
@@ -688,19 +839,46 @@ as an unquestioned source of truth.
   a server backup. Empty dvinyl directories and empty Floppy music tables do not
   require new source integrations.
 - Support a full backup containing source files, records, rules and their
-  versions, and manual changes. A database-only backup is insufficient.
+  versions, manual changes, Widget/Dashboard definitions, publication choices,
+  and required enrichment. A database-only backup is insufficient.
 - Restore into a new local directory and compare file hashes, raw payloads,
   record-to-play relationships, metadata, and relevant view results.
 - Test interrupted imports/rebuilds and recovery at realistic data sizes. Record
   import, rebuild, query time, memory, and disk use before setting targets.
 - Improve batching, indexing, and progress reporting where measured behavior
   requires it. Keep long operations inspectable without verbose UI prose.
+- Verify persistent query caches, summaries, invalidation, background preparation,
+  consistent View revisions, and bounded browser payloads against the full corpus.
+  Record cold/warm page loads, live publication delay, and rebuild recovery.
+  Treat near-instant common page loads as a measured acceptance target.
 
 **Done when:** every intended source file is accounted for, unexplained differences
 are recorded, repeats do not inflate the view, and a fresh restore reproduces
 the results from the preserved files/records/rules rather than cached totals.
 
-## Phase 10: deployment rehearsal and server rollout
+## Phase 13: personal Filters and final data review
+
+**Outcome:** the user's final Filter configuration is rebuilt using the completed
+features and verified against the complete imported history.
+
+- Review the existing personal Filters with the user and replace them with the
+  intended final set. Do this after feature development and full-data verification.
+- Review music/play matching, iTunes inference, shared-history attribution,
+  qualification, presentation, and inclusion with representative actual records.
+- Revisit field-specific source preferences using actual examples. A single
+  global Spotify-versus-Last.fm selector is insufficient for the available Sources.
+- Preserve original Files and Records. Compare affected identities, supporting
+  Records, dated/undated totals, and representative music pages.
+- Rebuild the View, invalidate and prepare analytical results, then review Home,
+  Rewind, and saved Widgets against that same published revision.
+- Verify backup/restore, live intake, and performance after the final changes.
+  Save the approved configuration and final acceptance results for rehearsal.
+
+**Done when:** the user has reviewed the final interpretation and representative
+results. The approved configuration is backed up, reproducible, and ready for
+deployment. Remaining work consists of rehearsal, routing, rollout, and checks.
+
+## Phase 14: deployment rehearsal and server rollout
 
 **Outcome:** the locally verified fork runs on the server with a tested way back.
 
@@ -757,9 +935,9 @@ or retaining a ZIP alone is not equivalent to reading its relevant records.
 | Setlist.fm | Original API/download records where recoverable; identified legacy concert records | 7 |
 | YARG/YARGfm | Score SQLite, song metadata, matching game/scrobble evidence | 7 |
 | Clone Hero | Documented score/cache binary versions | 7, after format verification |
-| Earlier projects | Needed normalized CSV/JSON/JSONL/SQLite; mappings, reviews, summaries, rule settings | 3/4/6/9, according to record meaning |
-| Backup containers and folder batches | ZIP, TAR.GZ, selected folder files; shared readers, nested-member links and size limits | ZIP foundation in 1; remaining bulk intake in 9 or earlier when needed |
-| Last.fm app PDF, scripts, settings, unknown files | Supporting-file preservation or direct unsupported result; no invented plays | 9 |
+| Earlier projects | Needed normalized CSV/JSON/JSONL/SQLite; mappings, reviews, summaries, rule settings | 3/4/6/12, according to record meaning |
+| Backup containers and folder batches | ZIP, TAR.GZ, selected folder files; shared readers, nested-member links and size limits | ZIP foundation in 1; remaining bulk intake in 12 or earlier when needed |
+| Last.fm app PDF, scripts, settings, unknown files | Supporting-file preservation or direct unsupported result; no invented plays | 12 |
 | Live submissions | Full accepted bodies and arbitrary fields, separate now-playing handling | 8 |
 
 ## 6. Linked issue coverage
@@ -772,7 +950,7 @@ has implemented them. Summaries were checked while writing this plan.
 | [#361: source metadata](https://github.com/gabehf/Koito/issues/361) | Preserve arbitrary input fields and optionally display source/field tags | Phase 1 starts file preservation; 4 adds optional display; 6 and 8 cover remaining history/live paths. |
 | [#360: edition grouping](https://github.com/gabehf/Koito/issues/360) | Opt-in bulk grouping of deluxe/remastered editions, including incoming metadata | Phase 4 regex/grouping rules with originals and exceptions preserved. |
 | [#359: case handling](https://github.com/gabehf/Koito/issues/359) | Configurable case-insensitive music grouping/matching | Phase 4 controls with independent original and displayed names. |
-| [#225: genres](https://github.com/gabehf/Koito/issues/225) | Genre assignments usable in charts | Phase 4 manual/source tags and chart filtering; later source imports supply more tags. |
+| [#225: genres](https://github.com/gabehf/Koito/issues/225) | Genre assignments usable in charts | Phase 4 manual/source tags; later imports supply more tags; Phases 9 through 11 add configurable charts and genre exploration. |
 | [#34: album distinctions](https://github.com/gabehf/Koito/issues/34) | Preserve which album a play came from even when recording identity matches | Phase 2 preserves record-level release information; 4 revises the catalog/view relationships. |
 
 ## 7. Checks before closing each phase
@@ -792,13 +970,20 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Phase 4 is complete. See [the Phase 4 notes](phase-4.md) and
-[requirement audit](phase-4-audit.md) for implementation and verification.
+Phases 1 through 8 are complete. Start the implementation work with Phase 9,
+**Widgets and queries**, when the user invokes the next goal. The suggested
+goal statement is:
 
-Phase 5 is complete. See [its notes](phase-5.md) and [closing audit](phase-5-audit.md).
-Phase 6 is complete. See [its notes](phase-6.md) and [closing audit](phase-6-audit.md).
-Phase 7 covers concerts, gameplay, and their reconciliation with the preserved history.
+> Complete Phase 9, Widgets and queries, in docs/development-plan.md. Build the
+> shared query foundation and an admin Widget editor using an established chart
+> library and Koito's existing visual style. Use actual imported listening to
+> deliver saved, editable time-series, calendar heatmap, and artist streamgraph
+> presets, plus compatible table and scalar displays. Reuse the Filter expression
+> vocabulary. Support field, measure, grouping, condition, calculation, and chart
+> edits without requiring code. Verify results, music links, save/reload,
+> permissions, cache reuse/invalidation, and measured performance. Keep current
+> personal Filters and live capture intact. Commit and push the work, document
+> acceptance evidence, and stop before Phase 10 or deployment.
 
-Field-specific source preference also needs concrete examples before controls
-return to Filters. Keep original music identities and source album associations
-available throughout the catalog redesign.
+Phase 9's full acceptance criteria above define completion. The next goal is
+implementation, not another proposal or a screenshot-only prototype.
