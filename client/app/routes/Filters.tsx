@@ -168,11 +168,11 @@ export default function Filters() {
   const dirty = !!saved && !!draft && JSON.stringify(saved.current.config) !== JSON.stringify(draft);
 
   if (recordID) return <Navigate replace to={`/imports?record=${encodeURIComponent(recordID)}`} />;
-  if (user?.role !== "admin") return <main className="p-6"><h1>Filters</h1><p>Administrator login required.</p></main>;
+  if (user?.role !== "admin") return <main className="w-full max-w-6xl p-4 sm:p-8"><h1>Filters</h1><p>Administrator login required.</p></main>;
 
-  return <main className="w-full max-w-4xl space-y-8 p-4 sm:p-8">
+  return <main className="w-full max-w-6xl space-y-6 p-4 sm:p-8">
     <title>Filters | Koito</title>
-    <header className="flex flex-wrap items-center justify-between gap-4">
+    <header className="flex flex-wrap items-start justify-between gap-4">
       <h1>Filters</h1>
       <div className="flex items-center gap-3">
         {dirty && <button type="button" className="px-2 py-2 text-(--color-fg-secondary) hover:underline disabled:opacity-50" disabled={saving} onClick={() => { setDraft(structuredClone(saved!.current.config)); setMessage(""); setError(""); }}>Discard</button>}
