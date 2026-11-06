@@ -216,7 +216,11 @@ API retention removes older rows. The original server destinations remain active
 
 Further actual listening arrived during validation. The latest completed captures
 were imported with overlap, including changed source rows as separate evidence.
-The catch-up view rebuild is in progress. This batch does not change saved filters.
+The catch-up rebuild completed at 20:50 UTC in 700 seconds. It published 265,502
+plays from 1,107,949 records with zero collisions. Saved filter version 9 remains
+selected. Every row in the latest complete Last.fm capture (223 rows) and
+Multi-Scrobbler capture (1,309 rows) is present in the working records. All 1,440
+registered original files passed their hash checks, covering 3,621,067,710 bytes.
 
 ## Acceptance audit
 
