@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const personalEvidenceRevision = 1
+
 func publishPersonalEvidence(ctx context.Context, tx *sql.Tx, plan matchPlan, config RuleConfig, versionID int64) error {
 	// Delete child links in bulk before parent rows to keep large rebuilds linear.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM source_personal_evidence_music`); err != nil {
@@ -15,6 +17,10 @@ func publishPersonalEvidence(ctx context.Context, tx *sql.Tx, plan matchPlan, co
 	if _, err := tx.ExecContext(ctx, `DELETE FROM source_personal_evidence`); err != nil {
 		return err
 	}
+	return insertPersonalEvidence(ctx, tx, plan, config, versionID)
+}
+
+func insertPersonalEvidence(ctx context.Context, tx *sql.Tx, plan matchPlan, config RuleConfig, versionID int64) error {
 	index := buildPersonalEvidence(plan, config)
 	entries, err := tx.PrepareContext(ctx, `INSERT INTO source_personal_evidence(play_key,record_id,details_json) VALUES(?,?,?) ON CONFLICT DO NOTHING`)
 	if err != nil {
@@ -52,7 +58,7 @@ func publishPersonalEvidence(ctx context.Context, tx *sql.Tx, plan matchPlan, co
 			}
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO source_personal_evidence_state(id,version_id) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version_id=excluded.version_id`, versionID)
+	_, err = tx.ExecContext(ctx, `INSERT INTO source_personal_evidence_state(id,version_id,revision) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET version_id=excluded.version_id,revision=excluded.revision`, versionID, personalEvidenceRevision)
 	return err
 }
 

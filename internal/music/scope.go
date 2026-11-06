@@ -253,7 +253,7 @@ func ScopeItems(ctx context.Context, db Database, trackID int64) ([]ScopeItem, e
 			addMember(historyKeys[item.ID], item.ID)
 		}
 	}
-	library, err := CatalogLibraryEnvironment(ctx, db)
+	library, err := catalogLibraryEnvironment(ctx, db, trackID)
 	if err != nil {
 		return nil, err
 	}

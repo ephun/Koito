@@ -110,7 +110,13 @@ func ScopePlays(ctx context.Context, db Database, trackID int64) ([]ScopePlay, e
 	if len(wanted) == 0 {
 		return plays, nil
 	}
-	rows, err = db.QueryContext(ctx, `SELECT play_key,record_id FROM source_interpretations WHERE play_key<>'' AND policy='filters-v1' ORDER BY play_key,record_id`)
+	interpretations := `SELECT play_key,record_id FROM source_interpretations WHERE play_key<>'' AND policy='filters-v1' ORDER BY play_key,record_id`
+	var interpretationArgs []any
+	if trackID != 0 {
+		interpretations = `SELECT i.play_key,i.record_id FROM (SELECT DISTINCT play_key FROM listens WHERE track_id=? AND play_key<>'') p CROSS JOIN source_interpretations i ON i.play_key=p.play_key AND i.policy='filters-v1' ORDER BY i.play_key,i.record_id`
+		interpretationArgs = []any{trackID}
+	}
+	rows, err = db.QueryContext(ctx, interpretations, interpretationArgs...)
 	if err != nil {
 		return nil, err
 	}

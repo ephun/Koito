@@ -291,7 +291,14 @@ func (s *Store) ProcessLive(ctx context.Context) error {
 		completed = completed || request.ListenType != "playing_now" && unpublished
 	}
 	if completed {
-		if _, err = s.Rebuild(ctx); err != nil {
+		incremental, updateErr := s.tryIncrementalLive(ctx)
+		if updateErr != nil {
+			return updateErr
+		}
+		if !incremental {
+			_, err = s.Rebuild(ctx)
+		}
+		if err != nil {
 			return err
 		}
 	} else {

@@ -25,10 +25,21 @@ func EmptyLibraryEnvironment() filters.Env {
 // Load once for catalog filtering. Membership links span the shared track
 // history while album ownership remains attached to its release.
 func CatalogLibraryEnvironment(ctx context.Context, db Database) (map[int64]filters.Env, error) {
-	rows, err := db.QueryContext(ctx, `SELECT t.id,m.kind,m.name,m.record_id FROM source_music_states m JOIN tracks t ON t.id=m.track_id
- UNION SELECT t.track_id,m.kind,m.name,m.record_id FROM source_music_states m JOIN track_histories h ON h.track_id=m.track_id JOIN track_histories t ON t.music_track_id=h.music_track_id
- UNION SELECT t.id,m.kind,m.name,m.record_id FROM source_music_states m JOIN tracks t ON t.release_id=m.release_id WHERE m.track_id IS NULL
- ORDER BY 1,4`)
+	return catalogLibraryEnvironment(ctx, db, 0)
+}
+
+func catalogLibraryEnvironment(ctx context.Context, db Database, trackID int64) (map[int64]filters.Env, error) {
+	first := `SELECT t.id,m.kind,m.name,m.record_id FROM source_music_states m JOIN tracks t ON t.id=m.track_id`
+	second := `SELECT t.track_id,m.kind,m.name,m.record_id FROM source_music_states m JOIN track_histories h ON h.track_id=m.track_id JOIN track_histories t ON t.music_track_id=h.music_track_id`
+	third := `SELECT t.id,m.kind,m.name,m.record_id FROM source_music_states m JOIN tracks t ON t.release_id=m.release_id WHERE m.track_id IS NULL`
+	var args []any
+	if trackID != 0 {
+		first += ` WHERE t.id=?`
+		second += ` WHERE t.track_id=?`
+		third += ` AND t.id=?`
+		args = []any{trackID, trackID, trackID}
+	}
+	rows, err := db.QueryContext(ctx, first+` UNION `+second+` UNION `+third+` ORDER BY 1,4`, args...)
 	if err != nil {
 		return nil, err
 	}

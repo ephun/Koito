@@ -85,11 +85,18 @@ func inspectionGameCatalog(ctx context.Context, reader sqlReader, records []matc
 		return err
 	}
 	all := append([]matchingRecord{}, records...)
+	included := map[int64]bool{}
+	for _, record := range records {
+		included[record.ID] = true
+	}
 	for rows.Next() {
 		var r matchingRecord
 		if err = rows.Scan(&r.ID, &r.SourceID, &r.FileHash, &r.Parser, &r.Payload); err != nil {
 			rows.Close()
 			return err
+		}
+		if included[r.ID] {
+			continue
 		}
 		r.Service = "yarg"
 		if r.Parser == CloneCache {

@@ -73,6 +73,10 @@ type matchPlan struct {
 }
 
 func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig, extra ...RuleConfig) ([]matchingRecord, error) {
+	return loadMatchingRecordsWhere(ctx, reader, config, "", nil, extra...)
+}
+
+func loadMatchingRecordsWhere(ctx context.Context, reader sqlReader, config RuleConfig, where string, args []any, extra ...RuleConfig) ([]matchingRecord, error) {
 	if err := prepareValidityPrograms(config); err != nil {
 		return nil, err
 	}
@@ -104,7 +108,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err != nil {
 		return nil, err
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id,r.kind FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
+	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id,r.kind FROM source_records r JOIN source_accounts a ON a.id=r.source_id `+where+` ORDER BY r.id`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +148,11 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err = attachRecordMemberships(ctx, reader, out); err != nil {
 		return nil, err
 	}
-	attachGameCatalog(out)
+	if where == "" {
+		attachGameCatalog(out)
+	} else if err = inspectionGameCatalog(ctx, reader, out); err != nil {
+		return nil, err
+	}
 	for i := range out {
 		r := &out[i]
 		interpretNormalizedRecord(r, config)
@@ -233,6 +241,15 @@ func pairKey(a, b int64) [2]int64 {
 		a, b = b, a
 	}
 	return [2]int64{a, b}
+}
+
+func sourceExactKey(r matchingRecord) string {
+	identity := []string{r.Values.Artist, r.Values.Title, r.Values.Album, r.Values.RecordingID}
+	if r.Values.URI != "" {
+		identity = []string{r.Values.URI, r.Values.RecordingID}
+	}
+	raw, _ := json.Marshal([]any{r.SourceID, r.Values.Time.UTC().Format(time.RFC3339Nano), r.Values.Precision, identity})
+	return string(raw)
 }
 
 // Use the same Unicode equivalence as EqualFold when building candidate keys.
@@ -426,12 +443,7 @@ func calculateMatches(ctx context.Context, records []matchingRecord, config Rule
 			if r.Values.Reason != "counted" {
 				continue
 			}
-			identity := []string{r.Values.Artist, r.Values.Title, r.Values.Album, r.Values.RecordingID}
-			if r.Values.URI != "" {
-				identity = []string{r.Values.URI, r.Values.RecordingID}
-			}
-			raw, _ := json.Marshal([]any{r.SourceID, r.Values.Time.UTC().Format(time.RFC3339Nano), r.Values.Precision, identity})
-			key := string(raw)
+			key := sourceExactKey(r)
 			exact[key] = append(exact[key], i)
 		}
 		exactKeys := make([]string, 0, len(exact))

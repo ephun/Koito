@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -196,7 +197,12 @@ type personalEvidence struct {
 
 func evidenceMusicKeys(v recordValues, rule Rule) []string {
 	identity := comparisonMusic(v, rule)
-	out := []string{"text:" + identity.Artist + "\x00" + identity.Title}
+	out := []string{}
+	// A delivery with absent names can still support its parent event. It
+	// cannot make every other unnamed delivery evidence for the same music.
+	if strings.TrimSpace(v.Artist) != "" && strings.TrimSpace(v.Title) != "" || strings.TrimSpace(identity.Artist) != "" && strings.TrimSpace(identity.Title) != "" {
+		out = append(out, "text:"+identity.Artist+"\x00"+identity.Title)
+	}
 	if v.URI != "" {
 		out = append(out, "uri:"+v.URI)
 	}

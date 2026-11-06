@@ -181,26 +181,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			return result, err
 		}
 	}
-	contexts := map[string]*performanceValues{}
-	for i := range plan.Records {
-		r := &plan.Records[i]
-		if key := plan.Keys[r.ID]; key != "" && r.Values.Performance != nil {
-			if previous := contexts[key]; previous == nil || r.Values.Performance.ID != "" && (previous.ID == "" || previous.ID == r.Values.Performance.ID) {
-				contexts[key] = r.Values.Performance
-			}
-		} else if key != "" && r.Values.TimeEstimated && contexts[key] == nil {
-			contexts[key] = &performanceValues{Kind: "unknown", TimeEstimated: true}
-		}
+	if err = publishPlayContexts(ctx, tx, plan); err != nil {
+		return result, err
 	}
-	for key, performance := range contexts {
-		raw, err := json.Marshal(performance)
-		if err != nil {
-			return result, err
-		}
-		if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_context(play_key,context_json) VALUES(?,?)`, key, string(raw)); err != nil {
-			return result, err
-		}
-	}
+
 	for _, r := range plan.Records {
 		if key := plan.Keys[r.ID]; key != "" {
 			if _, err := statements.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, key, r.ID); err != nil {
@@ -394,6 +378,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	}
 	stage("Inclusion")
 	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
+		return result, err
+	}
+	stage("Record dependencies")
+	if err = publishRecordDependencies(ctx, tx, plan, config, versionID); err != nil {
 		return result, err
 	}
 	if _, err = statements.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=? WHERE status='stored'`, versionID); err != nil {
