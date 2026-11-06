@@ -121,6 +121,14 @@ func (s *Sqlite) GetAlbumGroup(ctx context.Context, id int32) (*models.Album, er
 	if err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount),0),COALESCE(MIN(listened_at),0) FROM album_report_counts WHERE album_group_id=?`, id).Scan(&album.ListenCount, &album.FirstListen); err != nil {
 		return nil, err
 	}
+	var firstKey string
+	if err = s.db.QueryRowContext(ctx, `SELECT play_key FROM album_report_events WHERE album_group_id=? ORDER BY listened_at,play_key LIMIT 1`, id).Scan(&firstKey); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	album.FirstListenDate, err = s.firstListenCalendarDate(ctx, firstKey)
+	if err != nil {
+		return nil, err
+	}
 	if err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(t.duration),0) FROM album_report_events l JOIN tracks t ON t.id=l.track_id WHERE l.album_group_id=?`, id).Scan(&album.TimeListened); err != nil {
 		return nil, err
 	}

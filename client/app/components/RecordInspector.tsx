@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { filterRequest, sourceName, type FilterState } from "~/utils/filterRules";
 import FieldHelp from "./FieldHelp";
+import { calendarDate } from "~/utils/dates";
+import { formatJSON } from "~/utils/json";
 
 type SourceRecord = {
   id: number;
@@ -12,7 +14,7 @@ type SourceRecord = {
   reason: string;
   time: string;
   time_basis: string;
-  values: { title: string; artist: string; album: string; time_text: string; time_meaning: string; reason?: string };
+  values: { title: string; artist: string; album: string; origin?: string; time_text: string; time_meaning: string; reason?: string; performance?: { kind?: string; legacy?: boolean; venue?: string; performer?: string; cover_artist?: string; player_names?: string[]; date_only?: boolean; local_date?: string } };
 };
 type Attribution = { listener: string; basis: string; share_percent?: number };
 type Contribution = {
@@ -128,15 +130,19 @@ export default function RecordInspector({ id, onClose, onSaved }: { id: number; 
 }
 
 function RecordDetails({ record }: { record: SourceRecord }) {
-  let payload;
-  try { payload = JSON.stringify(JSON.parse(record.payload), null, 2); } catch { payload = record.payload; }
+  const payload = formatJSON(record.payload);
   return <details className="rounded border border-(--color-bg-tertiary) p-3">
     <summary className="cursor-pointer break-words">#{record.id} · {sourceName(record.service)}{record.values.artist && ` · ${record.values.artist}`}{record.values.title && ` · ${record.values.title}`}</summary>
     <dl className="mt-3 grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
       <dt>Album</dt><dd>{record.values.album || "Unknown"}</dd>
       <dt>Result</dt><dd>{record.reason.replaceAll(";", ".")}</dd>
-      {!!record.values.time_text && <><dt>Original time</dt><dd>{record.values.time_text} · {record.values.time_meaning}</dd></>}
-      {!record.time.startsWith("0001-") && <><dt>Used time</dt><dd>{record.time.replace("T", " ").replace("Z", "")} · {record.time_basis}</dd></>}
+      {record.values.performance?.kind && <><dt>Context</dt><dd>{record.values.performance.kind === "gameplay" ? "Gameplay" : record.values.performance.kind === "concert" ? "Concert" : "Unspecified"}</dd></>}
+      {record.values.performance?.legacy && <><dt>Source record</dt><dd>Recovered from earlier history</dd></>}
+      {record.values.performance?.venue && <><dt>Venue</dt><dd>{record.values.performance.venue}</dd></>}
+      {record.values.performance?.cover_artist && <><dt>Original artist of cover</dt><dd>{record.values.performance.cover_artist}</dd></>}
+      {!!record.values.performance?.player_names?.length && <><dt>Players</dt><dd>{record.values.performance.player_names.join(", ")}</dd></>}
+      {!!record.values.time_text && <><dt>{record.values.time_meaning === "date" ? record.values.performance?.legacy ? "Recovered date" : "Original date" : "Original time"}</dt><dd>{record.values.time_text} · {record.values.time_meaning}</dd></>}
+      {!record.time.startsWith("0001-") && <><dt>{record.values.performance?.date_only ? "Used date" : "Used time"}</dt><dd>{record.values.performance?.date_only && record.values.performance.local_date ? calendarDate(record.values.performance.local_date) : record.time.replace("T", " ").replace("Z", "")} · {record.time_basis}</dd></>}
       <dt>Position</dt><dd>Row {record.ordinal}</dd>
     </dl>
     <pre className="mt-3 max-h-80 overflow-auto text-sm">{payload}</pre>

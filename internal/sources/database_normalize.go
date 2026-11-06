@@ -30,6 +30,9 @@ func numeric(value any) int64 {
 }
 
 func normalizeDatabase(raw json.RawMessage, parser, zone string) recordValues {
+	if databaseFormat(parser) == YARGDB {
+		return normalizeYARG(raw, zone)
+	}
 	var row databaseRecord
 	if json.Unmarshal(raw, &row) != nil {
 		return recordValues{Reason: "invalid fields"}
@@ -67,6 +70,9 @@ func normalizeDatabase(raw json.RawMessage, parser, zone string) recordValues {
 		v = normalizeMultiPlay(row.Fields["play"])
 		v.Forwarder = "multi-scrobbler"
 		component := object(row.Context["component"])
+		if valueText(component["mode"]) == "source" {
+			v.SourceInput = valueText(component["name"])
+		}
 		uid := valueText(row.Fields["uid"])
 		if uid != "" {
 			v.EventID = "multi:" + uid
@@ -153,6 +159,9 @@ func normalizeMultiPlay(value any) recordValues {
 	}
 	if v.Reason == "counted" && (v.Title == "" || v.Artist == "") {
 		v.Reason = "not an identified music track"
+	}
+	if strings.EqualFold(v.OriginalService, "yargfm") || strings.EqualFold(v.OriginalService, "yarg") || strings.EqualFold(v.OriginalService, "clonehero") || strings.EqualFold(v.OriginalService, "clone hero") {
+		v.Performance = &performanceValues{Kind: "gameplay", PlayerIDs: []string{}, PlayerNames: []string{}}
 	}
 	return v
 }

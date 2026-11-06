@@ -35,7 +35,20 @@ func (s *Sqlite) SaveSession(ctx context.Context, userID int32, expiresAt time.T
 }
 
 func (s *Sqlite) RefreshSession(ctx context.Context, sessionId uuid.UUID, expiresAt time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	// Authentication reads should not advance SQLite's WAL on every request.
+	// Renew at most daily so a concurrent view calculation keeps its snapshot.
+	var current int64
+	err := s.db.QueryRowContext(ctx, `SELECT expires_at FROM sessions WHERE id=?`, sessionId.String()).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if target := expiresAt.Unix(); target >= current && target-current < int64((24*time.Hour)/time.Second) {
+		return nil
+	}
+	_, err = s.db.ExecContext(ctx,
 		`UPDATE sessions SET expires_at = ? WHERE id = ?`,
 		expiresAt.Unix(), sessionId.String())
 	return err

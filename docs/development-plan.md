@@ -1,12 +1,12 @@
 # Koito fork: development phases
 
-Updated November 4, 2026.
+Updated November 5, 2026.
 
 This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
 
-Phases 1 through 4 are complete. Later phases below are proposed
+Phases 1 through 7 are complete. Later phases are proposed
 work, not features that already exist. Specific matching thresholds, attribution
 heuristics, and display preferences still need examples and decisions as their
 phases begin. Old analysis scripts supply examples, not automatically approved
@@ -186,10 +186,10 @@ must remain attached to stable records or music identities across rebuilds.
 | 1 | Preserved Spotify imports and a rebuildable view | Complete |
 | 2 | Last.fm imports and the first matching rules in Filters | Complete |
 | 3 | iTunes counts, inference, and shared-history attribution | Complete |
-| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | In progress; track histories, Naming, attribution, Count programs, imported fields implemented |
-| 5 | Remaining Spotify exports, playlists, and Discogs | After 3-4 |
-| 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | After 2 and the source distinctions in 4 |
-| 7 | Concert and gameplay data | After 3-4; uses 6 where relevant |
+| 4 | Music identity, album distinctions, bulk cleanup, and genre tags | Complete |
+| 5 | Remaining Spotify exports, playlists, and Discogs | Complete |
+| 6 | Navidrome, Multi-Scrobbler, and remaining legacy history formats | Complete |
+| 7 | Concert and gameplay data | Complete; see [Phase 7](phase-7.md) |
 | 8 | Complete live capture and remaining qualification/inclusion controls | After historical import behavior is established |
 | 9 | Full-dump migration, restore, and performance verification | After required importers and rules |
 | 10 | Local deployment rehearsal, then server deployment | After 9 |
@@ -567,6 +567,9 @@ counts do not duplicate event records; unknown fields survive every supported
 path. Configured sources with no records are not reported as captured history.
 
 ## Phase 7: concerts and gameplay
+
+**Status: complete.** Implementation, verified formats, actual-data results,
+and the closing requirements audit are documented in [Phase 7](phase-7.md).
 
 **Outcome:** concert attendance and game performances can contribute through
 explicit rules while remaining distinguishable from recorded audio playback.

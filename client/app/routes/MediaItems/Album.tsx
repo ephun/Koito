@@ -34,6 +34,7 @@ export default function Album() {
       timeListened={album.time_listened}
       listenCount={album.listen_count}
       firstListen={album.first_listen}
+      firstListenDate={album.first_listen_date}
       imgItemId={album.id}
       metadata={<MusicStates kind="album" id={album.id} />}
       subContent={

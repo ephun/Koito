@@ -52,7 +52,7 @@ export type SourceField = { path: string; type: string; label: string };
 export type BlockSchema = { pair_fields?: boolean; help?: Record<string, string>; snapshot_fields?: boolean; item_fields?: Record<string, string>; item_labels?: Record<string, string>; evidence_fields?: boolean; raw_fields?: boolean; labels?: Record<string, string>; fields: Record<string, string>; targets: Record<string, string>; bounds?: Record<string, { min?: number; max?: number; whole?: boolean }>; choices?: Record<string, { label: string; value: string }[]> };
 
 export function sourceName(service: string, label?: string) {
-  const name = ({ spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes", discogs: "Discogs", navidrome: "Navidrome", "multi-scrobbler": "Multi-Scrobbler", listenbrainz: "ListenBrainz", maloja: "Maloja", koito: "Koito", legacy: "Earlier exports", database: "Database" } as Record<string, string>)[service] || service;
+  const name = ({ yarg: "YARG", yargfm: "YARGfm", clonehero: "Clone Hero", setlistfm: "Setlist.fm", spotify: "Spotify", lastfm: "Last.fm", itunes: "iTunes", discogs: "Discogs", navidrome: "Navidrome", "multi-scrobbler": "Multi-Scrobbler", listenbrainz: "ListenBrainz", maloja: "Maloja", koito: "Koito", legacy: "Earlier exports", database: "Database" } as Record<string, string>)[service] || service;
   return label && !label.startsWith("user:") ? `${name} (${label})` : name;
 }
 

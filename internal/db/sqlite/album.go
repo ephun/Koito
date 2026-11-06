@@ -100,13 +100,18 @@ func (s *Sqlite) getAlbumByID(ctx context.Context, id int32) (*models.Album, err
 	ret.TimeListened = timeListened
 
 	var firstListenUnix int64
+	var firstListenKey string
 	err = s.db.QueryRowContext(ctx, `
-		SELECT l.listened_at FROM displayed_listens l JOIN tracks t ON l.track_id = t.id
-		WHERE t.release_id = ? ORDER BY l.listened_at ASC LIMIT 1`, id).Scan(&firstListenUnix)
+		SELECT l.listened_at,l.play_key FROM displayed_listens l JOIN tracks t ON l.track_id = t.id
+		WHERE t.release_id = ? ORDER BY l.listened_at ASC,l.play_key ASC LIMIT 1`, id).Scan(&firstListenUnix, &firstListenKey)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("getAlbumByID: first listen: %w", err)
 	}
 	ret.FirstListen = firstListenUnix
+	ret.FirstListenDate, err = s.firstListenCalendarDate(ctx, firstListenKey)
+	if err != nil {
+		return nil, err
+	}
 
 	var rank int64
 	s.db.QueryRowContext(ctx, countedListeningQuery(`

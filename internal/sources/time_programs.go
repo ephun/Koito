@@ -15,12 +15,22 @@ func timeSchema() filters.Schema {
 	s.Fields["record.played_ms"] = filters.Number
 	s.Targets = map[string]filters.Type{"time.zone": filters.Text, "time.spotify_basis": filters.Text, "time.offset": filters.Duration, "time.last_played": filters.Boolean, "time.estimate_dates": filters.Boolean}
 	s.Choices = map[string][]filters.Choice{"time.spotify_basis": {{Label: "Reported end", Value: "end"}, {Label: "Estimated start", Value: "estimated_start"}}}
-	s.Labels = map[string]string{"original.time_text": "Original timestamp text", "record.played_ms": "Played milliseconds", "time.zone": "Last.fm timezone", "time.spotify_basis": "Spotify timestamps", "time.offset": "Time adjustment", "time.last_played": "Include last known play", "time.estimate_dates": "Estimate other play dates"}
-	s.Help = map[string]string{"time.zone": "Interpret local Last.fm timestamps using this timezone.", "time.spotify_basis": "Estimate starts using the reported end and played duration.", "time.offset": "Add this duration to the interpreted play time.", "time.last_played": "Use the last-played date recorded in the iTunes library export.", "time.estimate_dates": "Estimate missing play dates within the time range supported by the iTunes library export."}
+	for field, label := range map[string]string{"original.time_text": "Original timestamp text", "record.played_ms": "Played milliseconds", "time.zone": "Timezone", "time.spotify_basis": "Spotify timestamps", "time.offset": "Time adjustment", "time.last_played": "Include last known play", "time.estimate_dates": "Estimate other play dates"} {
+		s.Labels[field] = label
+	}
+	for field, help := range map[string]string{"time.zone": "Interpret local timestamps using this timezone.", "time.spotify_basis": "Estimate starts using the reported end and played duration.", "time.offset": "Add this duration to the interpreted play time.", "time.last_played": "Use the last-played date recorded in the iTunes library export.", "time.estimate_dates": "Estimate missing play dates within the time range supported by the iTunes library export."} {
+		s.Help[field] = help
+	}
 	s.Targets["time.meaning"] = filters.Text
-	s.Choices["time.meaning"] = []filters.Choice{{Label: "Playback start", Value: "start"}, {Label: "Playback end", Value: "end"}, {Label: "Submission", Value: "submission"}, {Label: "Unknown", Value: "unknown"}}
+	s.Choices["time.meaning"] = []filters.Choice{{Label: "Playback start", Value: "start"}, {Label: "Playback end", Value: "end"}, {Label: "Submission", Value: "submission"}, {Label: "Game result", Value: "result"}, {Label: "Unknown", Value: "unknown"}}
 	s.Labels["time.meaning"] = "Timestamp meaning"
 	s.Help["time.meaning"] = "Choose what this timestamp represents before comparing it with another source."
+	s.Targets["time.at"] = filters.Date
+	s.Targets["time.precision"] = filters.Duration
+	s.Labels["time.precision"] = "Timestamp precision"
+	s.Help["time.precision"] = "Choose the time range represented by a source timestamp."
+	s.Labels["time.at"] = "Estimated play time"
+	s.Help["time.at"] = "Assign an estimated time using an expression or a known reference."
 	return s
 }
 
@@ -162,7 +172,7 @@ func resolveTimePrograms(ctx context.Context, config RuleConfig, r matchingRecor
 		if targets == nil {
 			targets = programTargets(program)
 		}
-		relevant := targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"]
+		relevant := targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"] || targets["time.at"] || targets["time.precision"]
 		if library {
 			relevant = targets["time.last_played"] || targets["time.estimate_dates"]
 		}
@@ -201,6 +211,11 @@ func resolveTimePrograms(ctx context.Context, config RuleConfig, r matchingRecor
 		if value, exists := result.Values["time.offset"]; exists {
 			if _, valid := value.Span(); !valid {
 				result.Issues = append(result.Issues, filters.Issue{Path: "time.offset", Reason: "This duration exceeds timestamp precision or range."})
+			}
+		}
+		if value, exists := result.Values["time.precision"]; exists {
+			if span, valid := value.Span(); !valid || span <= 0 || span > 365*24*time.Hour {
+				result.Issues = append(result.Issues, filters.Issue{Path: "time.precision", Reason: "Choose a precision greater than zero and at most 365 days."})
 			}
 		}
 		if len(result.Issues) > 0 {
@@ -262,7 +277,7 @@ func hasObservedTimePrograms(config RuleConfig) bool {
 			if targets == nil {
 				targets = programTargets(r.Program)
 			}
-			if targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"] {
+			if targets["time.zone"] || targets["time.spotify_basis"] || targets["time.offset"] || targets["time.meaning"] || targets["time.at"] || targets["time.precision"] {
 				return true
 			}
 		}
@@ -281,13 +296,18 @@ func applyObservedTime(r *matchingRecord, config RuleConfig) string {
 	}
 	from, until := recordInterval(*r)
 	resolved := resolveTimePrograms(context.Background(), config, *r, from, until, false)
-	r.TimeIssues = resolved.Issues
 	if value, exists := resolved.Values["time.zone"]; exists {
 		zone, _ := value.Text()
 		r.Values = normalizeRecord([]byte(r.Payload), r.Parser, zone)
 		r.Start = r.Values.Time
 		r.Basis = r.Values.TimeMeaning
+		applyContextPrograms(r, config)
+		// Date expressions require an interpreted instant. Resolve them again
+		// after the timezone has supplied that instant for local source clocks.
+		from, until = recordInterval(*r)
+		resolved = resolveTimePrograms(context.Background(), config, *r, from, until, false)
 	}
+	r.TimeIssues = resolved.Issues
 	if value, exists := resolved.Values["time.spotify_basis"]; exists {
 		basis, _ = value.Text()
 	}
@@ -295,18 +315,38 @@ func applyObservedTime(r *matchingRecord, config RuleConfig) string {
 		r.Values = normalizeRecord([]byte(r.Payload), r.Parser, "")
 		r.Start = r.Values.Time
 		r.Basis = r.Values.TimeMeaning
+		applyContextPrograms(r, config)
 	}
 	if value, exists := resolved.Values["time.offset"]; exists {
 		if span, valid := value.Span(); valid {
 			r.timeOffset = &span
 		}
 	}
+	if value, exists := resolved.Values["time.at"]; exists {
+		if at, valid := value.Time(); valid && at.Unix() > 0 && at.Year() <= 9999 {
+			r.Start, r.Basis = at, "estimated start"
+			r.Values.TimeEstimated = true
+			if r.Values.Performance != nil {
+				r.Values.Performance.DateOnly = false
+				r.Values.Performance.TimeEstimated = true
+				if r.Values.Performance.Kind == "concert" && (r.Values.Reason == "unresolved concert date" || r.Values.Reason == "invalid concert date") && r.Values.Title != "" && r.Values.Artist != "" {
+					r.Values.Reason = "counted"
+				}
+			}
+			r.Values.Precision = int64(time.Second)
+		}
+	}
 	if value, exists := resolved.Values["time.meaning"]; exists {
 		if meaning, ok := value.Text(); ok {
 			switch meaning {
-			case "start", "end", "submission", "unknown":
+			case "start", "end", "submission", "result", "unknown":
 				r.Basis = meaning
 			}
+		}
+	}
+	if value, exists := resolved.Values["time.precision"]; exists {
+		if span, valid := value.Span(); valid && span > 0 && span <= 365*24*time.Hour {
+			r.Values.Precision = int64(span)
 		}
 	}
 	return basis

@@ -21,6 +21,7 @@ const MultiDB = "multi-scrobbler-sqlite-v1"
 const NormalizedDB = "normalized-history-sqlite-v1"
 const KoitoDB = "koito-sqlite-v1"
 const EmptyDB = "empty-sqlite-v1"
+const YARGDB = "yarg-sqlite-v1"
 
 type databaseRecord struct {
 	Kind    string         `json:"kind"`
@@ -31,7 +32,7 @@ type databaseRecord struct {
 }
 
 func databaseFormat(parser string) string {
-	for _, family := range []string{NavidromeDB, MultiDB, NormalizedDB, KoitoDB, LedgerDB, EmptyDB} {
+	for _, family := range []string{NavidromeDB, MultiDB, NormalizedDB, KoitoDB, LedgerDB, EmptyDB, YARGDB} {
 		if parser == family || strings.HasPrefix(parser, family+":") {
 			return family
 		}
@@ -138,6 +139,8 @@ func (s *Store) parseSQLite(ctx context.Context, file, wal File) (part parsedFil
 		return part, err
 	}
 	switch {
+	case tables["GameRecords"] != "" && tables["PlayerScores"] != "" && tables["Players"] != "":
+		part.service, part.parser = "yarg", YARGDB
 	case tables["media_file"] != "" && tables["annotation"] != "":
 		part.service, part.parser = "navidrome", NavidromeDB
 	case tables["plays"] != "" && tables["components"] != "" && tables["play_inputs"] != "":
@@ -194,6 +197,13 @@ func (s *Store) parseSQLite(ctx context.Context, file, wal File) (part parsedFil
 		part.snapshots = append(part.snapshots, parsedSnapshot{Group: "navidrome-catalog", Key: "catalog", Kind: "catalog", Name: "Navidrome", Metadata: json.RawMessage(`{"service":"navidrome"}`)})
 	}
 	lookup := map[string]map[string]map[string]any{}
+	var games *yargLookup
+	if part.service == "yarg" {
+		games, err = loadYARGContext(ctx, db)
+		if err != nil {
+			return part, err
+		}
+	}
 	if part.service == "koito" && tables["evidence_observations"] == "" {
 		lookup["native_tracks"], err = nativeKoitoTracks(ctx, db)
 		if err != nil {
@@ -226,6 +236,8 @@ func (s *Store) parseSQLite(ctx context.Context, file, wal File) (part parsedFil
 		err = readSQLTable(ctx, db, table, func(fields map[string]any, key string) error {
 			row := databaseRecord{Kind: "context", Table: table, Key: key, Fields: fields, Context: map[string]any{}}
 			switch part.service {
+			case "yarg":
+				games.attach(&row)
 			case "navidrome":
 				if kind := map[string]string{"player": "player", "tag": "tag", "media_file_tags": "tag_link", "album_tags": "tag_link", "album": "catalog_album", "artist": "catalog_artist", "library": "catalog_library", "scrobble_buffer": "queue"}[table]; kind != "" {
 					row.Kind = kind

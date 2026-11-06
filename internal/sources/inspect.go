@@ -39,6 +39,7 @@ type FilterIssue struct {
 // filters see earlier naming changes. Direct attribution reads original fields.
 func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfig, evidence *evidenceIndex, catalogAlbumID int64) ([]FilterIssue, error) {
 	issues := append(append([]FilterIssue{}, r.TimeIssues...), r.MusicIssues...)
+	issues = append(issues, r.ContextIssues...)
 	issues = append(issues, r.CompletionIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
@@ -152,6 +153,9 @@ func inspectedRecords(ctx context.Context, reader sqlReader, config RuleConfig, 
 		records[i] = out[i].matchingRecord
 	}
 	if err = attachRecordMemberships(ctx, reader, records); err != nil {
+		return nil, err
+	}
+	if err = inspectionGameCatalog(ctx, reader, records); err != nil {
 		return nil, err
 	}
 	for i := range out {

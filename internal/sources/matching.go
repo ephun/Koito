@@ -14,11 +14,13 @@ import (
 )
 
 type matchingRecord struct {
-	LibraryFields    filters.Env   `json:"-"`
-	ExternalID       string        `json:"external_id,omitempty"`
-	CompletionIssues []FilterIssue `json:"-"`
-	MusicIssues      []FilterIssue `json:"-"`
-	TimeIssues       []FilterIssue `json:"-"`
+	ContextIssues    []FilterIssue      `json:"-"`
+	GameCatalog      *music.GameCatalog `json:"-"`
+	LibraryFields    filters.Env        `json:"-"`
+	ExternalID       string             `json:"external_id,omitempty"`
+	CompletionIssues []FilterIssue      `json:"-"`
+	MusicIssues      []FilterIssue      `json:"-"`
+	TimeIssues       []FilterIssue      `json:"-"`
 	timeOffset       *time.Duration
 	ID               int64        `json:"id"`
 	SourceID         int64        `json:"source_id"`
@@ -68,6 +70,9 @@ type matchPlan struct {
 }
 
 func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig, extra ...RuleConfig) ([]matchingRecord, error) {
+	if err := prepareContextPrograms(config); err != nil {
+		return nil, err
+	}
 	if err := prepareCompletionPrograms(config); err != nil {
 		return nil, err
 	}
@@ -133,6 +138,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err = attachRecordMemberships(ctx, reader, out); err != nil {
 		return nil, err
 	}
+	attachGameCatalog(out)
 	for i := range out {
 		r := &out[i]
 		interpretMatchingRecord(r, config)
@@ -141,6 +147,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 		}
 		r.Payload = ""
 	}
+	selectConcertRevisions(out)
 	return out, nil
 }
 
@@ -166,6 +173,7 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 		r.TrackID = libraryText(row.Fields, "Persistent ID")
 		r.Device = libraryText(row.Fields, "Device")
 	}
+	applyContextPrograms(r, config)
 	basis := applyObservedTime(r, config)
 	applyCompletion(r, config)
 	if (r.Service == "spotify" || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard) && r.Values.TimeMeaning == "end" && basis == "estimated_start" && r.Values.Reason == "counted" {
@@ -181,6 +189,9 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	if r.timeOffset != nil && !r.Start.IsZero() {
 		r.Start = r.Start.Add(*r.timeOffset)
 		r.Basis = "adjusted time"
+	}
+	if r.Values.Performance != nil {
+		r.Values.Performance.Catalog = r.GameCatalog
 	}
 }
 
@@ -289,6 +300,9 @@ func comparableTimeBasis(a, b string) bool {
 		return false
 	}
 	if a == "submission" || b == "submission" {
+		return a == b
+	}
+	if a == "result" || b == "result" || a == "date" || b == "date" {
 		return a == b
 	}
 	return (a == "end") == (b == "end")

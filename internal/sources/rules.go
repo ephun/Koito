@@ -135,6 +135,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	state.Blocks.Schemas["matching:play"] = playSchema()
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Schemas["qualification:completion"] = completionSchema()
+	state.Blocks.Schemas["inference:context"] = contextSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
 	state.Blocks.Templates["presentation:naming"] = []ProgramTemplate{{"names", "Displayed names", displayedNameProgram()}, {"genres", "Artist genres", artistGenreProgram(0)}, {"source-tags", "Source tags", sourceTagProgram()}}
@@ -298,7 +299,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	for _, source := range state.Sources {
 		if source.Records > 0 && !services[source.Service] {
 			services[source.Service] = true
-			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs", "navidrome": "Navidrome", "multi-scrobbler": "Multi-Scrobbler", "listenbrainz": "ListenBrainz", "maloja": "Maloja", "koito": "Koito", "legacy": "Earlier exports", "database": "Database"}[source.Service]
+			name := map[string]string{"yarg": "YARG", "yargfm": "YARGfm", "clonehero": "Clone Hero", "setlistfm": "Setlist.fm", "spotify": "Spotify", "lastfm": "Last.fm", "itunes": "iTunes", "discogs": "Discogs", "navidrome": "Navidrome", "multi-scrobbler": "Multi-Scrobbler", "listenbrainz": "ListenBrainz", "maloja": "Maloja", "koito": "Koito", "legacy": "Earlier exports", "database": "Database"}[source.Service]
 			if name == "" {
 				name = source.Service
 			}
@@ -313,7 +314,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	heuristic.Labels = map[string]string{}
 	for _, source := range state.Sources {
 		if source.Records > 0 && source.Service != "itunes" {
-			name := map[string]string{"spotify": "Spotify", "lastfm": "Last.fm"}[source.Service]
+			name := map[string]string{"yarg": "YARG", "yargfm": "YARGfm", "clonehero": "Clone Hero", "setlistfm": "Setlist.fm", "spotify": "Spotify", "lastfm": "Last.fm"}[source.Service]
 			if name == "" {
 				name = source.Service
 			}
@@ -361,6 +362,7 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 		}
 		state.Blocks.Schemas[key] = other
 	}
+	performanceTemplates(&state)
 	return state, nil
 }
 
@@ -383,7 +385,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "qualification" && rule.Subtype == "completion" || rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
+		if rule.Program != nil && !(rule.Type == "qualification" && rule.Subtype == "completion" || rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time" || rule.Subtype == "context") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -567,6 +569,13 @@ func validateRules(config RuleConfig) error {
 			}
 			if rule.Scope.Device != "" || rule.Scope.From != "" || rule.Scope.Until != "" {
 				return errors.New("Count inference applies to whole counts.")
+			}
+		case rule.Type == "inference" && rule.Subtype == "context":
+			if rule.Program == nil {
+				return errors.New("Context filters need IF and SET blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, contextSchema()); err != nil {
+				return err
 			}
 		case rule.Type == "inference" && rule.Subtype == "time" && rule.Program != nil:
 			if rule.Scope != (RuleScope{}) {

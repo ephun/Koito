@@ -6,6 +6,10 @@ import (
 
 // a Listen is the same thing as a 'scrobble' but i despise the word scrobble so i will not use it
 type Listen struct {
+	ContextKind      string      `json:"context_kind,omitempty"`
+	LocalDate        string      `json:"local_date,omitempty"`
+	DateOnly         bool        `json:"date_only,omitempty"`
+	TimeEstimated    bool        `json:"time_estimated,omitempty"`
 	Tags             []string    `json:"tags,omitempty"`
 	AlbumID          int32       `json:"album_id,omitempty"`
 	Album            string      `json:"album,omitempty"`

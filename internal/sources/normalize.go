@@ -12,6 +12,9 @@ import (
 )
 
 type recordValues struct {
+	SourceInput      string               `json:"source_input,omitempty"`
+	TimeEstimated    bool                 `json:"time_estimated,omitempty"`
+	Performance      *performanceValues   `json:"performance,omitempty"`
 	EventID          string               `json:"event_id,omitempty"`
 	SupportID        string               `json:"support_id,omitempty"`
 	NativeLibraryID  string               `json:"native_library_id,omitempty"`
@@ -66,6 +69,20 @@ func itemText(raw json.RawMessage) string {
 }
 
 func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
+	if parser == SetlistJSON {
+		return normalizeConcert(raw)
+	}
+	if gameBinaryParser(parser) {
+		var row databaseRecord
+		if json.Unmarshal(raw, &row) != nil {
+			return recordValues{Reason: "invalid fields"}
+		}
+		service := "clonehero"
+		if parser == YARGCache {
+			service = "yarg"
+		}
+		return recordValues{Title: valueText(row.Fields["title"]), Artist: valueText(row.Fields["artist"]), Album: valueText(row.Fields["album"]), NativeTrackID: valueText(row.Fields["chart_checksum"]), DurationMS: numeric(row.Fields["duration_ms"]), Origin: "original", OriginalService: service, Reason: "game summary"}
+	}
 	if parser == NormalizedJSONL {
 		var row map[string]any
 		_ = json.Unmarshal(raw, &row)

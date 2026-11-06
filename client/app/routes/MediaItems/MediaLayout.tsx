@@ -11,6 +11,7 @@ import MbzIcon from "~/components/icons/MbzIcon";
 import { timeListenedString } from "~/utils/utils";
 import { Link } from "react-router";
 import useWindowWidth from "~/hooks/useWindowWidth";
+import { calendarDate } from "~/utils/dates";
 
 interface Props {
   filterIssues?: { filter_id: string; name: string; reason: string }[];
@@ -24,6 +25,7 @@ interface Props {
   listenCount: number;
   timeListened: number;
   firstListen: number; // unix
+  firstListenDate?: string;
   imgItemId: number;
   children: React.ReactNode;
   subContent?: React.ReactNode;
@@ -101,15 +103,10 @@ export default function MediaLayout(props: Props) {
               className="h-full w-full rounded-(--border-radius) border object-cover"
             />
           </div>
-          <div className="min-w-0 w-full flex-1 space-y-5">
-            <div className="space-y-3">
+          <div className="min-w-0 w-full flex-1 space-y-4">
+            <div className="space-y-2">
               <div className="flex min-h-8 items-center justify-between gap-4">
-                <p className="flex items-baseline gap-3 text-sm text-(--color-fg-secondary)">
-                  <span>{props.type}</span>
-                  {props.rank !== 0 && (
-                    <span>#{props.rank.toLocaleString()}</span>
-                  )}
-                </p>
+                <p className="text-lg text-(--color-fg-secondary)">{props.type}</p>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                   {props.musicbrainzId && (
                     <Link
@@ -194,8 +191,13 @@ export default function MediaLayout(props: Props) {
                   )}
                 </div>
               </div>
-              <h1 className="text-3xl font-semibold leading-tight [overflow-wrap:anywhere] sm:text-4xl xl:text-5xl">
+              <h1 className="text-3xl! font-semibold! leading-tight! [overflow-wrap:anywhere] sm:text-4xl! xl:text-5xl!">
                 {props.title}
+                {props.rank !== 0 && (
+                  <span className="ml-2 inline-block text-xl font-medium text-(--color-fg-secondary)">
+                    #{props.rank.toLocaleString()}
+                  </span>
+                )}
               </h1>
               {props.subContent && (
                 <div className="space-y-1.5 text-base text-(--color-fg-secondary) [&_a]:text-(--color-fg)">
@@ -204,33 +206,32 @@ export default function MediaLayout(props: Props) {
               )}
             </div>
             <dl
-              className="flex flex-wrap items-baseline gap-x-5 gap-y-2 text-sm text-(--color-fg-secondary)"
+              className="text-xl leading-normal text-(--color-fg-secondary) sm:text-2xl"
               aria-label="Listening statistics"
             >
-              <div>
+              <div className="inline">
                 <dt className="sr-only">Plays</dt>
-                <dd>
-                  <span className="font-semibold text-(--color-fg)">
-                    {props.listenCount.toLocaleString()}
-                  </span>{" "}
+                <dd className="inline">
+                  {props.listenCount.toLocaleString()}{" "}
                   {props.listenCount === 1 ? "play" : "plays"}
                 </dd>
               </div>
-              {props.timeListened > 0 && (
-                <div title={Math.floor(props.timeListened / 3600) + " hours"}>
-                  <dt className="sr-only">Time listened</dt>
-                  <dd>{timeListenedString(props.timeListened)}</dd>
-                </div>
-              )}
               {props.firstListen > 0 && (
                 <div
-                  title={new Date(props.firstListen * 1000).toLocaleString()}
+                  className="inline"
+                  title={props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleString()}
                 >
                   <dt className="sr-only">First listen</dt>
-                  <dd>
-                    since{" "}
-                    {new Date(props.firstListen * 1000).toLocaleDateString()}
+                  <dd className="inline">
+                    {" "}since{" "}
+                    {props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleDateString()}
                   </dd>
+                </div>
+              )}
+              {props.timeListened > 0 && (
+                <div className="inline" title={Math.floor(props.timeListened / 3600) + " hours"}>
+                  <dt className="sr-only">Time listened</dt>
+                  <dd className="inline"> ({timeListenedString(props.timeListened)})</dd>
                 </div>
               )}
             </dl>

@@ -3,6 +3,7 @@ package models
 import "github.com/google/uuid"
 
 type Artist struct {
+	FirstListenDate  string          `json:"first_listen_date,omitempty"`
 	IdentifierIssues []FilterIssue   `json:"identifier_issues,omitempty"`
 	NameIssues       []FilterIssue   `json:"name_issues,omitempty"`
 	GenreIssues      []GenreIssue    `json:"genre_issues,omitempty"`

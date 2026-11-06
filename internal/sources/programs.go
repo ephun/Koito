@@ -26,7 +26,7 @@ type ProgramTemplate struct {
 }
 
 func namingSchema() filters.Schema {
-	return music.LibraryFields(filters.Schema{
+	s := music.LibraryFields(filters.Schema{
 		RawFields: true,
 		Fields: map[string]filters.Type{
 			"source.format": filters.Text, "record.played_ms": filters.Number, "record.completed": filters.Boolean,
@@ -34,7 +34,8 @@ func namingSchema() filters.Schema {
 			"original.artist": filters.Text, "original.album": filters.Text, "original.title": filters.Text,
 			"source.service": filters.Text, "source.id": filters.Number, "file.hash": filters.Text,
 			"source.original_service": filters.Text, "source.original_format": filters.Text, "record.forwarder": filters.Text, "record.endpoint": filters.Text, "record.event_id": filters.Text,
-			"record.id": filters.Number, "record.time": filters.Date, "record.device": filters.Text,
+			"record.source_input": filters.Text,
+			"record.id":           filters.Number, "record.time": filters.Date, "record.device": filters.Text,
 			"track.duration_ms": filters.Number,
 			"library.id":        filters.Text, "track.persistent_id": filters.Text, "track.spotify_uri": filters.Text, "track.recording_id": filters.Text,
 		},
@@ -42,6 +43,9 @@ func namingSchema() filters.Schema {
 		Help:    map[string]string{"display.aliases": "Choose alternate names used by search.", "display.artist_ids": "Search for credited artists or build a list from expressions.", "display.primary_artist_ids": "Choose primary artists from the assigned credits.", "display.tags": "Choose concise labels from source fields or expressions.", "artist.genres": "Choose artist labels from source evidence or a list.", "source.genre_records": "Each item includes its label, source identifier, file hash, record identifier, and original field."},
 		Labels:  map[string]string{"source.format": "Source format", "source.original_service": "Original service", "source.original_format": "Original format", "record.forwarder": "Forwarding app", "record.endpoint": "Destination", "record.event_id": "Source event identifier", "record.played_ms": "Played milliseconds", "track.duration_ms": "Track duration in milliseconds", "record.completed": "Reported complete", "display.aliases": "Aliases", "original.aliases": "Original aliases", "display.artist_ids": "Artist credits", "display.primary_artist_ids": "Primary artist credits", "original.primary_artist_ids": "Original primary artist identifiers", "original.artists": "Original artist credits", "catalog.artist_ids": "Artist identifiers", "catalog.kind": "Item type", "catalog.id": "Item identifier", "artist.genres": "Artist genres", "display.tags": "Listening tags", "source.genres": "Source genre labels", "source.genre_records": "Source genre records", "catalog.artist_id": "Artist identifier"},
 	})
+	s.Labels["record.source_input"] = "Named source input"
+	s.Help["record.source_input"] = "The input name stored by the forwarding app."
+	return s
 }
 
 type namingProgram struct {
@@ -176,6 +180,9 @@ func recordEnvironment(r matchingRecord) filters.Env {
 		"source.format":  filters.String(sourceFormat(r.Parser)),
 		"display.artist": filters.String(r.Values.Artist), "display.album": filters.String(r.Values.Album), "display.title": filters.String(r.Values.Title),
 	}
+	if r.Values.SourceInput != "" {
+		env["record.source_input"] = filters.String(r.Values.SourceInput)
+	}
 	if r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard || r.Values.PlayedMS > 0 {
 		env["record.played_ms"] = filters.Integer(r.Values.PlayedMS)
 		if r.Values.ReportedComplete != nil {
@@ -193,6 +200,12 @@ func recordEnvironment(r matchingRecord) filters.Env {
 	}
 	for key, value := range r.RawFields {
 		env[key] = value
+	}
+	for key, value := range r.Values.Performance.Environment() {
+		env[key] = value
+	}
+	if r.Values.TimeEstimated {
+		env["event.time_estimated"] = filters.Bool(true)
 	}
 	if r.Values.Music != nil {
 		value := r.Values.Music

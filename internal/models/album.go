@@ -9,6 +9,7 @@ type AlbumEdition struct {
 }
 
 type Album struct {
+	FirstListenDate      string         `json:"first_listen_date,omitempty"`
 	ClassificationIssues []FilterIssue  `json:"classification_issues,omitempty"`
 	IdentifierIssues     []FilterIssue  `json:"identifier_issues,omitempty"`
 	NameIssues           []FilterIssue  `json:"name_issues,omitempty"`

@@ -41,6 +41,7 @@ export default function Artist() {
       timeListened={artist.time_listened}
       listenCount={artist.listen_count}
       firstListen={artist.first_listen}
+      firstListenDate={artist.first_listen_date}
       imgItemId={artist.id}
       metadata={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2" aria-label="Genres">{artist.genres?.map(genre => <MusicTag key={genre} to={`/chart/top/artists?period=all_time&genre=${encodeURIComponent(genre)}`}>{genre}</MusicTag>)}{user?.role === "admin" && <Link className="inline-flex shrink-0 items-center px-1 py-0.5 text-sm leading-5 underline underline-offset-2" to={`/filters?artist=${artist.id}`}>Edit genres</Link>}</div>}
     >

@@ -15,7 +15,7 @@ func LibraryFields(s filters.Schema) filters.Schema {
 	for key, label := range map[string]string{"music.saved": "Saved in imported library", "music.owned": "Owned in imported collection", "music.wanted": "On imported wantlist", "music.playlists": "Imported playlists", "music.membership_records": "Membership record identifiers"} {
 		s.Labels[key] = label
 	}
-	return s
+	return PerformanceFields(s)
 }
 
 func EmptyLibraryEnvironment() filters.Env {

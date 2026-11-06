@@ -235,6 +235,16 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 	}
 
 	listens := make([]*models.Listen, 0, len(raw))
+	keys := []string{}
+	for _, r := range raw {
+		if r.playKey != "" {
+			keys = append(keys, r.playKey)
+		}
+	}
+	contexts, err := music.LoadPerformances(ctx, s.db, keys)
+	if err != nil {
+		return nil, err
+	}
 	for _, r := range raw {
 		l := &models.Listen{
 			AlbumID:          r.albumID,
@@ -248,6 +258,9 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 				ID:    r.trackID,
 				Title: r.title,
 			},
+		}
+		if p := contexts[r.playKey]; p != nil {
+			l.ContextKind, l.DateOnly, l.LocalDate, l.TimeEstimated = p.Kind, p.DateOnly, p.LocalDate, p.TimeEstimated
 		}
 		if err = json.Unmarshal([]byte(r.tagsJSON), &l.Tags); err != nil {
 			return nil, err
@@ -271,6 +284,20 @@ func (s *Sqlite) GetListensPaginated(ctx context.Context, opts db.GetItemsOpts) 
 		HasNextPage:  int64(offset+len(listens)) < count,
 		CurrentPage:  int32(opts.Page),
 	}, nil
+}
+
+func (s *Sqlite) firstListenCalendarDate(ctx context.Context, key string) (string, error) {
+	if key == "" {
+		return "", nil
+	}
+	contexts, err := music.LoadPerformances(ctx, s.db, []string{key})
+	if err != nil {
+		return "", err
+	}
+	if p := contexts[key]; p != nil && p.DateOnly {
+		return p.LocalDate, nil
+	}
+	return "", nil
 }
 
 func (s *Sqlite) imageForTrack(ctx context.Context, trackId int32) (*uuid.UUID, error) {

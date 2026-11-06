@@ -296,6 +296,7 @@ type Track = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   all_time_rank: number;
 };
 type SimpleTrack = {
@@ -317,6 +318,7 @@ type Artist = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   is_primary: boolean;
   all_time_rank: number;
 };
@@ -339,6 +341,7 @@ type Album = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   all_time_rank: number;
 };
 type Alias = {
@@ -348,6 +351,10 @@ type Alias = {
   is_primary: boolean;
 };
 type Listen = {
+  context_kind?: string;
+  local_date?: string;
+  date_only?: boolean;
+  time_estimated?: boolean;
   tags?: string[];
   album_id?: number;
   album?: string;

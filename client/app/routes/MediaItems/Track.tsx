@@ -31,6 +31,7 @@ export default function Track() {
       timeListened={track.time_listened}
       listenCount={track.listen_count}
       firstListen={track.first_listen}
+      firstListenDate={track.first_listen_date}
       imgItemId={track.album_id}
       metadata={<MusicStates kind="track" id={track.id} />}
       subContent={

@@ -38,6 +38,10 @@ func requireSQLColumns(ctx context.Context, db *sql.DB, table string, required .
 func validateSQLSchema(ctx context.Context, db *sql.DB, parser string, tables map[string]string) error {
 	required := map[string][]string{}
 	switch parser {
+	case YARGDB:
+		required["GameRecords"] = []string{"Id", "Date", "SongChecksum", "GameVersion", "SongName", "SongArtist", "SongSpeed"}
+		required["PlayerScores"] = []string{"Id", "GameRecordId", "PlayerId", "Score", "NotesHit", "NotesMissed"}
+		required["Players"] = []string{"Id", "Name"}
 	case NavidromeDB:
 		required["media_file"] = []string{"id", "title", "artist", "album"}
 		required["annotation"] = []string{"user_id", "item_id", "item_type", "play_count", "play_date"}

@@ -111,6 +111,9 @@ func directAttribution(r matchingRecord, config RuleConfig, from, until time.Tim
 	if r.Service == "itunes" {
 		return Attribution{Listener: "unknown", Basis: "unattributed library", Rules: []string{}}
 	}
+	if r.Values.Performance != nil {
+		return Attribution{Listener: "unknown", Basis: "unattributed performance", Rules: []string{}}
+	}
 	return Attribution{Listener: "self", Basis: "existing history", Rules: []string{}}
 }
 

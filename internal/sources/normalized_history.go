@@ -11,7 +11,10 @@ const NormalizedJSONL = "normalized-history-jsonl-v1"
 const LedgerDB = "listening-ledger-sqlite-v1"
 
 func normalizedService(kind string) string {
-	for _, service := range []string{"spotify", "lastfm", "itunes"} {
+	if strings.HasPrefix(strings.ToLower(kind), "yargfm") {
+		return "yargfm"
+	}
+	for _, service := range []string{"spotify", "lastfm", "itunes", "setlistfm", "yarg"} {
 		if strings.HasPrefix(strings.ToLower(kind), service) {
 			return service
 		}
@@ -67,6 +70,9 @@ func normalizeHistoryRow(row map[string]any, zone string) recordValues {
 	fields := jsonObject(row["payload_json"])
 	if fields == nil {
 		fields = jsonObject(row["payload"])
+	}
+	if value, recognized := normalizeLegacyConcert(row, fields); recognized {
+		return value
 	}
 	parser := ""
 	switch {

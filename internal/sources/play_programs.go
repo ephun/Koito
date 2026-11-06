@@ -73,6 +73,9 @@ func preparePlayPrograms(config RuleConfig) error {
 }
 
 func exactSourcePair(a, b matchingRecord) bool {
+	if distinctPerformances(a, b) {
+		return false
+	}
 	if a.SourceID == b.SourceID && a.Values.EventID != "" && a.Values.EventID == b.Values.EventID {
 		return true
 	}
@@ -173,6 +176,9 @@ func (s *Store) InspectPair(ctx context.Context, left, right int64) (PairInspect
 
 func resolvePlayPair(ctx context.Context, config RuleConfig, a, b matchingRecord) pairResult {
 	out := pairResult{Issues: []FilterIssue{}}
+	if distinctPerformances(a, b) {
+		return out
+	}
 	best := -1
 	var winner Rule
 	var env filters.Env
@@ -246,6 +252,17 @@ func resolvePlayPair(ctx context.Context, config RuleConfig, a, b matchingRecord
 		out.Issues = append(out.Issues, FilterIssue{winner.ID, winner.Name, filters.Issue{Path: "match.play", Reason: "Equal-priority Play matching filters disagree."}})
 	}
 	return out
+}
+
+func distinctPerformances(a, b matchingRecord) bool {
+	left, right := a.Values.Performance, b.Values.Performance
+	if left == nil || right == nil {
+		return false
+	}
+	if left.Kind == "concert" && right.Kind == "concert" && left.SetlistID != "" && right.SetlistID != "" {
+		return left.SetlistID != right.SetlistID || left.Set != right.Set || left.Position != right.Position
+	}
+	return databaseFormat(a.Parser) == YARGDB && databaseFormat(b.Parser) == YARGDB && a.Values.EventID != "" && b.Values.EventID != "" && a.Values.EventID != b.Values.EventID
 }
 
 const unlimitedPairGap time.Duration = math.MaxInt64

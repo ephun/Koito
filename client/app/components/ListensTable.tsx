@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { timeSince } from "~/utils/utils";
 import { useAppContext } from "~/providers/AppProvider";
 import FieldHelp from "./FieldHelp";
+import { calendarDate } from "~/utils/dates";
 
 interface ListensTableProps {
   listens: Listen[];
@@ -104,10 +105,11 @@ export default function ListensTable({
             </td>
             <td
               className={`text-end whitespace-nowrap ${timeColClasses}`}
-              title={new Date(item.time).toString()}
+              title={item.date_only && item.local_date ? calendarDate(item.local_date) : new Date(item.time).toString()}
             >
               <span className="inline-flex items-center justify-end gap-2">
-              {user?.role === "admin" && item.record_id ? <Link className="hover:underline underline-offset-2" title="View records" to={`/imports?record=${item.record_id}`}>{timeSince(new Date(item.time))}</Link> : timeSince(new Date(item.time))}
+              {user?.role === "admin" && item.record_id ? <Link className="hover:underline underline-offset-2" title="View records" to={`/imports?record=${item.record_id}`}>{item.date_only && item.local_date ? calendarDate(item.local_date) : timeSince(new Date(item.time))}</Link> : item.date_only && item.local_date ? calendarDate(item.local_date) : timeSince(new Date(item.time))}
+              {item.time_estimated && <FieldHelp label="Estimated time">This time comes from an enabled Time filter.</FieldHelp>}
               {user?.role === "admin" && <Link aria-label="Edit play inclusion" title="Edit play inclusion" to={`/filters?listen_track=${item.track.id}&listen_time=${encodeURIComponent(item.time)}&listen_key=${encodeURIComponent(item.play_key || "")}${item.record_id && (!item.evidence || item.evidence === "observed") ? `&play_record=${item.record_id}` : ""}`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"><EyeOff size={14} /></Link>}
               </span>
             </td>

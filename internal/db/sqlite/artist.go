@@ -86,13 +86,18 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		opts.ID).Scan(&timeListened)
 
 	var firstListenUnix int64
+	var firstListenKey string
 	err = s.db.QueryRowContext(ctx, `
-		SELECT l.listened_at FROM displayed_listens l
+		SELECT l.listened_at,l.play_key FROM displayed_listens l
 		JOIN displayed_artist_tracks at2 ON l.track_id = at2.track_id
-		WHERE at2.artist_id = ? ORDER BY l.listened_at ASC LIMIT 1`,
-		opts.ID).Scan(&firstListenUnix)
+		WHERE at2.artist_id = ? ORDER BY l.listened_at ASC,l.play_key ASC LIMIT 1`,
+		opts.ID).Scan(&firstListenUnix, &firstListenKey)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("GetArtist: first listen: %w", err)
+	}
+	firstListenDate, err := s.firstListenCalendarDate(ctx, firstListenKey)
+	if err != nil {
+		return nil, err
 	}
 
 	var rank int64
@@ -147,6 +152,7 @@ func (s *Sqlite) GetArtist(ctx context.Context, opts db.GetArtistOpts) (*models.
 		ListenCount:      listenCount,
 		TimeListened:     timeListened,
 		FirstListen:      firstListenUnix,
+		FirstListenDate:  firstListenDate,
 		AllTimeRank:      rank,
 	}, nil
 }

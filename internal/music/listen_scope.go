@@ -10,7 +10,7 @@ import (
 )
 
 func scopeExprReadsPlay(expr filters.Expr) bool {
-	if expr.Op == "field" && strings.HasPrefix(expr.Field, "play.") {
+	if expr.Op == "field" && (strings.HasPrefix(expr.Field, "play.") || strings.HasPrefix(expr.Field, "event.") || strings.HasPrefix(expr.Field, "game.") || strings.HasPrefix(expr.Field, "concert.")) {
 		return true
 	}
 	for _, arg := range expr.Args {
@@ -49,6 +49,7 @@ type ScopePlay struct {
 	TrackID, Time int64
 	Key, Client   string
 	Records       []filters.Value
+	Performance   *Performance
 }
 
 func (play ScopePlay) Environment(base filters.Env) filters.Env {
@@ -59,6 +60,9 @@ func (play ScopePlay) Environment(base filters.Env) filters.Env {
 	env["play.key"], env["play.client"] = filters.String(play.Key), filters.String(play.Client)
 	env["play.time"] = filters.Timestamp(time.Unix(play.Time, 0).UTC())
 	env["play.record_ids"] = filters.Values(play.Records...)
+	for field, value := range play.Performance.Environment() {
+		env[field] = value
+	}
 	return env
 }
 func ScopePlays(ctx context.Context, db Database, trackID int64) ([]ScopePlay, error) {
@@ -115,8 +119,17 @@ func ScopePlays(ctx context.Context, db Database, trackID int64) ([]ScopePlay, e
 	if err != nil {
 		return nil, err
 	}
+	keys := []string{}
+	for key := range wanted {
+		keys = append(keys, key)
+	}
+	contexts, err := LoadPerformances(ctx, db, keys)
+	if err != nil {
+		return nil, err
+	}
 	for i := range plays {
 		plays[i].Records = records[plays[i].Key]
+		plays[i].Performance = contexts[plays[i].Key]
 	}
 	return plays, nil
 }

@@ -142,7 +142,7 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 					return e
 				}
 				kind = row.Kind
-			} else if databaseParser(part.parser) || part.parser == MultiCache || part.parser == MultiLog {
+			} else if databaseParser(part.parser) || gameBinaryParser(part.parser) || part.parser == SetlistJSON || part.parser == MultiCache || part.parser == MultiLog {
 				var row databaseRecord
 				if e = json.Unmarshal(raw, &row); e != nil {
 					return e

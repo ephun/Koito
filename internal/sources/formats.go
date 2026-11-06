@@ -52,6 +52,12 @@ func (s *Store) parseFile(ctx context.Context, f File, filenames ...string) (par
 	if err != nil {
 		return parsedFile{}, err
 	}
+	if part, e := parseCloneHero(f, data); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
+	if part, e := parseYARGCache(f, data); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
 	clean := bytes.TrimSpace(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}))
 	filename := ""
 	if len(filenames) > 0 {
@@ -65,6 +71,9 @@ func (s *Store) parseFile(ctx context.Context, f File, filenames ...string) (par
 			return parsedFile{file: f, service: "database", parser: EmptyDB, records: []json.RawMessage{json.RawMessage(`{"kind":"database","table":"schema","key":"schema","fields":{"empty":true}}`)}}, nil
 		}
 		return parsedFile{}, ErrUnsupportedFile
+	}
+	if part, e := parseSetlists(f, clean); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
 	}
 	if part, e := parseNormalizedHistory(f, clean); !errors.Is(e, ErrUnsupportedFile) {
 		return part, e
@@ -135,6 +144,9 @@ func parseLastfmJSON(data []byte) ([]json.RawMessage, error) {
 		if raw[0] == '[' {
 			var rows []json.RawMessage
 			if err := json.Unmarshal(raw, &rows); err != nil {
+				if !recognized && !bytes.Contains(raw, []byte(`"artist"`)) && !bytes.Contains(raw, []byte(`"source_type"`)) {
+					return ErrUnsupportedFile
+				}
 				return err
 			}
 			for _, row := range rows {

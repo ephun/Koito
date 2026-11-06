@@ -3,6 +3,7 @@ package models
 import "github.com/google/uuid"
 
 type Track struct {
+	FirstListenDate  string         `json:"first_listen_date,omitempty"`
 	ScopeIssues      []FilterIssue  `json:"scope_issues,omitempty"`
 	IdentifierIssues []FilterIssue  `json:"identifier_issues,omitempty"`
 	NameIssues       []FilterIssue  `json:"name_issues,omitempty"`

@@ -30,6 +30,16 @@ func nativeKoitoTracks(ctx context.Context, db *sql.DB) (map[string]map[string]a
 
 func normalizeNativeKoito(row databaseRecord) recordValues {
 	track := object(row.Context["track"])
+	if strings.Contains(strings.ToLower(valueText(row.Fields["client"])), "setlist") {
+		fields := map[string]any{}
+		for key, value := range row.Fields {
+			fields[key] = value
+		}
+		fields["release_title"] = valueText(track["album"])
+		if v, recognized := normalizeLegacyConcert(map[string]any{"title": track["title"], "artist": track["artist"]}, map[string]any{"native_original_fields": fields}); recognized {
+			return v
+		}
+	}
 	v := recordValues{Title: valueText(track["title"]), Artist: valueText(track["artist"]), Album: valueText(track["album"]), Reason: "counted", Origin: "converted", TimeMeaning: "unknown", Precision: int64(time.Second), Forwarder: valueText(row.Fields["client"]), Endpoint: "koito"}
 	seconds := numeric(row.Fields["listened_at"])
 	v.TimeText = valueText(row.Fields["listened_at"])

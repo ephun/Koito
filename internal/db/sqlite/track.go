@@ -86,13 +86,18 @@ func (s *Sqlite) getTrackByID(ctx context.Context, id int32) (*models.Track, err
 	track.TimeListened = timeListened
 
 	var firstListenUnix int64
+	var firstListenKey string
 	err = s.db.QueryRowContext(ctx,
-		`SELECT listened_at FROM displayed_listens WHERE `+historyPredicate("track_id")+` ORDER BY listened_at ASC LIMIT 1`, id).
-		Scan(&firstListenUnix)
+		`SELECT listened_at,play_key FROM displayed_listens WHERE `+historyPredicate("track_id")+` ORDER BY listened_at ASC,play_key ASC LIMIT 1`, id).
+		Scan(&firstListenUnix, &firstListenKey)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("getTrackByID: first listen: %w", err)
 	}
 	track.FirstListen = firstListenUnix
+	track.FirstListenDate, err = s.firstListenCalendarDate(ctx, firstListenKey)
+	if err != nil {
+		return nil, err
+	}
 
 	var rank int64
 	s.db.QueryRowContext(ctx, countedListeningQuery(`
