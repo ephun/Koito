@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"database/sql"
 	"mime"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/gabehf/koito/internal/cfg"
 	"github.com/gabehf/koito/internal/db"
 	mbz "github.com/gabehf/koito/internal/mbz"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -46,6 +48,8 @@ func bindRoutes(
 			r.Get("/artist/{id}/aliases", handlers.GetArtistAliasesHandler(db))   // done
 			r.Get("/artist/{id}/interest", handlers.GetArtistInterestHandler(db)) // done
 
+			r.Get("/album-group/{id}", handlers.GetAlbumGroupHandler(db))
+			r.Get("/album-group/{id}/interest", handlers.GetAlbumGroupInterestHandler(db))
 			r.Get("/album/{id}", handlers.GetAlbumHandler(db))                   // done
 			r.Get("/album/{id}/artists", handlers.GetArtistsForAlbumHandler(db)) // done
 			r.Get("/album/{id}/aliases", handlers.GetAlbumAliasesHandler(db))    // done
@@ -59,6 +63,7 @@ func bindRoutes(
 			r.Get("/top/tracks", handlers.GetTopTracksHandler(db))
 			r.Get("/top/albums", handlers.GetTopAlbumsHandler(db))
 			r.Get("/top/artists", handlers.GetTopArtistsHandler(db))
+			r.Get("/genres", handlers.GetGenresHandler(db))
 
 			r.Get("/listens", handlers.GetListensHandler(db))
 			r.Get("/listen-activity", handlers.GetListenActivityHandler(db))
@@ -92,35 +97,30 @@ func bindRoutes(
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Authenticate(db, middleware.AuthModeSessionOrAPIKey))
 
-			r.Delete("/artist/{id}", handlers.DeleteArtistHandler(db))
-			r.Delete("/artist/{id}/aliases", handlers.DeleteArtistAliasHandler(db))
-			r.Post("/artist/{id}/merge", handlers.MergeArtistsHandler(db))
-			r.Post("/artist/{id}/aliases", handlers.CreateArtistAliasHandler(db))
-			r.Patch("/artist/{id}", handlers.UpdateArtistHandler(db))
+			if provider, ok := db.(interface{ SourceDatabase() *sql.DB }); ok {
+				imports := handlers.ImportsHandler(&sources.Store{DB: provider.SourceDatabase(), Root: filepath.Join(cfg.ConfigDir(), "sources")})
+				r.Get("/imports", imports)
+				r.Post("/imports", imports)
+				r.Get("/imports/records", imports)
+				r.Get("/imports/music", imports)
+				r.Get("/imports/file", imports)
+				r.Post("/imports/rebuild", imports)
+				filters := handlers.FiltersHandler(&sources.Store{DB: provider.SourceDatabase(), Root: filepath.Join(cfg.ConfigDir(), "sources")})
+				r.Get("/filters", filters)
+				r.Get("/filters/plays", filters)
+				r.Get("/filters/record", filters)
+				r.Get("/filters/fields", filters)
+				r.Get("/filters/pair", filters)
+				r.Post("/filters/preview", filters)
+				r.Post("/filters/apply", filters)
+				r.Post("/filters/save", filters)
+			}
+
 			r.Patch("/artist/{id}/image", handlers.ReplaceArtistImageHandler(db))
-			r.Patch("/artist/{id}/aliases/primary", handlers.SetPrimaryArtistAliasHandler(db))
 
-			r.Delete("/album/{id}", handlers.DeleteAlbumHandler(db))
-			r.Delete("/album/{id}/aliases", handlers.DeleteAlbumAliasHandler(db))
-			r.Post("/album/{id}/merge", handlers.MergeAlbumsHandler(db))
-			r.Post("/album/{id}/aliases", handlers.CreateAlbumAliasHandler(db))
-			r.Patch("/album/{id}", handlers.UpdateAlbumHandler(db))
 			r.Patch("/album/{id}/image", handlers.ReplaceAlbumImageHandler(db))
-			r.Patch("/album/{id}/aliases/primary", handlers.SetPrimaryAlbumAliasHandler(db))
-			r.Patch("/album/{id}/artists/{artist_id}", handlers.SetPrimaryAlbumArtistHandler(db))
-
-			r.Delete("/track/{id}", handlers.DeleteTrackHandler(db))
-			r.Delete("/track/{id}/aliases", handlers.DeleteTrackAliasHandler(db))
-			r.Delete("/track/{id}/artists/{artist_id}", handlers.DeleteTrackArtistHandler(db))
-			r.Post("/track/{id}/merge", handlers.MergeTracksHandler(db))
-			r.Post("/track/{id}/aliases", handlers.CreateTrackAliasHandler(db))
-			r.Post("/track/{id}/artists", handlers.AddTrackArtistsHandler(db))
-			r.Patch("/track/{id}", handlers.UpdateTrackHandler(db))
-			r.Patch("/track/{id}/aliases/primary", handlers.SetPrimaryTrackAliasHandler(db))
-			r.Patch("/track/{id}/artists/{artist_id}", handlers.SetPrimaryTrackArtistHandler(db))
 
 			r.Post("/listens", handlers.SubmitListenWithIDHandler(db))
-			r.Delete("/listens", handlers.DeleteListenHandler(db))
 
 			r.Get("/user/apikeys", handlers.GetApiKeysHandler(db))
 			r.Post("/user/apikeys", handlers.GenerateApiKeyHandler(db))

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"github.com/gabehf/koito/internal/logger"
 	mbz "github.com/gabehf/koito/internal/mbz"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -75,6 +77,14 @@ func Run(
 	w io.Writer,
 	version string,
 ) error {
+	shutdown, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return RunWithContext(shutdown, getenv, w, version)
+}
+
+// RunWithContext runs the server until shutdown is cancelled. This also lets
+// local integration tests release server and SQLite handles before cleanup.
+func RunWithContext(shutdown context.Context, getenv func(string) string, w io.Writer, version string) error {
 	l, ctx, err := initLogger(getenv, version, w)
 	if err != nil {
 		log.Fatalf("Engine: %v", err)
@@ -220,6 +230,16 @@ func Run(
 	mux.Use(chimiddleware.Recoverer)
 	mux.Use(chimiddleware.RealIP)
 	bindRoutes(mux, &ready, store, mbzC)
+	if provider, ok := store.(interface{ SourceDatabase() *sql.DB }); ok {
+		live := &sources.Store{DB: provider.SourceDatabase(), Root: path.Join(cfg.ConfigDir(), "sources")}
+		liveContext, stopLive := context.WithCancel(ctx)
+		defer stopLive()
+		go func() { <-shutdown.Done(); stopLive() }()
+		go live.RunLive(liveContext)
+		if cfg.LbzRelayEnabled() {
+			go live.RunLiveRelay(liveContext, cfg.LbzRelayUrl(), cfg.LbzRelayToken())
+		}
+	}
 
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddr(),
@@ -255,9 +275,7 @@ func Run(
 	go catalog.FetchMissingAlbumImages(ctx, store)
 
 	l.Info().Msg("Engine: Initialization finished")
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-shutdown.Done()
 	l.Info().Msg("Engine: Received server shutdown notice")
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)

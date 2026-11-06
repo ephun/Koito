@@ -70,17 +70,12 @@ func getApiKey(t *testing.T, session string) {
 	})
 }
 
-// truncateTestData removes all music data from the server's database, leaving
-// users, sessions, and api_keys intact. Deleting artists cascades to
-// artist_aliases, artist_tracks, and artist_releases; the orphan trigger then
-// deletes releases, which cascade to release_aliases, tracks, and track_aliases.
+// truncateTestData resets the isolated integration fixture, including evidence
+// introduced by live submissions. Production evidence remains append-only.
 func truncateTestData(t *testing.T) {
 	t.Helper()
-	require.NoError(t, store.Exec("DELETE FROM listens"))
-	require.NoError(t, store.Exec("DELETE FROM artists"))
-	// Belt-and-suspenders: delete any releases the trigger may have missed
-	// (e.g. releases that were never associated with an artist).
-	require.NoError(t, store.Exec("DELETE FROM releases"))
+	waitForLivePublication(t)
+	resetMusicFixture(t)
 }
 
 func newTestDB() *sqlite.Sqlite {
@@ -190,78 +185,9 @@ func doSubmitListens(t *testing.T) {
 		require.NoError(t, err)
 		respBytes, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, `{"status": "ok"}`, string(respBytes))
+		assert.JSONEq(t, `{"status": "ok"}`, string(respBytes))
 	}
-}
-
-func doSubmitListensForMergeConflict(t *testing.T) {
-	login(t)
-	getApiKey(t, session)
-	tt := time.Now().Add(-2 * time.Hour).Unix() // yesterday
-	bodies := []string{fmt.Sprintf(`{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": %d,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"efc787f0-046f-4a60-beff-77b398c8cdf4"
-						],
-						"artist_names": [
-							"さユり"
-						],
-						"duration_ms": 275960,
-						"recording_mbid": "21524d55-b1f8-45d1-b172-976cba447199",
-						"release_group_mbid": "3281e0d9-fa44-4337-a8ce-6f264beeae16",
-						"release_mbid": "eb790e90-0065-4852-b47d-bbeede4aa9fc",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "さユり",
-					"release_name": "酸欠少女",
-					"track_name": "花の塔"
-				}
-			}
-		]
-	}`, tt),
-		fmt.Sprintf(`{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": %d,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"efc787f0-046f-4a60-beff-77b398c8cdf4"
-						],
-						"artist_names": [
-							"Sayuri"
-						],
-						"duration_ms": 241560,
-						"recording_mbid": "21524d55-b1f8-45d1-b172-976cba447199",
-						"release_group_mbid": "3281e0d9-fa44-4337-a8ce-6f264beeae16",
-						"release_mbid": "eb790e90-0065-4852-b47d-bbeede4aa9fc",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "Sayuri",
-					"release_name": "Sanketsu Girl",
-					"track_name": "Tower of Flower"
-				}
-			}
-		]
-	}`, tt)}
-	for _, body := range bodies {
-		req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		respBytes, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-	}
+	waitForLivePublication(t)
 }
 
 func TestGetters(t *testing.T) {
@@ -325,73 +251,36 @@ func TestGetters(t *testing.T) {
 	truncateTestData(t)
 }
 
-func TestMerge(t *testing.T) {
+func TestLegacyMergeEndpointsRemoved(t *testing.T) {
 	truncateTestData(t)
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/track/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/2")
-	require.NoError(t, err)
-	var track models.Track
-	err = json.NewDecoder(resp.Body).Decode(&track)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, track.ListenCount)
-
-	truncateTestData(t)
-
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/2")
-	require.NoError(t, err)
-	var artist models.Artist
-	err = json.NewDecoder(resp.Body).Decode(&artist)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, artist.ListenCount)
-
-	truncateTestData(t)
-
-	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/album/2/merge", strings.NewReader(`{"merge_from_id":1}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/2")
-	require.NoError(t, err)
-	var album models.Album
-	err = json.NewDecoder(resp.Body).Decode(&album)
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, album.ListenCount)
-
-	truncateTestData(t)
-}
-
-func TestMerge_ConflictingListens(t *testing.T) {
-	truncateTestData(t)
-	t.Run("Submit Listens For Merge Conflict", doSubmitListensForMergeConflict)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/1/merge", strings.NewReader(`{"merge_from_id":2}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1")
-	require.NoError(t, err)
-	var artist models.Artist
-	err = json.NewDecoder(resp.Body).Decode(&artist)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, artist.ListenCount) // conflicting listens should be ignored on merge, so only one remains
-
-	// old artist deleted
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/2")
-	require.NoError(t, err)
-	assert.Equal(t, 404, resp.StatusCode)
+	t.Cleanup(func() { truncateTestData(t) })
+	doSubmitListens(t)
+	for _, entity := range []string{"artist", "album", "track"} {
+		t.Run(entity, func(t *testing.T) {
+			endpoint := "/apis/web/v1/" + entity + "/1"
+			before, err := http.Get(host() + endpoint)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, before.StatusCode)
+			original, err := io.ReadAll(before.Body)
+			before.Body.Close()
+			require.NoError(t, err)
+			response, err := makeAuthRequest(t, session, http.MethodPost, endpoint+"/merge", strings.NewReader(`{"merge_from_id":2}`))
+			require.NoError(t, err)
+			response.Body.Close()
+			require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+			after, err := http.Get(host() + endpoint)
+			require.NoError(t, err)
+			defer after.Body.Close()
+			require.Equal(t, http.StatusOK, after.StatusCode)
+			unchanged, err := io.ReadAll(after.Body)
+			require.NoError(t, err)
+			require.JSONEq(t, string(original), string(unchanged))
+			other, err := http.Get(host() + "/apis/web/v1/" + entity + "/2")
+			require.NoError(t, err)
+			other.Body.Close()
+			require.Equal(t, http.StatusOK, other.StatusCode)
+		})
+	}
 }
 
 func TestValidateToken(t *testing.T) {
@@ -427,34 +316,24 @@ func TestValidateToken(t *testing.T) {
 	assert.Equal(t, 401, resp.StatusCode)
 }
 
-func TestDelete(t *testing.T) {
+func TestRetiredCatalogDeletionKeepsOriginalItemsAndListens(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/artist/1", nil)
+	before, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1")
+	for _, kind := range []string{"artist", "album", "track"} {
+		response, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/"+kind+"/1", nil)
+		require.NoError(t, err)
+		response.Body.Close()
+		require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+		response, err = makeAuthRequest(t, session, "GET", "/apis/web/v1/"+kind+"/1", nil)
+		require.NoError(t, err)
+		response.Body.Close()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	}
+	after, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/album/1", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/1")
-	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/track/1", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	require.Equal(t, 404, resp.StatusCode)
-
+	require.Equal(t, before, after)
 	truncateTestData(t)
 }
 
@@ -462,12 +341,12 @@ func TestLoginGate(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
 
-	req, err := http.NewRequest("DELETE", host()+"/apis/web/v1/artist/1", nil)
+	req, err := http.NewRequest("GET", host()+"/apis/web/v1/artist/1", nil)
 	require.NoError(t, err)
 	req.Header.Add("Authorization", "Token "+apikey)
 	resp, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
-	assert.Equal(t, 204, resp.StatusCode)
+	assert.Equal(t, 200, resp.StatusCode)
 
 	req, err = http.NewRequest("GET", host()+"/apis/web/v1/artist/3", nil)
 	require.NoError(t, err)
@@ -503,79 +382,32 @@ func TestLoginGate(t *testing.T) {
 	truncateTestData(t)
 }
 
-func TestAliasesAndSearch(t *testing.T) {
+func TestRetiredAliasWritesKeepOriginalAliases(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/artist/1/aliases", strings.NewReader(`{"alias":"Sayuri"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/artist/1/aliases")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var actual []models.Alias
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&actual))
-	require.Len(t, actual, 2)
-	assert.ElementsMatch(t, []models.Alias{
-		{ID: 1, Alias: "さユり", Source: "Canonical", Primary: true},
-		{ID: 1, Alias: "Sayuri", Source: "Manual", Primary: false},
-	}, actual)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/album/1/aliases", strings.NewReader(`{"alias":"Sanketsu Girl"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/album/1/aliases")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	actual = nil
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&actual))
-	require.Len(t, actual, 2)
-	assert.ElementsMatch(t, []models.Alias{
-		{ID: 1, Alias: "酸欠少女", Source: "Canonical", Primary: true},
-		{ID: 1, Alias: "Sanketsu Girl", Source: "Manual", Primary: false},
-	}, actual)
-
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/aliases", strings.NewReader(`{"alias":"Tower of Flower"}`))
-	require.NoError(t, err)
-	require.Equal(t, 201, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/aliases/primary", strings.NewReader(`{"alias":"Tower of Flower"}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var track models.Track
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&track))
-	require.Len(t, actual, 2)
-	assert.Equal(t, track.Title, "Tower of Flower")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/artist/1/aliases/primary", strings.NewReader(`{"alias":"Sayuri"}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// make sure searching works with aliases
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/search?q=Sanketsu")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	var results handlers.SearchResults
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&results))
-	require.Len(t, results.Albums, 1)
-	assert.Equal(t, results.Albums[0].Title, "酸欠少女")
-
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/search?q=Sayuri")
-	require.NoError(t, err)
-	require.Equal(t, 200, resp.StatusCode)
-	results = handlers.SearchResults{}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&results))
-	require.Len(t, results.Artists, 1)
-	assert.Equal(t, results.Artists[0].Name, "Sayuri") // reflects the new primary alias
-
-	truncateTestData(t)
+	for _, kind := range []string{"artist", "album", "track"} {
+		t.Run(kind, func(t *testing.T) {
+			endpoint := "/apis/web/v1/" + kind + "/1/aliases"
+			read := func() []models.Alias {
+				response, err := makeAuthRequest(t, session, "GET", endpoint, nil)
+				require.NoError(t, err)
+				defer response.Body.Close()
+				require.Equal(t, http.StatusOK, response.StatusCode)
+				var result []models.Alias
+				require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+				return result
+			}
+			before := read()
+			require.NotEmpty(t, before)
+			for _, request := range []struct{ method, path string }{{"POST", endpoint}, {"DELETE", endpoint}, {"PATCH", endpoint + "/primary"}} {
+				response, err := makeAuthRequest(t, session, request.method, request.path, strings.NewReader(`{"alias":"Rejected alias"}`))
+				require.NoError(t, err)
+				response.Body.Close()
+				require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+			}
+			require.Equal(t, before, read())
+		})
+	}
 }
 
 func TestStats(t *testing.T) {
@@ -751,65 +583,18 @@ func TestAuth(t *testing.T) {
 	require.Equal(t, 401, resp.StatusCode)
 }
 
-func TestDeleteListen(t *testing.T) {
-	login(t)
-	getApiKey(t, session)
-
+func TestRetiredListenDeletionPreservesStoredListens(t *testing.T) {
 	truncateTestData(t)
-
-	body := `{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": 1749475719,
-				"track_metadata": {
-					"additional_info": {
-						"artist_mbids": [
-							"80b3cb83-b7a3-4f79-ad42-8325cefb3626"
-						],
-						"artist_names": [
-							"キタニタツヤ"
-						],
-						"duration_ms": 197270,
-						"recording_mbid": "4e909c21-e7a8-404d-b75a-0c8c2926efb0",
-						"release_group_mbid": "89069d92-e495-462c-b189-3431551868ed",
-						"release_mbid": "e16a49d6-77f3-4d73-b93c-cac855ce6ad5",
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "キタニタツヤ",
-					"release_name": "Where Our Blue Is",
-					"track_name": "Where Our Blue Is"
-				}
-			}
-		]
-	}`
-
-	req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(body))
+	t.Run("Submit Listens", doSubmitListens)
+	before, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-	resp, err := http.DefaultClient.Do(req)
+	response, err := makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
 	require.NoError(t, err)
-	respBytes, err := io.ReadAll(resp.Body)
+	response.Body.Close()
+	require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+	after, err := store.Count(`SELECT COUNT(*) FROM listens`)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// deletes are idempotent
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/listens?track_id=1&unix=1749475719", nil)
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	// listen is deleted
-	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/track/1")
-	require.NoError(t, err)
-	var track models.Track
-	err = json.NewDecoder(resp.Body).Decode(&track)
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, track.ListenCount)
+	require.Equal(t, before, after)
 }
 
 func TestArtistReplaceImage(t *testing.T) {
@@ -886,171 +671,34 @@ func TestAlbumReplaceImage(t *testing.T) {
 	assert.Contains(t, a.Image.Small, response.Image)
 }
 
-func TestSetPrimaryArtist(t *testing.T) {
+func TestRetiredCatalogWritesPreserveOriginalCredits(t *testing.T) {
 	truncateTestData(t)
 	t.Run("Submit Listens", doSubmitListens)
-
-	// set and unset track primary artist
-
-	resp, err := makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/artists/1", strings.NewReader(`{"is_primary":false}`))
+	for _, request := range []struct{ method, path, body string }{
+		{"PATCH", "/artist/1", `{"musicbrainz_id":""}`},
+		{"PATCH", "/album/1", `{"various_artists":true}`},
+		{"PATCH", "/track/1", `{"musicbrainz_id":""}`},
+		{"PATCH", "/track/1/artists/1", `{"is_primary":false}`},
+		{"PATCH", "/album/1/artists/1", `{"is_primary":false}`},
+		{"POST", "/track/1/artists", `{"artist_ids":[2]}`},
+		{"DELETE", "/track/1/artists/1", ``},
+	} {
+		t.Run(request.method+request.path, func(t *testing.T) {
+			response, err := makeAuthRequest(t, session, request.method, "/apis/web/v1"+request.path, strings.NewReader(request.body))
+			require.NoError(t, err)
+			defer response.Body.Close()
+			require.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, response.StatusCode)
+		})
+	}
+	exists, err := store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_tracks WHERE track_id=1 AND artist_id=1 AND is_primary=1)`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err := store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_tracks
-      WHERE track_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, false)
+	require.True(t, exists)
+	exists, err = store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_releases WHERE release_id=1 AND artist_id=1 AND is_primary=1)`)
 	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be false")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/1/artists/1", strings.NewReader(`{"is_primary":true}`))
+	require.True(t, exists)
+	exists, err = store.RowExists(`SELECT EXISTS(SELECT 1 FROM artist_tracks WHERE track_id=1 AND artist_id=2)`)
 	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_tracks
-      WHERE track_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, true)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be true")
-
-	// set and unset album primary artist
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/1/artists/1", strings.NewReader(`{"is_primary":false}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_releases
-      WHERE release_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, false)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be false")
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/1/artists/1", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-    SELECT EXISTS (
-      SELECT 1 FROM artist_releases
-      WHERE release_id = $1 AND artist_id = $2 AND is_primary = $3
-    )`, 1, 1, true)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist is_primary to be true")
-
-	// create a new track with multiple artists to make sure only one is primary at a time
-
-	listenBody := `{
-		"listen_type": "single",
-		"payload": [
-			{
-				"listened_at": 1749475719,
-				"track_metadata": {
-					"additional_info": {
-						"artist_names": [
-							"Rat Tally",
-							"Madeline Kenney"
-						],
-						"duration_ms": 197270,
-						"submission_client": "navidrome",
-						"submission_client_version": "0.56.1 (fa2cf362)"
-					},
-					"artist_name": "Rat Tally feat. Madeline Kenney",
-					"release_name": "In My Car",
-					"track_name": "In My Car"
-				}
-			}
-		]
-	}`
-
-	req, err := http.NewRequest("POST", host()+"/apis/listenbrainz/1/submit-listens", strings.NewReader(listenBody))
-	require.NoError(t, err)
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", apikey))
-	req.Header.Add("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	respBytes, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
-
-	// ensure only one artist can be primary at once
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/4/artists/4", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/album/4/artists/5", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/4/artists/4", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	resp, err = makeAuthRequest(t, session, "PATCH", "/apis/web/v1/track/4/artists/5", strings.NewReader(`{"is_primary":true}`))
-	require.NoError(t, err)
-	require.Equal(t, 204, resp.StatusCode)
-
-	count, err := store.Count(`SELECT COUNT(*) FROM artist_releases WHERE release_id = $1 AND is_primary = $2`, 4, true)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, count, "expected only one primary artist for release")
-	count, err = store.Count(`SELECT COUNT(*) FROM artist_tracks WHERE track_id = $1 AND is_primary = $2`, 4, true)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, count, "expected only one primary artist for track")
-}
-
-func TestUpdateArtists_Track(t *testing.T) {
-	truncateTestData(t)
-	t.Run("Submit Listens", doSubmitListens)
-
-	// happy path: add artist 2 to track 1
-	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	exists, err := store.RowExists(`
-		SELECT EXISTS (
-			SELECT 1 FROM artist_tracks
-			WHERE track_id = $1 AND artist_id = $2
-		)`, 1, 2)
-	require.NoError(t, err)
-	assert.True(t, exists, "expected artist 2 to be associated with track 1")
-
-	// happy path: remove artist 2 from track 1
-	resp, err = makeAuthRequest(t, session, "DELETE", "/apis/web/v1/track/1/artists/2", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	exists, err = store.RowExists(`
-		SELECT EXISTS (
-			SELECT 1 FROM artist_tracks
-			WHERE track_id = $1 AND artist_id = $2
-		)`, 1, 2)
-	require.NoError(t, err)
-	assert.False(t, exists, "expected artist 2 to be removed from track 1")
-
-	// 401 Unauthorized
-	req, err := http.NewRequest("POST", host()+"/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	resp, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-
-	// 400 Bad Request: invalid id
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/notanumber/artists", strings.NewReader(`{"artist_ids":[2]}`))
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-
-	// 400 Bad Request: invalid add_artist
-	resp, err = makeAuthRequest(t, session, "POST", "/apis/web/v1/track/1/artists", strings.NewReader(`{"artist_ids":["abc123"]}`))
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-
-	truncateTestData(t)
+	require.False(t, exists)
 }
 
 func TestManualListen(t *testing.T) {
@@ -1062,8 +710,10 @@ func TestManualListen(t *testing.T) {
 	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/listens", strings.NewReader(`{"track_id":1,"unix":`+unix+`}`))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
-	count, _ := store.Count(`SELECT COUNT(*) FROM listens WHERE track_id = $1`, 1)
-	assert.Equal(t, 2, count)
+	waitForLivePublication(t)
+	track, err := store.GetTrack(context.Background(), db.GetTrackOpts{ID: 1})
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, track.ListenCount)
 
 	// 400
 	unix = strconv.FormatInt(time.Now().Unix()+60, 10)
@@ -1118,7 +768,7 @@ func TestNowPlaying(t *testing.T) {
 	require.NoError(t, err)
 	respBytes, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
+	assert.JSONEq(t, `{"status": "ok"}`, string(respBytes))
 
 	// yes playing
 	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/now-playing")

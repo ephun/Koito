@@ -58,6 +58,12 @@ func GetListenActivityHandler(store db.ListenStore) func(w http.ResponseWriter, 
 			return
 		}
 
+		groupText := r.URL.Query().Get("album_group_id")
+		groupID, err := strconv.Atoi(groupText)
+		if groupText != "" && (err != nil || groupID < 1) {
+			utils.WriteError(w, "invalid album group identifier", http.StatusBadRequest)
+			return
+		}
 		trackIdStr := r.URL.Query().Get("track_id")
 		trackId, err := strconv.Atoi(trackIdStr)
 		if err != nil && trackIdStr != "" {
@@ -82,14 +88,15 @@ func GetListenActivityHandler(store db.ListenStore) func(w http.ResponseWriter, 
 		}
 
 		opts := db.ListenActivityOpts{
-			Step:     step,
-			Range:    _range,
-			Month:    month,
-			Year:     year,
-			Timezone: parseTZ(r),
-			AlbumID:  int32(albumId),
-			ArtistID: int32(artistId),
-			TrackID:  int32(trackId),
+			AlbumGroupID: int32(groupID),
+			Step:         step,
+			Range:        _range,
+			Month:        month,
+			Year:         year,
+			Timezone:     parseTZ(r),
+			AlbumID:      int32(albumId),
+			ArtistID:     int32(artistId),
+			TrackID:      int32(trackId),
 		}
 
 		if strings.ToLower(opts.Timezone.String()) == "local" {

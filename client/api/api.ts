@@ -89,39 +89,16 @@ function replaceImage(
   });
 }
 
-function mergeTracks(from: number, to: number): Promise<Response> {
-  return fetch(`/apis/web/v1/track/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from }),
-  });
-}
-function mergeAlbums(
-  from: number,
-  to: number,
-  replaceImage: boolean,
-): Promise<Response> {
-  return fetch(`/apis/web/v1/album/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from, replace_image: replaceImage }),
-  });
-}
-function mergeArtists(
-  from: number,
-  to: number,
-  replaceImage: boolean,
-): Promise<Response> {
-  return fetch(`/apis/web/v1/artist/${to}/merge`, {
-    method: "POST",
-    body: JSON.stringify({ merge_from_id: from, replace_image: replaceImage }),
-  });
-}
 function login(
   username: string,
   password: string,
   remember: boolean,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`/apis/web/v1/login`, {
     method: "POST",
+    signal,
+    credentials: "same-origin",
     body: JSON.stringify({
       username: username,
       password: password,
@@ -201,11 +178,6 @@ function updateApiKeyLabel(id: number, label: string): Promise<Response> {
   });
 }
 
-function deleteItem(itemType: string, id: number): Promise<Response> {
-  return fetch(`/apis/web/v1/${itemType}/${id}`, {
-    method: "DELETE",
-  });
-}
 function updateUser(username: string, password: string) {
   const form = new URLSearchParams();
   form.append("username", username);
@@ -269,16 +241,6 @@ function getAlbum(id: number): Promise<Album> {
   );
 }
 
-function deleteListen(listen: Listen): Promise<Response> {
-  const ms = new Date(listen.time).getTime();
-  const unix = Math.floor(ms / 1000);
-  return fetch(
-    `/apis/web/v1/listens?track_id=${listen.track.id}&unix=${unix}`,
-    {
-      method: "DELETE",
-    },
-  );
-}
 function getExport() {}
 
 async function getRewindStats(args: timeframe): Promise<RewindStats> {
@@ -292,14 +254,10 @@ export {
   getTopAlbums,
   search,
   replaceImage,
-  mergeTracks,
-  mergeAlbums,
-  mergeArtists,
   imageUrl,
   login,
   logout,
   getCfg,
-  deleteItem,
   updateUser,
   getAliases,
   createAlias,
@@ -310,7 +268,6 @@ export {
   createApiKey,
   deleteApiKey,
   updateApiKeyLabel,
-  deleteListen,
   getAlbum,
   getExport,
   submitListen,
@@ -324,7 +281,13 @@ type ImageList = {
   xl: string;
 };
 type Track = {
+  scope_issues?: {filter_id:string;name:string;path:string;reason:string}[];
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;
+  music_track_id?: number;
+  albums?: { id: number; title: string; listen_count: number }[];
+  recordings?: { key: string; musicbrainz_id?: string; spotify_uri?: string }[];
   title: string;
   artists: SimpleArtists[];
   listen_count: number;
@@ -333,6 +296,7 @@ type Track = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   all_time_rank: number;
 };
 type SimpleTrack = {
@@ -342,6 +306,10 @@ type SimpleTrack = {
   image: ImageList;
 };
 type Artist = {
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  genres?: string[];
+  genre_issues?: {filter_id: string; name: string; path: string; reason: string}[];
   id: number;
   name: string;
   image: ImageList;
@@ -350,10 +318,20 @@ type Artist = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   is_primary: boolean;
   all_time_rank: number;
 };
+export function albumPath(album: Pick<Album, "id" | "album_group_id">) {
+ return album.album_group_id ? `/album-group/${album.album_group_id}` : `/album/${album.id}`;
+}
+
 type Album = {
+  classification_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  identifier_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+  name_issues?: {filter_id: string; name: string; path: string; reason: string}[];
+ album_group_id?: number;
+ editions?: { id: number; title: string; listen_count: number }[];
   id: number;
   title: string;
   image: ImageList;
@@ -363,6 +341,7 @@ type Album = {
   musicbrainz_id: string;
   time_listened: number;
   first_listen: number;
+  first_listen_date?: string;
   all_time_rank: number;
 };
 type Alias = {
@@ -372,6 +351,17 @@ type Alias = {
   is_primary: boolean;
 };
 type Listen = {
+  context_kind?: string;
+  local_date?: string;
+  date_only?: boolean;
+  time_estimated?: boolean;
+  tags?: string[];
+  album_id?: number;
+  album?: string;
+  play_key?: string;
+  record_id?: number;
+  evidence?: string;
+  attribution_basis?: string;
   time: string;
   track: SimpleTrack;
 };
@@ -404,6 +394,7 @@ type SimpleArtists = {
   id: number;
 };
 type Stats = {
+  undated_count: number;
   listen_count: number;
   track_count: number;
   album_count: number;

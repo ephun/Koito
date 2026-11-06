@@ -1,3 +1,4 @@
+import { albumPath } from "api/api";
 import { useQuery } from "@tanstack/react-query";
 import {
   apiFetch,
@@ -50,11 +51,11 @@ export default function ArtistAlbums({ artistId, name }: Props) {
       <div className="flex flex-wrap gap-8 mt-8">
         {data.items.length < 1 && "Nothing to show"}
         {data.items.map((item) => (
-          <div className="w-[330px]" key={item.item.id}>
+          <div className="w-[330px]" key={albumPath(item.item)}>
             <MediaItem
               image={item.item.image}
               size="lg"
-              link={`/album/${item.item.id}`}
+              link={albumPath(item.item)}
               alt={item.item.title}
               alignTop
               title={item.item.title}

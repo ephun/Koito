@@ -45,8 +45,9 @@ func AssociateTrack(ctx context.Context, d db.TrackStore, opts AssociateTrackOpt
 // If no match is found, will call matchTrackByTitleAndArtist and associate the Mbz ID with the result
 func matchTrackByMbzID(ctx context.Context, d db.TrackStore, opts AssociateTrackOpts) (*models.Track, error) {
 	l := logger.FromContext(ctx)
-	track, err := d.GetTrack(ctx, db.GetTrackOpts{
+	track, err := d.GetTrack(ctx, db.GetTrackOpts{Original: true,
 		MusicBrainzID: opts.TrackMbzID,
+		ReleaseID:     opts.AlbumID,
 	})
 	if err == nil {
 		l.Debug().Msgf("Found track '%s' by MusicBrainz ID", track.Title)
@@ -81,11 +82,14 @@ func matchTrackByMbzID(ctx context.Context, d db.TrackStore, opts AssociateTrack
 func matchTrackByTrackInfo(ctx context.Context, d db.TrackStore, opts AssociateTrackOpts) (*models.Track, error) {
 	l := logger.FromContext(ctx)
 	// try provided track title
-	track, err := d.GetTrack(ctx, db.GetTrackOpts{
+	track, err := d.GetTrack(ctx, db.GetTrackOpts{Original: true,
 		Title:     opts.TrackName,
 		ReleaseID: opts.AlbumID,
 		ArtistIDs: opts.ArtistIDs,
 	})
+	if err == nil && opts.TrackMbzID != uuid.Nil && (track.MbzID == nil || *track.MbzID != opts.TrackMbzID) {
+		err = db.ErrNotFound
+	}
 	if err == nil {
 		l.Debug().Msgf("Track '%s' found by title, release and artist match", track.Title)
 		return track, nil
@@ -95,7 +99,7 @@ func matchTrackByTrackInfo(ctx context.Context, d db.TrackStore, opts AssociateT
 		if opts.TrackMbzID != uuid.Nil {
 			mbzTrack, err := opts.Mbzc.GetTrack(ctx, opts.TrackMbzID)
 			if err == nil {
-				track, err := d.GetTrack(ctx, db.GetTrackOpts{
+				track, err := d.GetTrack(ctx, db.GetTrackOpts{Original: true,
 					Title:     mbzTrack.Title,
 					ReleaseID: opts.AlbumID,
 					ArtistIDs: opts.ArtistIDs,

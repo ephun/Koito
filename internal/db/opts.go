@@ -8,6 +8,7 @@ import (
 )
 
 type GetAlbumOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	ArtistID      int32
@@ -17,6 +18,7 @@ type GetAlbumOpts struct {
 }
 
 type GetArtistOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	Name          string
@@ -24,6 +26,7 @@ type GetArtistOpts struct {
 }
 
 type GetTrackOpts struct {
+	Original      bool
 	ID            int32
 	MusicBrainzID uuid.UUID
 	Title         string
@@ -124,9 +127,11 @@ type AddArtistsToTrackOpts struct {
 }
 
 type GetItemsOpts struct {
-	Limit     int
-	Page      int
-	Timeframe Timeframe
+	Genre        string
+	AlbumGroupID int
+	Limit        int
+	Page         int
+	Timeframe    Timeframe
 
 	// Used only for getting top tracks
 	ArtistID int
@@ -137,33 +142,37 @@ type GetItemsOpts struct {
 }
 
 type ListenActivityOpts struct {
-	Step     StepInterval
-	Range    int
-	Month    int
-	Year     int
-	Timezone *time.Location
-	AlbumID  int32
-	ArtistID int32
-	TrackID  int32
+	AlbumGroupID int32
+	Step         StepInterval
+	Range        int
+	Month        int
+	Year         int
+	Timezone     *time.Location
+	AlbumID      int32
+	ArtistID     int32
+	TrackID      int32
 }
 
 type TimeListenedOpts struct {
-	Timeframe Timeframe
-	AlbumID   int32
-	ArtistID  int32
-	TrackID   int32
+	AlbumGroupID int32
+	Timeframe    Timeframe
+	AlbumID      int32
+	ArtistID     int32
+	TrackID      int32
 }
 
 type GetExportPageOpts struct {
 	UserID     int32
 	ListenedAt time.Time
 	TrackID    int32
+	PlayKey    string
 	Limit      int32
 }
 
 type GetInterestOpts struct {
-	Buckets  int
-	AlbumID  int32
-	ArtistID int32
-	TrackID  int32
+	AlbumGroupID int32
+	Buckets      int
+	AlbumID      int32
+	ArtistID     int32
+	TrackID      int32
 }

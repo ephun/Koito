@@ -54,7 +54,7 @@ func ImportKoitoFile(ctx context.Context, store importStore, filename string) er
 			if ia.MBID != nil {
 				mbid = *ia.MBID
 			}
-			artist, err := store.GetArtist(ctx, db.GetArtistOpts{
+			artist, err := store.GetArtist(ctx, db.GetArtistOpts{Original: true,
 				MusicBrainzID: mbid,
 				Name:          getPrimaryAliasFromAliasSlice(ia.Aliases),
 			})
@@ -89,7 +89,7 @@ func ImportKoitoFile(ctx context.Context, store importStore, filename string) er
 		if data.Listens[i].Album.MBID != nil {
 			mbid = *data.Listens[i].Album.MBID
 		}
-		album, err := store.GetAlbum(ctx, db.GetAlbumOpts{
+		album, err := store.GetAlbum(ctx, db.GetAlbumOpts{Original: true,
 			MusicBrainzID: mbid,
 			Title:         getPrimaryAliasFromAliasSlice(data.Listens[i].Album.Aliases),
 			ArtistID:      artistIds[0],
@@ -126,7 +126,7 @@ func ImportKoitoFile(ctx context.Context, store importStore, filename string) er
 		if data.Listens[i].Track.MBID != nil {
 			mbid = *data.Listens[i].Track.MBID
 		}
-		track, err := store.GetTrack(ctx, db.GetTrackOpts{
+		track, err := store.GetTrack(ctx, db.GetTrackOpts{Original: true,
 			MusicBrainzID: mbid,
 			Title:         getPrimaryAliasFromAliasSlice(data.Listens[i].Track.Aliases),
 			ReleaseID:     albumId,
@@ -168,6 +168,9 @@ func ImportKoitoFile(ctx context.Context, store importStore, filename string) er
 		count++
 	}
 
+	if err := f.Close(); err != nil {
+		return err
+	}
 	return finishImport(ctx, filename, count)
 }
 func getPrimaryAliasFromAliasSlice(aliases []models.Alias) string {

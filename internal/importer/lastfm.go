@@ -127,5 +127,8 @@ func ImportLastFMFile(ctx context.Context, store importStore, mbzc mbz.MusicBrai
 			throttleFunc()
 		}
 	}
+	if err := file.Close(); err != nil {
+		return err
+	}
 	return finishImport(ctx, filename, count)
 }

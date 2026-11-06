@@ -1,0 +1,400 @@
+package sources
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"math"
+	"sort"
+	"time"
+
+	"github.com/gabehf/koito/internal/logger"
+	"github.com/gabehf/koito/internal/music"
+)
+
+func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	started := time.Now()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	defer tx.Rollback()
+	restoreCache, err := publicationCache(ctx, tx)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	defer restoreCache()
+	version, err := readRuleVersion(ctx, tx, 0)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	records, err := loadMatchingRecords(ctx, tx, version.Config)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	logger.FromContext(ctx).Debug().Int("records", len(records)).Dur("elapsed", time.Since(started)).Msg("Loaded records for publication")
+	decisions, err := loadDecisions(ctx, tx)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	plan, err := calculateView(ctx, tx, records, version.Config, decisions)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	logger.FromContext(ctx).Debug().Int("plays", len(plan.Plays)).Dur("elapsed", time.Since(started)).Msg("Calculated listening view")
+	result, err := publishPlan(ctx, tx, plan, version.ID)
+	if err != nil {
+		return result, err
+	}
+	restoreCache()
+	return result, tx.Commit()
+}
+
+// publishPlan replaces only owned display rows and derived links, atomically.
+// It never updates source records, legacy aliases or unrelated live listens.
+func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int64) (ProjectionResult, error) {
+	started := time.Now()
+	restoreCache, err := publicationCache(ctx, tx)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	defer restoreCache()
+	statements := publicationStatements{tx: tx}
+	defer statements.Close()
+	stage := func(name string) {
+		logger.FromContext(ctx).Debug().Str("stage", name).Dur("elapsed", time.Since(started)).Msg("Rebuilding imported view")
+	}
+	result := ProjectionResult{Policy: Policy, Records: len(plan.Records), Plays: len(plan.Plays)}
+	version, err := readRuleVersion(ctx, tx, versionID)
+	if err != nil {
+		return result, err
+	}
+	naming, err := compileNaming(version.Config)
+	if err != nil {
+		return result, err
+	}
+	for _, query := range []string{
+		`DELETE FROM source_play_tags`,
+		`DELETE FROM track_history_overrides`,
+		`DELETE FROM track_catalog_comparisons`,
+		`DELETE FROM source_aggregate_records`,
+		`DELETE FROM source_aggregates`,
+		`DELETE FROM source_play_records`,
+		`DELETE FROM source_play_details`,
+		`DELETE FROM listens WHERE client IN ('sources:spotify-v1','sources:filters-v1') AND EXISTS(SELECT 1 FROM source_projection p WHERE p.owned=1 AND p.track_id=listens.track_id AND p.listened_at=listens.listened_at AND p.user_id=listens.user_id AND p.play_key=listens.play_key)`,
+		`DELETE FROM source_projection`,
+		`DELETE FROM source_match_candidates`,
+		`DELETE FROM source_plays WHERE policy IN ('spotify-v1','filters-v1')`,
+		`DELETE FROM source_interpretations WHERE policy IN ('spotify-v1','filters-v1')`,
+	} {
+		if _, err := statements.ExecContext(ctx, query); err != nil {
+			return result, err
+		}
+	}
+	stage("Catalog")
+	// Read unowned display rows once. A per-play COUNT with a user condition
+	// can make SQLite choose the user index and scan the entire single-user
+	// history for every new play.
+	legacyKeys := map[[3]int64]bool{}
+	legacyRows, err := tx.QueryContext(ctx, `SELECT track_id,listened_at,user_id FROM listens`)
+	if err != nil {
+		return result, err
+	}
+	for legacyRows.Next() {
+		var track, unix, user int64
+		if err = legacyRows.Scan(&track, &unix, &user); err != nil {
+			legacyRows.Close()
+			return result, err
+		}
+		legacyKeys[[3]int64{track, unix, user}] = true
+	}
+	err = legacyRows.Err()
+	legacyRows.Close()
+	if err != nil {
+		return result, err
+	}
+	byID := map[int64]*matchingRecord{}
+	for i := range plan.Records {
+		r := &plan.Records[i]
+		byID[r.ID] = r
+	}
+	tracks := map[string]int64{}
+	historyAssignments, err := nativeHistoryAssignments(ctx, tx, version.Config, legacyKeys)
+	if err != nil {
+		return result, err
+	}
+	// Reserve unchanged appearances before source-scoped comparison variants.
+	// Disabling an alias can then reuse the original appearance identifiers.
+	warm := []*matchingRecord{}
+	for _, play := range plan.Plays {
+		if r := byID[play.Representative]; r.Values.Music != nil {
+			warm = append(warm, r)
+		}
+	}
+	for _, aggregate := range plan.Aggregates {
+		if aggregate.Attributed > 0 {
+			if r := byID[aggregate.Representative]; r.Values.Music != nil {
+				warm = append(warm, r)
+			}
+		}
+	}
+	unchanged := func(r *matchingRecord) bool {
+		return r.Values.Music.Artist == r.Values.Artist && r.Values.Music.Title == r.Values.Title
+	}
+	sort.SliceStable(warm, func(i, j int) bool {
+		if unchanged(warm[i]) != unchanged(warm[j]) {
+			return unchanged(warm[i])
+		}
+		return warm[i].ID < warm[j].ID
+	})
+	for _, r := range warm {
+		v, err := applyNaming(ctx, naming, *r, spotifyItem{DurationMS: r.Values.DurationMS, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID})
+		if err != nil {
+			return result, err
+		}
+		comparisonKey := historyComparisonKey(*r)
+		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID, comparisonKey})
+		key := string(raw)
+		if _, exists := tracks[key]; exists {
+			continue
+		}
+		base, err := projectTrack(ctx, tx, v)
+		if err != nil {
+			return result, err
+		}
+		appearance, err := historyVariant(ctx, tx, base, comparisonKey, historyAssignments)
+		if err != nil {
+			return result, err
+		}
+		tracks[key] = appearance
+	}
+	stage("Play details")
+	for key, attribution := range plan.Attributions {
+		raw, err := json.Marshal(attribution)
+		if err != nil {
+			return result, err
+		}
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_details(play_key,evidence_level,attribution_json,version_id) VALUES(?,'observed',?,?)`, key, string(raw), versionID); err != nil {
+			return result, err
+		}
+	}
+	if err = publishPlayContexts(ctx, tx, plan); err != nil {
+		return result, err
+	}
+
+	for _, r := range plan.Records {
+		if key := plan.Keys[r.ID]; key != "" {
+			if _, err := statements.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, key, r.ID); err != nil {
+				return result, err
+			}
+		}
+	}
+	stage("Plays")
+	for _, play := range plan.Plays {
+		r := byID[play.Representative]
+		v := spotifyItem{DurationMS: r.Values.DurationMS, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+		v, err = applyNaming(ctx, naming, *r, v)
+		if err != nil {
+			return result, err
+		}
+		comparisonKey := historyComparisonKey(*r)
+		raw, _ := json.Marshal([]string{v.Artist, v.Album, v.Title, v.URI, v.RecordingID, comparisonKey})
+		cacheKey := string(raw)
+		track, ok := tracks[cacheKey]
+		var err error
+		if !ok {
+			track, err = projectTrack(ctx, tx, v)
+			if err != nil {
+				return result, err
+			}
+			track, err = historyVariant(ctx, tx, track, comparisonKey, historyAssignments)
+			if err != nil {
+				return result, err
+			}
+			tracks[cacheKey] = track
+		}
+		at := play.At
+		if at.IsZero() {
+			at = r.Start
+		}
+		unix := at.Unix()
+		if play.Evidence != "observed" {
+			if _, err = statements.ExecContext(ctx, `UPDATE source_play_details SET evidence_level=?,interval_start=?,interval_end=? WHERE play_key=?`, play.Evidence, optionalTime(play.IntervalStart), optionalTime(play.IntervalEnd), play.Key); err != nil {
+				return result, err
+			}
+			for _, id := range play.Records {
+				if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, play.Key, id); err != nil {
+					return result, err
+				}
+			}
+		}
+		// An unowned legacy row remains available and is reported as a collision,
+		// not silently deleted or claimed as proof that the source records match it.
+		owned := 1
+		disposition := "counted"
+		if legacyKeys[[3]int64{track, unix, int64(r.UserID)}] {
+			owned = 0
+			result.Collisions++
+			disposition = "legacy display overlap"
+		} else {
+			if _, err = statements.ExecContext(ctx, `INSERT INTO listens(track_id,listened_at,user_id,client,play_key) VALUES(?,?,?,'sources:filters-v1',?)`, track, unix, r.UserID, play.Key); err != nil {
+				return result, err
+			}
+		}
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_projection(track_id,listened_at,user_id,policy,owned,play_key) VALUES(?,?,?,?,?,?)`, track, unix, r.UserID, Policy, owned, play.Key); err != nil {
+			return result, err
+		}
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_plays(policy,play_key,source_id,representative_record,track_id,listened_at,disposition,version_id) VALUES(?,?,?,?,?,?,?,?)`, Policy, play.Key, r.SourceID, r.ID, track, unix, disposition, versionID); err != nil {
+			return result, err
+		}
+		if len(v.Tags) > 0 {
+			raw, e := json.Marshal(v.Tags)
+			if e != nil {
+				return result, e
+			}
+			if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_tags(play_key,tags_json) VALUES(?,?)`, play.Key, string(raw)); err != nil {
+				return result, err
+			}
+		}
+	}
+	for _, aggregate := range plan.Aggregates {
+		r := byID[aggregate.Representative]
+		var track any
+		if aggregate.Attributed > 0 {
+			v := spotifyItem{DurationMS: r.Values.DurationMS, Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+			v, err = applyNaming(ctx, naming, *r, v)
+			if err != nil {
+				return result, err
+			}
+			id, err := projectTrack(ctx, tx, v)
+			if err != nil {
+				return result, err
+			}
+			id, err = historyVariant(ctx, tx, id, historyComparisonKey(*r), historyAssignments)
+			if err != nil {
+				return result, err
+			}
+			track = id
+		}
+		raw, err := json.Marshal(aggregate)
+		if err != nil {
+			return result, err
+		}
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_aggregates(aggregate_key,library_key,track_key,representative_record,track_id,user_id,available_count,attributed_count,observed_count,overlap_count,last_played_count,estimated_count,undated_count,details_json,version_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, aggregate.Key, aggregate.LibraryKey, aggregate.TrackKey, aggregate.Representative, track, r.UserID, aggregate.Available, aggregate.Attributed, aggregate.Observed, aggregate.Overlap, aggregate.LastPlayed, aggregate.Estimated, aggregate.Undated, string(raw), versionID); err != nil {
+			return result, err
+		}
+		result.Estimated += aggregate.Estimated
+		result.LastPlayed += aggregate.LastPlayed
+		if aggregate.Undated > math.MaxInt64-result.Undated {
+			return result, fmt.Errorf("Undated counts exceed supported total.")
+		}
+		result.Undated += aggregate.Undated
+		for _, id := range aggregate.Records {
+			if _, err = statements.ExecContext(ctx, `INSERT INTO source_aggregate_records(aggregate_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, aggregate.Key, id); err != nil {
+				return result, err
+			}
+		}
+	}
+	stage("Interpretations")
+	statement, err := tx.PrepareContext(ctx, `INSERT INTO source_interpretations(record_id,policy,play_key,reason) VALUES(?,?,?,?)`)
+	if err != nil {
+		return result, err
+	}
+	defer statement.Close()
+	for _, r := range plan.Records {
+		if _, err = statement.ExecContext(ctx, r.ID, Policy, plan.Keys[r.ID], plan.Reasons[r.ID]); err != nil {
+			return result, err
+		}
+	}
+	candidateStatement, err := tx.PrepareContext(ctx, `INSERT INTO source_match_candidates(record_id,candidate_id) VALUES(?,?)`)
+	if err != nil {
+		return result, err
+	}
+	defer candidateStatement.Close()
+	for id, partners := range plan.Ambiguous {
+		for _, partner := range partners {
+			if _, err = candidateStatement.ExecContext(ctx, id, partner); err != nil {
+				return result, err
+			}
+		}
+	}
+	// The version being published may differ from filter_state until commit.
+	var rawConfig string
+	if err = tx.QueryRowContext(ctx, `SELECT config_json FROM filter_versions WHERE id=?`, versionID).Scan(&rawConfig); err != nil {
+		return result, err
+	}
+	var config RuleConfig
+	if err = json.Unmarshal([]byte(rawConfig), &config); err != nil {
+		return result, err
+	}
+	if err = publishCatalogIdentifiers(ctx, tx, config); err != nil {
+		return result, err
+	}
+	stage("Source genres")
+	if err = refreshSourceGenres(ctx, tx); err != nil {
+		return result, err
+	}
+	stage("Snapshots")
+	if err = publishSnapshots(ctx, tx, byID, naming, historyAssignments, tracks); err != nil {
+		return result, err
+	}
+	stage("Artist matching")
+	if err = music.RefreshArtistMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
+	stage("Names")
+	if err = publishCatalogNames(ctx, tx, config); err != nil {
+		return result, err
+	}
+	musicRule, _ := config.matchingRules()
+	if err = publishAlbumClassification(ctx, tx, config); err != nil {
+		return result, err
+	}
+	stage("Catalog matching")
+	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
+	stage("Album groups")
+	if err = publishAlbumGroups(ctx, tx, config, byID, naming); err != nil {
+		return result, err
+	}
+	stage("Catalog matching")
+	if err = music.RefreshCatalogMatches(ctx, tx, rawConfig); err != nil {
+		return result, err
+	}
+	stage("Track histories")
+	if err = music.RefreshHistories(ctx, tx, !musicRule.Enabled || musicRule.Settings.CaseSensitive, rawConfig); err != nil {
+		return result, err
+	}
+	if err = publishArtistGenres(ctx, tx, config); err != nil {
+		return result, err
+	}
+	stage("Attribution evidence")
+	if err = publishPersonalEvidence(ctx, tx, plan, config, versionID); err != nil {
+		return result, err
+	}
+	stage("Inclusion")
+	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
+		return result, err
+	}
+	stage("Record dependencies")
+	if err = publishRecordDependencies(ctx, tx, plan, config, versionID); err != nil {
+		return result, err
+	}
+	if _, err = statements.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=? WHERE status='stored'`, versionID); err != nil {
+		return result, err
+	}
+	_, err = statements.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
+	stage("Complete")
+	return result, err
+}
+
+func optionalTime(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}

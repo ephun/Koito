@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -161,7 +160,7 @@ func saveImage(imgid uuid.UUID, size ImageSize, data io.Reader) error {
 	imagePath := BuildImagePath(imgid, size)
 
 	// Ensure the cache directory exists
-	err := os.MkdirAll(path.Dir(imagePath), 0744)
+	err := os.MkdirAll(filepath.Dir(imagePath), 0744)
 	if err != nil {
 		return fmt.Errorf("saveImage: failed to create full image cache directory: %w", err)
 	}

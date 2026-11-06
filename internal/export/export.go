@@ -47,6 +47,7 @@ type KoitoArtist struct {
 func ExportData(ctx context.Context, user *models.User, store db.ExportStore, out io.Writer) error {
 	lastTime := time.Unix(0, 0)
 	lastTrackId := int32(0)
+	lastPlayKey := ""
 	pageSize := int32(1000)
 
 	l := logger.FromContext(ctx)
@@ -72,6 +73,7 @@ func ExportData(ctx context.Context, user *models.User, store db.ExportStore, ou
 			UserID:     user.ID,
 			ListenedAt: lastTime,
 			TrackID:    lastTrackId,
+			PlayKey:    lastPlayKey,
 			Limit:      pageSize,
 		})
 		if err != nil {
@@ -100,12 +102,9 @@ func ExportData(ctx context.Context, user *models.User, store db.ExportStore, ou
 			}
 			_, _ = out.Write(raw)
 
-			if r.TrackID > lastTrackId {
-				lastTrackId = r.TrackID
-			}
-			if r.ListenedAt.After(lastTime) {
-				lastTime = r.ListenedAt
-			}
+			lastTrackId = r.TrackID
+			lastTime = r.ListenedAt
+			lastPlayKey = r.PlayKey
 		}
 	}
 

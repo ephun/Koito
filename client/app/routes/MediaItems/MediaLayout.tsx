@@ -1,30 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { average } from "color.js";
-import { type ImageList, type SearchResponse } from "api/api";
+import { type ImageList } from "api/api";
 import ImageDropHandler from "~/components/ImageDropHandler";
-import { Edit, ImageIcon, Merge, Plus, Trash } from "lucide-react";
+import { Edit, ImageIcon, Plus, EyeOff } from "lucide-react";
 import { useAppContext } from "~/providers/AppProvider";
-import MergeModal from "~/components/modals/MergeModal";
 import ImageReplaceModal from "~/components/modals/ImageReplaceModal";
-import DeleteModal from "~/components/modals/DeleteModal";
 import EditModal from "~/components/modals/EditModal/EditModal";
 import AddListenModal from "~/components/modals/AddListenModal";
 import MbzIcon from "~/components/icons/MbzIcon";
 import { timeListenedString } from "~/utils/utils";
 import { Link } from "react-router";
 import useWindowWidth from "~/hooks/useWindowWidth";
-
-export type MergeFunc = (
-  from: number,
-  to: number,
-  replaceImage: boolean,
-) => Promise<Response>;
-export type MergeSearchCleanerFunc = (
-  r: SearchResponse,
-  id: number,
-) => SearchResponse;
+import { calendarDate } from "~/utils/dates";
 
 interface Props {
+  filterIssues?: { filter_id: string; name: string; reason: string }[];
+  grouped?: boolean;
   type: "Track" | "Album" | "Artist";
   title: string;
   img: ImageList;
@@ -34,26 +25,33 @@ interface Props {
   listenCount: number;
   timeListened: number;
   firstListen: number; // unix
+  firstListenDate?: string;
   imgItemId: number;
-  mergeFunc: MergeFunc;
-  mergeCleanerFunc: MergeSearchCleanerFunc;
   children: React.ReactNode;
-  subContent: React.ReactNode;
+  subContent?: React.ReactNode;
+  metadata?: React.ReactNode;
 }
 
 export default function MediaLayout(props: Props) {
   const [bgColor, setBgColor] = useState<string>("(--color-bg)");
-  const [mergeModalOpen, setMergeModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [addListenModalOpen, setAddListenModalOpen] = useState(false);
   const { user } = useAppContext();
 
   useEffect(() => {
-    average(props.img.xs, { amount: 1 }).then((color) => {
-      setBgColor(`rgba(${color[0]},${color[1]},${color[2]},0.2)`);
-    });
+    let active = true;
+    average(props.img.xs, { amount: 1 })
+      .then((color) => {
+        if (!active) return;
+        setBgColor(`rgba(${color[0]},${color[1]},${color[2]},0.2)`);
+      })
+      .catch(() => {
+        if (active) setBgColor("transparent");
+      });
+    return () => {
+      active = false;
+    };
   }, [props.img]);
 
   const replaceImageCallback = () => {
@@ -82,17 +80,19 @@ export default function MediaLayout(props: Props) {
         background: `linear-gradient(to bottom, ${bgColor}, transparent 800px)`,
       }}
     >
-      <ImageDropHandler
-        itemType={props.type.toLowerCase() === "artist" ? "artist" : "album"}
-        onComplete={replaceImageCallback}
-      />
+      {!props.grouped && (
+        <ImageDropHandler
+          itemType={props.type.toLowerCase() === "artist" ? "artist" : "album"}
+          onComplete={replaceImageCallback}
+        />
+      )}
       <title>{title}</title>
       <meta property="og:title" content={title} />
       <meta name="description" content={title} />
       <div
         className={`mx-auto w-19/20 sm:w-auto sm:mx-10 sm:ml-10 ${mobileTopMarginClass} sm:mt-12`}
       >
-        <div className="flex gap-8 flex-wrap md:flex-nowrap relative sm:mb-6">
+        <header className="flex gap-8 flex-wrap md:flex-nowrap relative sm:mb-6" aria-label="Music information">
           <div className="flex flex-col justify-around">
             <img
               fetchPriority="high"
@@ -107,144 +107,125 @@ export default function MediaLayout(props: Props) {
           <div className="flex flex-col items-start">
             <h3>{props.type}</h3>
             <div className="flex">
-              <h5
-                className={`mt-2 sm:mt-4 mb-1 sm:mb-3 font-semibold ${headersizeclass}`}
-              >
+              <h5 className={`mt-2 sm:mt-4 mb-1 sm:mb-3 font-semibold ${headersizeclass}`}>
                 {props.title}
                 <span className="text-xl font-medium text-(--color-fg-secondary) pl-2">
-                  {props.rank !== 0 && "#" + props.rank}
+                  {props.rank !== 0 && "#" + props.rank.toLocaleString()}
                 </span>
               </h5>
             </div>
             <div className="flex flex-col gap-1.5 items-start">
               {props.subContent}
-              {props.listenCount > 0 && (
-                <p>
-                  {props.listenCount} play{props.listenCount > 1 ? "s" : ""}
-                </p>
-              )}
-              {props.timeListened !== 0 && (
-                <p title={Math.floor(props.timeListened / 60 / 60) + " hours"}>
-                  {timeListenedString(props.timeListened)}
-                </p>
-              )}
-              {props.firstListen > 0 && (
-                <p title={new Date(props.firstListen * 1000).toLocaleString()}>
-                  Listening since{" "}
-                  {new Date(props.firstListen * 1000).toLocaleDateString()}
-                </p>
-              )}
+              {props.listenCount > 0 && <p>{props.listenCount.toLocaleString()} play{props.listenCount > 1 ? "s" : ""}</p>}
+              {props.timeListened !== 0 && <p title={Math.floor(props.timeListened / 3600) + " hours"}>{timeListenedString(props.timeListened)}</p>}
+              {props.firstListen > 0 && <p title={props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleString()}>
+                Listening since{" "}
+                {props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleDateString()}
+              </p>}
+              {props.metadata && <div className="min-w-0 w-full" aria-label="Music metadata">{props.metadata}</div>}
             </div>
           </div>
           <div className="absolute left-1 sm:right-10 sm:left-auto -top-9 sm:top-0 flex gap-3 items-center">
-            {props.musicbrainzId && (
-              <Link
-                title="View on MusicBrainz"
-                target="_blank"
-                to={`https://musicbrainz.org/${props.type.toLowerCase()}/${
-                  props.musicbrainzId
-                }`}
-              >
-                <MbzIcon size={iconSize} hover />
-              </Link>
-            )}
-            {user && (
-              <>
-                {props.type === "Track" && (
-                  <>
-                    <button
-                      title="Add Listen"
-                      className="hover:cursor-pointer"
-                      onClick={() => setAddListenModalOpen(true)}
+                  {props.musicbrainzId && (
+                    <Link
+                      title="View on MusicBrainz"
+                      target="_blank"
+                      to={`https://musicbrainz.org/${props.type === "Track" ? "recording" : props.type === "Album" ? "release" : "artist"}/${
+                        props.musicbrainzId
+                      }`}
                     >
-                      <Plus
-                        size={iconSize}
-                        className="hover:stroke-(--color-fg-secondary)"
-                      />
-                    </button>
-                    <AddListenModal
-                      open={addListenModalOpen}
-                      setOpen={setAddListenModalOpen}
-                      trackid={props.id}
-                    />
-                  </>
-                )}
-                <button
-                  title="Edit Item"
-                  className="hover:cursor-pointer"
-                  onClick={() => setRenameModalOpen(true)}
-                >
-                  <Edit
-                    size={iconSize}
-                    className="hover:stroke-(--color-fg-secondary)"
-                  />
-                </button>
+                      <MbzIcon size={iconSize} hover />
+                    </Link>
+                  )}
+                  {user && !props.grouped && (
+                    <>
+                      {props.type === "Track" && (
+                        <>
+                          <button
+                            title="Add Listen"
+                            className="hover:cursor-pointer"
+                            onClick={() => setAddListenModalOpen(true)}
+                          >
+                            <Plus
+                              size={iconSize}
+                              className="hover:stroke-(--color-fg-secondary)"
+                            />
+                          </button>
+                          <AddListenModal
+                            open={addListenModalOpen}
+                            setOpen={setAddListenModalOpen}
+                            trackid={props.id}
+                          />
+                        </>
+                      )}
+                      <button
+                        title="Edit Item"
+                        className="hover:cursor-pointer"
+                        onClick={() => setRenameModalOpen(true)}
+                      >
+                        <Edit
+                          size={iconSize}
+                          className="hover:stroke-(--color-fg-secondary)"
+                        />
+                      </button>
 
-                {props.type !== "Track" && (
-                  <button
-                    title="Replace Image"
-                    className="hover:cursor-pointer"
-                    onClick={() => setImageModalOpen(true)}
-                  >
-                    <ImageIcon
-                      size={iconSize}
-                      className="hover:stroke-(--color-fg-secondary)"
-                    />
-                  </button>
-                )}
-                <button
-                  title="Merge Items"
-                  className="hover:cursor-pointer"
-                  onClick={() => setMergeModalOpen(true)}
-                >
-                  <Merge
-                    size={iconSize}
-                    className="hover:stroke-(--color-fg-secondary)"
-                  />
-                </button>
-                <button
-                  title="Delete Item"
-                  className="hover:cursor-pointer"
-                  onClick={() => setDeleteModalOpen(true)}
-                >
-                  <Trash
-                    size={iconSize}
-                    className="hover:stroke-(--color-fg-secondary)"
-                  />
-                </button>
-                <EditModal
-                  open={renameModalOpen}
-                  setOpen={setRenameModalOpen}
-                  type={props.type.toLowerCase()}
-                  id={props.id}
-                />
-                <ImageReplaceModal
-                  open={imageModalOpen}
-                  setOpen={setImageModalOpen}
-                  id={props.imgItemId}
-                  musicbrainzId={props.musicbrainzId}
-                  type={props.type === "Track" ? "Album" : props.type}
-                />
-                <MergeModal
-                  currentTitle={props.title}
-                  mergeFunc={props.mergeFunc}
-                  mergeCleanerFunc={props.mergeCleanerFunc}
-                  type={props.type}
-                  currentId={props.id}
-                  open={mergeModalOpen}
-                  setOpen={setMergeModalOpen}
-                />
-                <DeleteModal
-                  open={deleteModalOpen}
-                  setOpen={setDeleteModalOpen}
-                  title={props.title}
-                  id={props.id}
-                  type={props.type}
-                />
-              </>
-            )}
+                      {props.type !== "Track" && (
+                        <button
+                          title="Replace Image"
+                          className="hover:cursor-pointer"
+                          onClick={() => setImageModalOpen(true)}
+                        >
+                          <ImageIcon
+                            size={iconSize}
+                            className="hover:stroke-(--color-fg-secondary)"
+                          />
+                        </button>
+                      )}
+                      <Link
+                        title="Edit inclusion"
+                        aria-label="Edit inclusion"
+                        className="hover:cursor-pointer"
+                        to={`/filters?catalog=${props.type.toLowerCase()}&id=${props.id}&edit=scope`}
+                      >
+                        <EyeOff
+                          size={iconSize}
+                          className="hover:stroke-(--color-fg-secondary)"
+                        />
+                      </Link>
+                      <EditModal
+                        open={renameModalOpen}
+                        setOpen={setRenameModalOpen}
+                        type={props.type.toLowerCase()}
+                        id={props.id}
+                      />
+                      <ImageReplaceModal
+                        open={imageModalOpen}
+                        setOpen={setImageModalOpen}
+                        id={props.imgItemId}
+                        musicbrainzId={props.musicbrainzId}
+                        type={props.type === "Track" ? "Album" : props.type}
+                      />
+                    </>
+                  )}
           </div>
-        </div>
+        </header>
+        {!!props.filterIssues?.length && (
+          <details className="mt-6 rounded border border-(--color-bg-tertiary) p-3">
+            <summary className="cursor-pointer text-sm">
+              Unresolved filters
+            </summary>
+            <ul className="mt-2 space-y-2 text-sm">
+              {props.filterIssues.map((issue, index) => (
+                <li key={index}>
+                  <Link className="underline" to="/filters">
+                    {issue.name || "Filter"}
+                  </Link>
+                  : {issue.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {props.children}
       </div>
     </main>

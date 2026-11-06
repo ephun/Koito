@@ -6,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
   useRouteError,
+  useNavigation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -17,6 +18,7 @@ import Sidebar from "./components/sidebar/Sidebar";
 import Footer from "./components/Footer";
 import { AppProvider } from "./providers/AppProvider";
 import { initTimezoneCookie } from "./tz";
+import Loading from "./components/Loading";
 
 initTimezoneCookie();
 
@@ -47,6 +49,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 try {
                   var bg = localStorage.getItem("bgcolor");
                   document.documentElement.style.backgroundColor = bg;
+                  var theme = localStorage.getItem("theme");
+                  if (theme) document.documentElement.setAttribute("data-theme", theme);
+                  if (theme === "custom") {
+                    var custom = JSON.parse(localStorage.getItem("custom-theme") || "null");
+                    if (custom && typeof custom.bg === "string" && typeof custom.fg === "string") {
+                      document.documentElement.style.setProperty("--color-bg", custom.bg);
+                      document.documentElement.style.setProperty("--color-fg", custom.fg);
+                    }
+                  }
                 } catch (e) {
                   console.log(e);
                 }
@@ -84,14 +95,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const navigation = useNavigation();
+  const navigating = navigation.state !== "idle";
   return (
     <>
+      {navigating && <div role="status" aria-label="Loading page" className="fixed inset-x-0 top-0 z-[100] h-1 animate-pulse bg-(--color-fg-secondary)"><span className="sr-only">Loading page</span></div>}
       <AppProvider>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <div className="flex-col flex sm:flex-row">
               <Sidebar />
-              <div className="flex flex-col items-center mx-auto w-full ml-0 sm:ml-[58px]">
+              <div aria-busy={navigating} className="flex flex-col items-center mx-auto w-full ml-0 sm:ml-[58px]">
                 <Outlet />
                 <Footer />
               </div>
@@ -104,7 +118,7 @@ export default function App() {
 }
 
 export function HydrateFallback() {
-  return null;
+  return <Loading />;
 }
 
 export function ErrorBoundary() {
@@ -127,10 +141,8 @@ export function ErrorBoundary() {
   const title = `${message} - Koito`;
 
   return (
-    <AppProvider>
-      <ThemeProvider>
+    <div style={{ minHeight: "100vh", padding: "2rem", background: "#191310", color: "#f5ece3" }}>
         <title>{title}</title>
-        <Sidebar />
         <div className="flex">
           <div className="w-full flex flex-col">
             <main className="pt-16 p-4 w-4/5 min-w-[350px] mx-auto flex-grow">
@@ -147,10 +159,9 @@ export function ErrorBoundary() {
                 </pre>
               )}
             </main>
-            <Footer />
           </div>
         </div>
-      </ThemeProvider>
-    </AppProvider>
+      <button type="button" className="underline" onClick={() => window.location.reload()}>Reload</button>
+    </div>
   );
 }

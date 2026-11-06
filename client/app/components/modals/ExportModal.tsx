@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AsyncButton } from "../AsyncButton";
-import { getExport } from "api/api";
 import SubHeader from "../primitives/SubHeader";
+import FieldHelp from "../FieldHelp";
 
 export default function ExportModal() {
   const [loading, setLoading] = useState(false);
@@ -39,9 +39,12 @@ export default function ExportModal() {
   return (
     <div>
       <SubHeader>Export</SubHeader>
-      <AsyncButton loading={loading} onClick={handleExport}>
-        Export Data
-      </AsyncButton>
+      <div className="flex items-center gap-1">
+        <AsyncButton loading={loading} onClick={handleExport}>
+          Export dated plays
+        </AsyncButton>
+        <FieldHelp label="Export">Exports dated plays with original aliases. Includes estimated dates selected by your filters.</FieldHelp>
+      </div>
       {error && <p className="error">{error}</p>}
     </div>
   );

@@ -1,11 +1,27 @@
 name: Test
 
 on:
+  push:
+    branches:
+      - 'custom/**'
   pull_request:
     branches:
       - main
 
 jobs:
+  client:
+    name: Client checks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - run: corepack enable
+    - run: yarn install --immutable
+      working-directory: client
+    - run: yarn typecheck && yarn build
+      working-directory: client
   test:
     name: Go Test
     runs-on: ubuntu-latest
@@ -20,7 +36,7 @@ jobs:
     - name: Install libvips
       run: |
         sudo apt-get update
-        sudo apt-get install -y libvips-dev
+        sudo apt-get install -y libvips-dev libvips-tools
 
     - name: Verify libvips install
       run: vips --version

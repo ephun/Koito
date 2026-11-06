@@ -156,7 +156,7 @@ func TestSubmitListen_CreateAllNoMbzIDsNoArtistNamesNoReleaseTitle(t *testing.T)
 	store := newTestDB()
 
 	// artists get created with artist and track title
-	// release group gets created with artist and track title
+	// missing release gets an Unknown Album entry
 
 	ctx := context.Background()
 	mbzc := &mbz.MbzMockCaller{}
@@ -186,9 +186,9 @@ func TestSubmitListen_CreateAllNoMbzIDsNoArtistNamesNoReleaseTitle(t *testing.T)
     SELECT EXISTS (
       SELECT 1 FROM releases_with_title
       WHERE title = $1
-    )`, opts.TrackTitle)
+    )`, "Unknown Album")
 	require.NoError(t, err)
-	assert.True(t, exists, "expected created release to have track title as title")
+	assert.True(t, exists, "expected absent release to remain unknown")
 	exists, err = store.RowExists(`
     SELECT EXISTS (
       SELECT 1 FROM artists_with_name
@@ -324,21 +324,27 @@ func TestSubmitListen_DoNotOverwriteMbzIDs(t *testing.T) {
     SELECT EXISTS (
       SELECT 1 FROM listens
       WHERE track_id = $1
-    )`, 1)
+    )`, 2)
 	require.NoError(t, err)
-	assert.True(t, exists, "expected listen row to exist")
+	assert.True(t, exists, "expected listen to retain its distinct recording")
 
-	// verify that track, release group, and artist are existing ones and not duplicates
+	// A conflicting recording identifier creates a separate appearance.
+	// Existing recording evidence stays unchanged.
+	var original string
+	require.NoError(t, store.QueryRow(`SELECT musicbrainz_id FROM tracks WHERE id=1`).Scan(&original))
+	assert.Equal(t, "00000000-0000-0000-0000-000000001001", original)
+
+	// Conflicting releases remain separate while original identifiers survive.
 	count, err := store.Count(`
 	SELECT COUNT(*) FROM tracks_with_title WHERE musicbrainz_id = $1
 	`, trackMbzID)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "duplicate track created")
+	assert.Equal(t, 1, count, "different recording should have its own appearance")
 	count, err = store.Count(`
 	SELECT COUNT(*) FROM releases_with_title WHERE musicbrainz_id = $1
 	`, releaseMbzID)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "duplicate release group created")
+	assert.Equal(t, 1, count, "conflicting release identifier should retain its own release")
 	count, err = store.Count(`
 	SELECT COUNT(*) FROM releases_with_title WHERE musicbrainz_id = $1
 	`, existingReleaseMbzID)
@@ -819,7 +825,7 @@ func TestSubmitListen_AssociateAllMbzIDsWithMbzUnreachable(t *testing.T) {
 
 	// existing artist gets associated with mbz id (also updates aliases)
 	// exisiting release gets associated with mbz id
-	// existing track gets associated with mbz id (with new artist association)
+	// identified recording keeps its own appearance beside the unidentified legacy appearance
 
 	ctx := context.Background()
 	mbzc := &mbz.MbzErrorCaller{}
@@ -849,16 +855,21 @@ func TestSubmitListen_AssociateAllMbzIDsWithMbzUnreachable(t *testing.T) {
     SELECT EXISTS (
       SELECT 1 FROM listens
       WHERE track_id = $1
-    )`, 1)
+    )`, 2)
 	require.NoError(t, err)
-	assert.True(t, exists, "expected listen row to exist")
+	assert.True(t, exists, "expected identified recording listen to exist")
 
-	// verify that track, release group, and artist are existing ones and not duplicates
+	// The unidentified appearance retains its original lack of identity.
+	var unidentified bool
+	require.NoError(t, store.QueryRow(`SELECT musicbrainz_id IS NULL FROM tracks WHERE id=1`).Scan(&unidentified))
+	assert.True(t, unidentified)
+
+	// Artist and release association remains shared.
 	count, err := store.Count(`
 	SELECT COUNT(*) FROM tracks_with_title WHERE title = $1
 	`, "Tokyo Calling")
 	require.NoError(t, err)
-	assert.Equal(t, 1, count, "duplicate track created")
+	assert.Equal(t, 2, count, "legacy and identified recordings should remain distinguishable")
 	count, err = store.Count(`
 	SELECT COUNT(*) FROM releases_with_title WHERE title = $1
 	`, "AG! Calling")

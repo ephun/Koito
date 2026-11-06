@@ -64,6 +64,18 @@ Before importing, it is recommended you set up any image sources you want to hav
 
 See the [configuration reference](https://koito.io/reference/configuration/) in the docs.
 
+## Local development on Windows
+
+See the [Windows development guide](docs/windows-development.md) for a native
+PowerShell setup, local server, frontend hot reload, and tests.
+
+## Fork development plan
+
+See the [development phases](docs/development-plan.md) for the agreed vocabulary,
+source coverage, remaining work, and acceptance criteria.
+See [Phase 2](docs/phase-2.md) for Last.fm imports, reversible matching, and
+local verification results.
+
 ## Contributing
 
 There are currently some known issues that I am actively working on, in addition to adding new features. If you want to contribute (especially more and more robust testing) feel free to fork the repository and make a pull request with your changes.

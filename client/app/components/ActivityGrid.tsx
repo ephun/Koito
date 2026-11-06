@@ -15,6 +15,7 @@ interface Props {
   year?: number;
   artistId?: number;
   albumId?: number;
+  albumGroupId?: number;
   trackId?: number;
   configurable?: boolean;
   autoAdjust?: boolean;
@@ -27,6 +28,7 @@ const getActivity = (args: {
   year: number;
   artist_id: number;
   album_id: number;
+  album_group_id?: number;
   track_id: number;
 }) => apiFetch<ListenActivityResponse>("/apis/web/v1/listen-activity", args);
 
@@ -34,11 +36,16 @@ const header = "Activity";
 
 const NUM_WEEKS = 36;
 
+function visibleWeeks(width: number) {
+  return width <= 640 ? Math.min(26, Math.max(1, Math.floor((width * 0.95 - 64) / 11))) : NUM_WEEKS;
+}
+
 export default function ActivityGrid({
   month = 0,
   year = 0,
   artistId = 0,
   albumId = 0,
+  albumGroupId = 0,
   trackId = 0,
 }: Props) {
   const args = {
@@ -48,6 +55,7 @@ export default function ActivityGrid({
     year,
     artist_id: artistId,
     album_id: albumId,
+    album_group_id: albumGroupId || undefined,
     track_id: trackId,
   };
   const { isPending, isError, data, error } = useQuery({
@@ -61,7 +69,7 @@ export default function ActivityGrid({
     return <ActivityGridSkeleton />;
   } else if (isError) {
     return (
-      <div className="w-[350px]">
+      <div className="w-full min-w-0 sm:w-[350px]">
         <CardHeader>{header}</CardHeader>
         <p className="error">Error: {error.message}</p>
       </div>
@@ -71,7 +79,7 @@ export default function ActivityGrid({
   let target = 100;
   if (trackId !== 0) {
     target = 5;
-  } else if (albumId !== 0) {
+  } else if (albumId !== 0 || albumGroupId !== 0) {
     target = 10;
   } else if (artistId !== 0) {
     target = 20;
@@ -120,11 +128,7 @@ export default function ActivityGrid({
     }
   }
 
-  // if window size is small (640px)
-  if (width <= 640) {
-    // remove 10 weeks from data
-    cells.splice(0, 10 * 7);
-  }
+  cells.splice(0, (NUM_WEEKS - visibleWeeks(width)) * 7);
 
   const CELL_W = "w-[9px] sm:w-[10px]";
   const CELL_H = "h-[9px] sm:h-[10px]";
@@ -136,9 +140,9 @@ export default function ActivityGrid({
       : ["Sun", "", "Tue", "", "Thu", "", "Sat"];
 
   return (
-    <div className="flex flex-col items-start">
+    <div className="flex w-full min-w-0 max-w-full flex-col items-start sm:w-auto">
       <CardHeader isOffset>{header}</CardHeader>
-      <div className="flex flex-col min-w-[350px] sm:h-[175px] items-center gap-6 pt-4 sm:pt-6 px-4 sm:px-7 pb-4 sm:pb-5 card">
+      <div className="flex w-full min-w-0 flex-col sm:min-w-[350px] sm:h-[175px] items-center gap-6 pt-4 sm:pt-6 px-4 sm:px-7 pb-4 sm:pb-5 card">
         <div className="flex items-start gap-2">
           <div className={`grid grid-rows-7 ${CELL_GAP}`}>
             {DAY_LABELS.map((label, i) => (
@@ -231,9 +235,9 @@ function ActivityGridSkeleton() {
   const width = useWindowWidth();
 
   return (
-    <div className="flex flex-col items-start">
+    <div className="flex w-full min-w-0 max-w-full flex-col items-start sm:w-auto">
       <CardHeader isOffset>{header}</CardHeader>
-      <div className="flex flex-col items-center gap-5 pt-4 sm:pt-6 px-4 sm:px-7 pb-4 sm:pb-5 card">
+      <div className="flex w-full min-w-0 flex-col items-center gap-5 pt-4 sm:pt-6 px-4 sm:px-7 pb-4 sm:pb-5 card">
         <div className="flex items-start gap-2">
           <div className={`grid grid-rows-7 ${CELL_GAP}`}>
             {DAY_LABELS.map((label, i) => (
@@ -251,7 +255,7 @@ function ActivityGridSkeleton() {
             className={`w-auto grid grid-flow-col grid-rows-7 mt-2.5 ${CELL_GAP}`}
           >
             {Array.from({
-              length: NUM_WEEKS * 7 - (width <= 640 ? 10 * 7 : 0),
+              length: visibleWeeks(width) * 7,
             }).map((_, i) => (
               <div
                 key={i}

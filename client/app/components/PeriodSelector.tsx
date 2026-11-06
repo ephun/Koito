@@ -44,13 +44,13 @@ export default function PeriodSelector({
   }, []);
 
   return (
-    <div className="flex gap-2 grow-0 text-sm sm:text-[16px] px-3 sm:px-6 py-2 card">
+    <div className="flex max-w-full flex-wrap gap-2 grow-0 text-sm sm:text-[16px] px-3 sm:px-6 py-2 card">
       {periods.map((p, i) => (
         <div key={`period_setter_${p}`}>
           <button
             className={`uppercase period-selector ${
               p === current ? "color-fg" : "color-fg-tertiary"
-            } ${i !== periods.length - 1 ? "pr-8" : ""}`}
+            } ${i !== periods.length - 1 ? "pr-3 sm:pr-8" : ""}`}
             onClick={() => setPeriod(p)}
             disabled={p === current}
           >

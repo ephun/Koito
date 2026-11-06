@@ -2,12 +2,9 @@ import { Modal } from "./Modal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@radix-ui/react-tabs";
 import AccountPage from "./AccountPage";
 import { ThemeSwitcher } from "../themeSwitcher/ThemeSwitcher";
-import ThemeHelper from "../../routes/ThemeHelper";
 import { useAppContext } from "~/providers/AppProvider";
 import ApiKeysModal from "./ApiKeysModal";
-import { AsyncButton } from "../AsyncButton";
 import ExportModal from "./ExportModal";
-import About from "./About";
 
 interface Props {
   open: boolean;
@@ -15,7 +12,7 @@ interface Props {
 }
 
 export default function SettingsModal({ open, setOpen }: Props) {
-  const { user, updateAvailable } = useAppContext();
+  const { user } = useAppContext();
 
   const triggerClasses =
     "px-1 sm:px-4 py-2 w-full hover-bg-secondary " +
@@ -48,15 +45,6 @@ export default function SettingsModal({ open, setOpen }: Props) {
               </TabsTrigger>
             </>
           )}
-          <TabsTrigger
-            className={`${triggerClasses} inline-flex items-center gap-2`}
-            value="About"
-          >
-            About{" "}
-            {updateAvailable && (
-              <div className="h-1.5 w-1.5 rounded-full bg-(--color-info)" />
-            )}
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="Account" className={contentClasses}>
@@ -70,9 +58,6 @@ export default function SettingsModal({ open, setOpen }: Props) {
         </TabsContent>
         <TabsContent value="Export" className={contentClasses}>
           <ExportModal />
-        </TabsContent>
-        <TabsContent value="About" className={contentClasses}>
-          <About />
         </TabsContent>
       </Tabs>
     </Modal>

@@ -1,0 +1,2 @@
+{"source_type":"lastfm_csv","source_name":"example_LastFM","played_at":"2020-01-02T03:04:00Z","title_raw":"Morning Light","artist_raw":"Example Artist","album_raw":"Example Album","payload_json":{"Artist":"Example Artist","Album":"Example Album","Title":"Morning Light","Timestamp":"1/2/2020 03:04"},"unknown":"keep"}
+{"source_type":"lastfm_csv","played_at":"2020-01-02T03:08:00Z","title_raw":"Evening Song","artist_raw":"Example Artist","album_raw":"","payload_json":{"Artist":"Example Artist","Album":"","Title":"Evening Song","Timestamp":"1/2/2020 03:08"}}

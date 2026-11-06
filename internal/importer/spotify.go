@@ -75,5 +75,8 @@ func ImportSpotifyFile(ctx context.Context, store importStore, mbzc mbz.MusicBra
 		}
 		throttleFunc()
 	}
+	if err := file.Close(); err != nil {
+		return err
+	}
 	return finishImport(ctx, filename, len(export))
 }

@@ -33,7 +33,7 @@ export default function ComboBox({ onSelection, filterFunction }: Props) {
       onSelectedItemChange: ({ selectedItem: newSelectedItem }) => {
         if (newSelectedItem) {
           setQuery(newSelectedItem.name);
-          onSelection(selectedItem);
+          onSelection(newSelectedItem);
         }
       },
     });

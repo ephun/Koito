@@ -11,6 +11,8 @@ import (
 	"github.com/gabehf/koito/internal/cfg"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/music"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
@@ -22,6 +24,10 @@ const defaultItemsPerPage = 20
 type Sqlite struct {
 	db *sql.DB
 }
+
+// SourceDatabase shares the catalog connection with the evidence store so a
+// projection can be published atomically with its provenance.
+func (s *Sqlite) SourceDatabase() *sql.DB { return s.db }
 
 func New() (*Sqlite, error) {
 	dsn := path.Join(cfg.ConfigDir(), "koito.db") + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)"
@@ -40,6 +46,16 @@ func New() (*Sqlite, error) {
 	if err := goose.Up(db, "."); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("sqlite.New: goose: %w", err)
+	}
+	if err := initializeMusic(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite.New: music identities: %w", err)
+	}
+	// No request from the previous server process can still be extracting.
+	// Interrupted attempts remain visible and can safely be retried.
+	if _, err := db.Exec(`UPDATE import_receipts SET status='failed', error='Server stopped during import; retry this file. Any committed records are preserved.' WHERE status='processing'`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite.New: recover imports: %w", err)
 	}
 
 	return &Sqlite{db: db}, nil
@@ -72,8 +88,42 @@ func NewInMemory() (*Sqlite, error) {
 		sqldb.Close()
 		return nil, fmt.Errorf("sqlite.NewInMemory: goose: %w", err)
 	}
+	if err := initializeMusic(sqldb); err != nil {
+		sqldb.Close()
+		return nil, err
+	}
 
 	return &Sqlite{db: sqldb}, nil
+}
+
+func initializeMusic(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	sensitive, err := music.CaseSensitive(ctx, tx)
+	if err != nil {
+		return err
+	}
+	var config string
+	if err = tx.QueryRowContext(ctx, `SELECT v.config_json FROM filter_versions v JOIN filter_state s ON s.version_id=v.id WHERE s.id=1`).Scan(&config); err != nil {
+		return err
+	}
+	if err = music.RefreshCatalogMatches(ctx, tx, config); err != nil {
+		return err
+	}
+	if err = sources.RefreshMatchedCatalog(ctx, tx); err != nil {
+		return err
+	}
+	if err = music.RefreshHistories(ctx, tx, sensitive); err != nil {
+		return err
+	}
+	if err = music.RefreshScope(ctx, tx, 0); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Not part of the DB interface this package implements. Only used for testing.
@@ -111,12 +161,12 @@ func (s *Sqlite) Close(_ context.Context) {
 // replacing the PG get_artists_for_track() function.
 func (s *Sqlite) artistsForTrack(ctx context.Context, trackID int32) ([]models.SimpleArtist, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.id, awn.name, at2.is_primary
-		FROM artist_tracks at2
+		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name), at2.is_primary
+		FROM displayed_artist_tracks at2
 		JOIN artists_with_name awn ON awn.id = at2.artist_id
 		JOIN artists a ON a.id = at2.artist_id
 		WHERE at2.track_id = ?
-		ORDER BY at2.is_primary DESC, awn.name`,
+		ORDER BY at2.is_primary DESC, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name)`,
 		trackID,
 	)
 	if err != nil {
@@ -139,12 +189,12 @@ func (s *Sqlite) artistsForTrack(ctx context.Context, trackID int32) ([]models.S
 // replacing the PG get_artists_for_release() function.
 func (s *Sqlite) artistsForRelease(ctx context.Context, releaseID int32) ([]models.SimpleArtist, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.id, awn.name, ar.is_primary
-		FROM artist_releases ar
+		SELECT a.id, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name), ar.is_primary
+		FROM displayed_artist_releases ar
 		JOIN artists_with_name awn ON awn.id = ar.artist_id
 		JOIN artists a ON a.id = ar.artist_id
 		WHERE ar.release_id = ?
-		ORDER BY ar.is_primary DESC, awn.name`,
+		ORDER BY ar.is_primary DESC, COALESCE((SELECT display_name FROM catalog_names cn WHERE cn.kind='artist' AND cn.item_id=awn.id),awn.name)`,
 		releaseID,
 	)
 	if err != nil {
@@ -189,14 +239,20 @@ func (s *Sqlite) artistsWithAliasesForTrack(ctx context.Context, trackID int32) 
 		}
 		a.MbzID = parseNullableUUID(mbzID)
 		a.Image = parseNullableUUID(image)
-		aliases, err := s.getAliasesForEntity(ctx, "artist_aliases", "artist_id", a.ID)
+		artists = append(artists, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range artists {
+		aliases, err := s.getAliasesForEntity(ctx, "artist_aliases", "artist_id", artists[i].ID)
 		if err != nil {
 			return nil, err
 		}
-		a.Aliases = aliases
-		artists = append(artists, a)
+		artists[i].Aliases = aliases
 	}
-	return artists, rows.Err()
+	return artists, nil
 }
 
 // getAliasesForEntity fetches all aliases for an entity from the given alias table.
@@ -255,7 +311,7 @@ func parseNullableUUID(s sql.NullString) *uuid.UUID {
 // associations where the artist has no tracks in the release, and removes
 // artists with no tracks. Mirrors PG CleanOrphanedEntries + the orphan trigger.
 func cleanOrphanedEntries(ctx context.Context, tx *sql.Tx) error {
-	// delete tracks with no listens (e.g. the "from" track after a merge)
+	// delete tracks with no listens
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM tracks WHERE id NOT IN (SELECT DISTINCT track_id FROM listens)`); err != nil {
 		return err

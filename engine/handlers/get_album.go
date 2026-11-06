@@ -1,13 +1,59 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/logger"
+	"github.com/gabehf/koito/internal/models"
 	"github.com/gabehf/koito/internal/utils"
 )
+
+func GetAlbumGroupHandler(store db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := utils.ParseIDParam(r, "id")
+		if err != nil {
+			utils.WriteError(w, "invalid album group identifier", http.StatusBadRequest)
+			return
+		}
+		groups, ok := store.(interface {
+			GetAlbumGroup(context.Context, int32) (*models.Album, error)
+		})
+		if !ok {
+			utils.WriteError(w, "album groups unavailable", http.StatusNotImplemented)
+			return
+		}
+		album, err := groups.GetAlbumGroup(r.Context(), id)
+		if err != nil {
+			utils.WriteError(w, "album group could not be found", http.StatusNotFound)
+			return
+		}
+		utils.WriteJSON(w, http.StatusOK, album)
+	}
+}
+
+func GetAlbumGroupInterestHandler(store db.ListenStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := utils.ParseIDParam(r, "id")
+		if err != nil {
+			utils.WriteError(w, "invalid album group identifier", http.StatusBadRequest)
+			return
+		}
+		buckets, err := strconv.Atoi(r.URL.Query().Get("buckets"))
+		if err != nil || buckets < 1 || buckets > 500 {
+			utils.WriteError(w, "invalid bucket count", http.StatusBadRequest)
+			return
+		}
+		interest, err := store.GetInterest(r.Context(), db.GetInterestOpts{AlbumGroupID: id, Buckets: buckets})
+		if err != nil {
+			utils.WriteError(w, "could not retrieve interest", http.StatusInternalServerError)
+			return
+		}
+		utils.WriteJSON(w, http.StatusOK, interest)
+	}
+}
 
 func GetAlbumHandler(store db.AlbumStore) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {

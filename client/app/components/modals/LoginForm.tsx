@@ -1,74 +1,96 @@
 import { login } from "api/api";
-import { useEffect, useState } from "react";
-import { AsyncButton } from "../AsyncButton";
+import { useState, type FormEvent } from "react";
 import SubHeader from "../primitives/SubHeader";
 
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
 
-  const loginHandler = () => {
-    if (username && password) {
-      setLoading(true);
-      login(username, password, remember)
-        .then((r) => {
-          if (r.status >= 200 && r.status < 300) {
-            window.location.reload();
-          } else {
-            r.json().then((r) => setError(r.error));
-          }
-        })
-        .catch((err) => setError(err));
-      setLoading(false);
-    } else if (username || password) {
-      setError("username and password are required");
+  async function loginHandler(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading) return;
+    // Read actual inputs, including values supplied by browser autofill.
+    const data = new FormData(event.currentTarget);
+    const username = String(data.get("koito-username") || "").trim();
+    const password = String(data.get("koito-password") || "");
+    setError("");
+    if (!username || !password) {
+      setError("Username and password are required.");
+      return;
     }
-  };
+
+    setLoading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await login(username, password, data.has("koito-remember"), controller.signal);
+      if (!response.ok) {
+        if (response.status === 429) setError("Too many login attempts. Try again in a minute.");
+        else if (response.status === 401) setError("Incorrect username or password.");
+        else setError(`Login failed (${response.status}). Try again.`);
+        return;
+      }
+      const session = await fetch("/apis/web/v1/user", { credentials: "same-origin", cache: "no-store", signal: controller.signal });
+      if (session.status === 401) {
+        setError("Your browser did not keep the login session. Allow cookies for this site.");
+        return;
+      }
+      if (!session.ok) {
+        setError("Could not load your login session. Try again.");
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      setError(error instanceof Error && error.name === "AbortError"
+        ? "Login timed out. Try again."
+        : "Could not reach Koito. Try again.");
+    } finally {
+      window.clearTimeout(timeout);
+      setLoading(false);
+    }
+  }
 
   return (
     <>
       <SubHeader>Log In</SubHeader>
       <div className="flex flex-col items-center gap-4 w-full">
-        <p>
-          Logging in gives you access to <strong>admin tools</strong>, such as
-          updating images, merging items, deleting items, and more.
-        </p>
         <form
-          action="#"
           className="flex flex-col items-center gap-4 w-3/4"
-          onSubmit={(e) => e.preventDefault()}
+          onSubmit={loginHandler}
+          noValidate
         >
           <input
             name="koito-username"
             type="text"
+            autoComplete="username"
+            aria-label="Username"
             placeholder="Username"
             className="w-full mx-auto fg bg rounded p-2"
-            onChange={(e) => setUsername(e.target.value)}
+            disabled={loading}
           />
           <input
             name="koito-password"
             type="password"
+            autoComplete="current-password"
+            aria-label="Password"
             placeholder="Password"
             className="w-full mx-auto fg bg rounded p-2"
-            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
           />
           <div className="flex gap-2 items-center">
             <input
               type="checkbox"
               name="koito-remember"
               id="koito-remember"
-              onChange={() => setRemember(!remember)}
+              disabled={loading}
             />
-            <label htmlFor="kotio-remember">Remember me</label>
+            <label htmlFor="koito-remember">Remember me</label>
           </div>
-          <AsyncButton loading={loading} onClick={loginHandler}>
-            Login
-          </AsyncButton>
+          <button type="submit" className="large-button disabled:opacity-50" disabled={loading}>
+            {loading ? "Logging in…" : "Login"}
+          </button>
         </form>
-        <p className="error">{error}</p>
+        {error && <p role="alert" className="text-(--color-error)">{error}</p>}
       </div>
     </>
   );

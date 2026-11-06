@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   apiFetch,
-  deleteListen,
   type Listen,
   type NowPlaying,
   type PaginatedResponse,
@@ -15,7 +13,10 @@ interface Props {
   limit: number;
   artistId?: Number;
   albumId?: Number;
+  albumGroupId?: number;
   trackId?: number;
+  musicTrackId?: number;
+  showAlbums?: boolean;
   hideArtists?: boolean;
   showNowPlaying?: boolean;
   showSeeMore?: boolean;
@@ -26,6 +27,7 @@ const getLastListens = (args: {
   period: string;
   artist_id?: number;
   album_id?: number;
+  album_group_id?: number;
   track_id?: number;
   page: number;
 }) => apiFetch<PaginatedResponse<Listen>>("/apis/web/v1/listens", args);
@@ -40,6 +42,7 @@ export default function LastPlays(props: Props) {
     period: "all_time",
     artist_id: props.artistId as number | undefined,
     album_id: props.albumId as number | undefined,
+    album_group_id: props.albumGroupId,
     track_id: props.trackId,
     page: 0,
   };
@@ -54,24 +57,6 @@ export default function LastPlays(props: Props) {
 
   const header = "Last played";
 
-  const [items, setItems] = useState<Listen[] | null>(null);
-
-  const handleDelete = async (listen: Listen) => {
-    if (!data) return;
-    try {
-      const res = await deleteListen(listen);
-      if (res.ok || (res.status >= 200 && res.status < 300)) {
-        setItems((prev) =>
-          (prev ?? data.items).filter((i) => i.time !== listen.time),
-        );
-      } else {
-        console.error("Failed to delete listen:", res.status);
-      }
-    } catch (err) {
-      console.error("Error deleting listen:", err);
-    }
-  };
-
   const showNP = (): boolean => {
     if (!props.showNowPlaying || !npData?.currently_playing) return false;
 
@@ -82,13 +67,14 @@ export default function LastPlays(props: Props) {
 
     if (albumId) return track.album_id === albumId;
     if (artistId) return track.artists.some((a) => a.id === artistId);
-    if (trackId) return track.id === trackId;
+    if (trackId) return track.id === trackId || !!props.musicTrackId && track.music_track_id === props.musicTrackId;
 
     return false;
   };
 
   let params = "";
   params += props.artistId ? `&artist_id=${props.artistId}` : "";
+  params += props.albumGroupId ? `&album_group_id=${props.albumGroupId}` : "";
   params += props.albumId ? `&album_id=${props.albumId}` : "";
   params += props.trackId ? `&track_id=${props.trackId}` : "";
 
@@ -103,7 +89,7 @@ export default function LastPlays(props: Props) {
     );
   }
 
-  const listens = items ?? data.items;
+  const listens = data.items;
 
   return (
     <div className={`text-[13px] sm:text-[15px] ${sizeClasses}`}>
@@ -117,7 +103,7 @@ export default function LastPlays(props: Props) {
           npData={npData}
           showNP={showNP()}
           hideArtists={props.hideArtists}
-          onDelete={handleDelete}
+          showAlbums={props.showAlbums}
         />
       )}
       {props.showSeeMore && data.has_next_page && (

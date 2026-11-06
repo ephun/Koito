@@ -33,7 +33,7 @@ func AssociateAlbum(ctx context.Context, d db.AlbumStore, opts AssociateAlbumOpt
 	}
 	releaseTitle := opts.ReleaseName
 	if releaseTitle == "" {
-		releaseTitle = opts.TrackName
+		releaseTitle = "Unknown Album"
 	}
 	if opts.ReleaseMbzID != uuid.Nil {
 		l.Debug().Msgf("Associating album '%s' by MusicBrainz release ID", releaseTitle)
@@ -46,7 +46,7 @@ func AssociateAlbum(ctx context.Context, d db.AlbumStore, opts AssociateAlbumOpt
 
 func matchAlbumByMbzReleaseID(ctx context.Context, d db.AlbumStore, opts AssociateAlbumOpts) (*models.Album, error) {
 	l := logger.FromContext(ctx)
-	a, err := d.GetAlbum(ctx, db.GetAlbumOpts{MusicBrainzID: opts.ReleaseMbzID})
+	a, err := d.GetAlbum(ctx, db.GetAlbumOpts{Original: true, MusicBrainzID: opts.ReleaseMbzID})
 	if err == nil {
 		l.Debug().Msgf("Found release '%s' by MusicBrainz Release ID", a.Title)
 		return &models.Album{
@@ -187,13 +187,17 @@ func matchAlbumByTitle(ctx context.Context, d db.AlbumStore, opts AssociateAlbum
 	if opts.ReleaseName != "" {
 		releaseName = opts.ReleaseName
 	} else {
-		releaseName = opts.TrackName
+		releaseName = "Unknown Album"
 	}
 
-	a, err := d.GetAlbum(ctx, db.GetAlbumOpts{
+	a, err := d.GetAlbum(ctx, db.GetAlbumOpts{Original: true,
 		Title:    releaseName,
 		ArtistID: opts.Artists[0].ID,
 	})
+	if err == nil && opts.ReleaseMbzID != uuid.Nil && a.MbzID != nil && *a.MbzID != uuid.Nil && *a.MbzID != opts.ReleaseMbzID {
+		err = db.ErrNotFound
+	}
+
 	if err == nil {
 		l.Debug().Msgf("Found album '%s' by artist and title", a.Title)
 		if a.MbzID == nil && opts.ReleaseMbzID != uuid.Nil {

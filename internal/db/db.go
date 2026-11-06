@@ -23,7 +23,6 @@ type ArtistStore interface {
 	SetPrimaryTrackArtist(ctx context.Context, id int32, artistId int32, value bool) error
 	DeleteArtist(ctx context.Context, id int32) error
 	DeleteArtistAlias(ctx context.Context, id int32, alias string) error
-	MergeArtists(ctx context.Context, fromId, toId int32, replaceImage bool) error
 	SearchArtists(ctx context.Context, q string) ([]*models.Artist, error)
 	CountArtists(ctx context.Context, timeframe Timeframe) (int64, error)
 	CountNewArtists(ctx context.Context, timeframe Timeframe) (int64, error)
@@ -42,7 +41,6 @@ type AlbumStore interface {
 	AddArtistsToAlbum(ctx context.Context, opts AddArtistsToAlbumOpts) error
 	DeleteAlbum(ctx context.Context, id int32) error
 	DeleteAlbumAlias(ctx context.Context, id int32, alias string) error
-	MergeAlbums(ctx context.Context, fromId, toId int32, replaceImage bool) error
 	SearchAlbums(ctx context.Context, q string) ([]*models.Album, error)
 	CountAlbums(ctx context.Context, timeframe Timeframe) (int64, error)
 	CountNewAlbums(ctx context.Context, timeframe Timeframe) (int64, error)
@@ -60,7 +58,6 @@ type TrackStore interface {
 	SetPrimaryTrackAlias(ctx context.Context, id int32, alias string) error
 	DeleteTrack(ctx context.Context, id int32) error
 	DeleteTrackAlias(ctx context.Context, id int32, alias string) error
-	MergeTracks(ctx context.Context, fromId, toId int32) error
 	SearchTracks(ctx context.Context, q string) ([]*models.Track, error)
 	CountTracks(ctx context.Context, timeframe Timeframe) (int64, error)
 	CountNewTracks(ctx context.Context, timeframe Timeframe) (int64, error)

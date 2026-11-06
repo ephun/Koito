@@ -1,12 +1,17 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
+	"path/filepath"
+	"time"
 
+	"github.com/gabehf/koito/internal/cfg"
 	"github.com/gabehf/koito/internal/db"
 	"github.com/gabehf/koito/internal/logger"
 	"github.com/gabehf/koito/internal/memkv"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 )
 
@@ -21,6 +26,27 @@ func NowPlayingHandler(store db.TrackStore) http.HandlerFunc {
 		l := logger.FromContext(ctx)
 
 		l.Debug().Msg("NowPlayingHandler: Got request")
+		if provider, ok := store.(interface{ SourceDatabase() *sql.DB }); ok {
+			live := &sources.Store{DB: provider.SourceDatabase(), Root: filepath.Join(cfg.ConfigDir(), "sources")}
+			track, handled, err := live.LiveNowPlaying(ctx, 1, time.Now())
+			if err != nil {
+				utils.WriteError(w, "Could not read current playback", http.StatusInternalServerError)
+				return
+			}
+			if handled {
+				response := NowPlayingResponse{CurrentlyPlaying: track != nil}
+				if track != nil {
+					if track.ID > 0 {
+						if stored, err := store.GetTrack(ctx, db.GetTrackOpts{ID: track.ID}); err == nil && stored != nil {
+							track = stored
+						}
+					}
+					response.Track = *track
+				}
+				utils.WriteJSON(w, http.StatusOK, response)
+				return
+			}
+		}
 
 		// Hardcoded user id as 1. Not great but it works until (if) multi-user is supported.
 		if trackIdI, ok := memkv.Store.Get("1"); !ok {
