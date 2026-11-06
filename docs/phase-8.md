@@ -1,7 +1,7 @@
 # Phase 8: live capture and remaining filter controls
 
-Status: local implementation and validation in progress. Server connection and
-current-server backup still require commands run by the user. The acceptance requirements remain those in
+Status: complete. Server backups, live delivery, publication, and interrupted
+submission recovery have been verified. The acceptance requirements remain those in
 [the development plan](development-plan.md#phase-8-live-capture-and-remaining-filter-controls).
 
 ## Live intake
@@ -42,8 +42,8 @@ rows, source event identifiers, and destination attempts. The saved pages are
 private and excluded from Git.
 
 The Multi-Scrobbler container on PhunRAID successfully reached the development
-fork through Tailscale and validated its dedicated token. Live delivery has not
-been configured. Existing Last.fm and production Koito destinations remain active.
+fork through Tailscale and validated its dedicated token. Live delivery is now
+configured. Existing Last.fm and production Koito destinations remain active.
 
 A continuous local capture saves complete Last.fm history pages from November 1
 and periodic Multi-Scrobbler API pages. These originals include overlap with the
@@ -97,7 +97,10 @@ completed submission, including "Kiss Off" and "The Second Waltz, Op. 99a", to
 exactly one displayed play. Their now-playing records linked to zero plays.
 Fifteen completed submissions and ten now-playing submissions were projected
 before the local restart test. A further accepted submission survived that
-restart and is undergoing replay. Recovery publication remains unverified.
+restart and was published successfully after replay. The final receiver audit
+found 16 completed submissions and ten now-playing submissions projected, zero
+pending submissions, and exactly one displayed play for each completed record.
+All 24 distinct native request files passed their size and SHA-256 checks.
 
 `scripts/backup-koito.cjs` creates a verified online snapshot of the original
 Koito database and copies its configuration files. It passed against the saved
@@ -141,7 +144,7 @@ Filters have matching page spacing at desktop and mobile widths. Pending page
 navigation has a loading indicator. Artist, album, track, album-group, and Rewind
 loaders cancel requests when another navigation supersedes them.
 
-Working-data recovery and the real sender connection remain in progress.
+Working-data recovery and the real sender connection have been verified.
 Continuous history capture remains running. Broad query and rebuild performance
 work belongs to Phase 9. The GitHub branch remains a development checkpoint.
 
@@ -235,21 +238,28 @@ registered original files passed their hash checks, covering 3,621,067,710 bytes
 
 ## Acceptance audit
 
-| Requirement | Evidence still required before completion |
+| Requirement | Verified evidence |
 |---|---|
-| Preserve complete accepted bytes and unknown fields | Unit and HTTP checks pass. Verify deployed receiver with real submissions. |
-| Retry and restart recovery | Unit checks pass for explicit retry keys, publication failure, and restart replay. Verify actual sender retry behavior. |
-| Separate now-playing from completed plays | Unit checks cover timestamped updates, expiry, stop, ordering, completion, and restart. Browser rendering checks pass. Verify actual sender behavior. |
-| Preserve source, device, app, and native identifiers | Initial ListenBrainz fields retained and interpreted. Verify Multi-Scrobbler's actual outgoing fields and distinct event behavior. |
+| Preserve complete accepted bytes and unknown fields | HTTP durability and arbitrary-field tests pass. All 24 real native request files pass size/hash checks. |
+| Retry and restart recovery | Explicit retry identity and failure/replay tests pass. Actual Multi-Scrobbler backlog was delivered and published. An accepted real submission survived an interrupted rebuild and receiver restart, then published exactly once. |
+| Separate now-playing from completed plays | Unit and browser checks pass. Ten actual now-playing records contribute zero plays. Sixteen completed submissions are projected. |
+| Preserve source, device, app, and native identifiers | Incoming originals retain all supplied fields. Actual Spotify service and track identity are present. This sender omits device/event IDs and listened duration from its outgoing requests. Richer API responses remain preserved separately. |
 | Preserve current history, database, queues, and configuration | Both current server snapshots passed their online-backup checks before destination setup. |
-| Backfill since the last export with overlap | Imported 1,590 actual records. Reimport added zero. Rebuild and baseline-record comparison pass. Compare coverage with current destinations and investigate gaps. |
-| Add the fork as another destination | Configured for all six sources. Authentication and real backlog delivery pass. Verify a newly completed listen. |
-| Remaining qualification and inclusion controls | Completion, played time, media/app facts, source/date qualification, date ranges, attribution basis, and evidence-level conditions pass integration tests. Undated inclusion passes. Inspect real connected submissions. |
+| Backfill since the last export with overlap | Historical overlap and catch-up imports pass reimport checks. Baseline records remain unchanged. The post-catch-up comparison found zero missing rows in the complete Last.fm and Multi-Scrobbler captures. Subsequent live submissions reach publication. |
+| Add the fork as another destination | Configured for all six sources. Authentication, backlog delivery, and newly completed listening reach the displayed view. Existing destinations remain configured. |
+| Remaining qualification and inclusion controls | Completion, played time, media/app facts, source/date qualification, date ranges, attribution basis, evidence level, and undated inclusion pass integration tests. Actual connected requests were inspected. Absent listened duration remains unknown. |
 | Repeat limits after matching and attribution | Distinct plays, supporting records, other listeners, time windows, and count-inference reservations pass the repetition tests. |
 | Consistent history, search, statistics, charts, and exports | Cross-view integration tests pass. Catalog tests cover native search. Export hover text explains its original-alias and dated-only format. |
-| Existing native behavior | Finish integration checks, preserve manual submissions, and verify any configured relay behavior. |
-| Working-data performance and recovery | Measure live publication at the current database size. Verify backlog processing, interrupted publication, and repeat rebuilds. |
+| Existing native behavior | Full Go suite passes, including manual request preservation, durable HTTP acknowledgment, now-playing, and relay retry of original bytes. Actual native completed listening reaches Last Played. |
+| Working-data performance and recovery | Real-data incremental/full comparison matches 33 derived tables. Timings are recorded above. Actual backlog, repeated full publications, and interrupted real-submission recovery succeed. |
 
-Completion also requires browser review, appropriate full checks, a verified
-running local build, and the branch mirrored to GitHub. Passing the initial
-intake tests alone does not complete Phase 8.
+The full Go suite and client type checking/build pass. Browser checks cover stock
+entry layouts, filter controls, now-playing, loading themes, and desktop/mobile
+action alignment. The restarted local receiver passes its health check. Changes
+are mirrored to `custom/koito` on GitHub. Personal filter version 9 remains selected.
+
+Full catalog rebuilds still delay displayed listening. Request acknowledgment and
+original preservation remain independent of that delay. Broader performance work
+belongs to Phase 9. The additional requested features are the next discussion,
+before Phase 9 or production deployment. Public reverse-proxy addresses have not
+been changed.
