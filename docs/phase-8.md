@@ -88,11 +88,17 @@ the backup, validates the receiving token, adds the development client, and exte
 the lists that currently include Koito. It preserves existing destinations and
 checks for concurrent config changes before an atomic replacement. Tests include
 the actual saved configuration, a real local token preflight, and repeated setup.
-The server configuration has not yet been changed.
+The user ran setup successfully on November 6 at 20:55 UTC. The development
+destination is configured and all six explicit source routes include it. Token
+validation succeeds. Multi-Scrobbler restarted and its development client reports
+running. Backlog submissions receive HTTP 200 and their original requests are
+preserved. Verification of a newly completed listen remains in progress.
 
 `scripts/backup-koito.cjs` creates a verified online snapshot of the original
 Koito database and copies its configuration files. It passed against the saved
-local Koito baseline. Running it against the original server remains pending.
+local Koito baseline. The server run also succeeded, preserving four files and
+a database containing 320,766 listens. A fresh Multi-Scrobbler backup verified
+seven files at `/config/koito-phase8-backup-20261106T205534Z` before setup.
 
 ## Filter controls and native pages
 
@@ -230,9 +236,9 @@ registered original files passed their hash checks, covering 3,621,067,710 bytes
 | Retry and restart recovery | Unit checks pass for explicit retry keys, publication failure, and restart replay. Verify actual sender retry behavior. |
 | Separate now-playing from completed plays | Unit checks cover timestamped updates, expiry, stop, ordering, completion, and restart. Browser rendering checks pass. Verify actual sender behavior. |
 | Preserve source, device, app, and native identifiers | Initial ListenBrainz fields retained and interpreted. Verify Multi-Scrobbler's actual outgoing fields and distinct event behavior. |
-| Preserve current history, database, queues, and configuration | Current Multi-Scrobbler online backup verified by the server-side helper. Current Koito online snapshot remains pending. |
+| Preserve current history, database, queues, and configuration | Both current server snapshots passed their online-backup checks before destination setup. |
 | Backfill since the last export with overlap | Imported 1,590 actual records. Reimport added zero. Rebuild and baseline-record comparison pass. Compare coverage with current destinations and investigate gaps. |
-| Add the fork as another destination | Connectivity and authentication verified. Configure and observe real delivery after receiver verification. |
+| Add the fork as another destination | Configured for all six sources. Authentication and real backlog delivery pass. Verify a newly completed listen. |
 | Remaining qualification and inclusion controls | Completion, played time, media/app facts, source/date qualification, date ranges, attribution basis, and evidence-level conditions pass integration tests. Undated inclusion passes. Inspect real connected submissions. |
 | Repeat limits after matching and attribution | Distinct plays, supporting records, other listeners, time windows, and count-inference reservations pass the repetition tests. |
 | Consistent history, search, statistics, charts, and exports | Cross-view integration tests pass. Catalog tests cover native search. Export hover text explains its original-alias and dated-only format. |
