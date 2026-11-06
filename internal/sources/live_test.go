@@ -104,6 +104,68 @@ func TestLiveExplicitRetryKeyReusesRecords(t *testing.T) {
 	}
 }
 
+func TestPublishedLiveRetryFinishesWithoutRebuilding(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	captureExample(t, s, liveExample, "delivery-one")
+	if err := s.ProcessLive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`CREATE TRIGGER reject_rebuild BEFORE INSERT ON source_plays BEGIN SELECT RAISE(ABORT,'Unnecessary rebuild'); END`); err != nil {
+		t.Fatal(err)
+	}
+	captureExample(t, s, liveExample, "delivery-one")
+	if err := s.ProcessLive(ctx); err != nil {
+		t.Fatal("Published retry attempted a rebuild", err)
+	}
+	if count(t, s, "source_records") != 1 || count(t, s, "live_submissions") != 2 || count(t, s, "listens") != 1 {
+		t.Fatal("Retry lost evidence or changed listening")
+	}
+	var published int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM live_submissions WHERE status='projected' AND version_id=(SELECT version_id FROM filter_state WHERE id=1)`).Scan(&published); err != nil || published != 2 {
+		t.Fatal("Retry lost publication provenance", err)
+	}
+	if pending, err := s.PendingLive(ctx); err != nil || len(pending) != 0 {
+		t.Fatal("Published retry remained queued", err)
+	}
+	// Equal bytes without a retry identifier still represent a new observation.
+	captureExample(t, s, liveExample, "")
+	if err := s.ProcessLive(ctx); err == nil {
+		t.Fatal("A new observation bypassed publication")
+	}
+	if pending, err := s.PendingLive(ctx); err != nil || len(pending) != 1 {
+		t.Fatal("Failed publication lost the new observation", err)
+	}
+}
+
+func TestLiveNativeIdentifiersSupportSeparateSameSecondPlays(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	withID := func(id string) string {
+		return strings.Replace(liveExample, `"unknown_nested":`, `"event_id":`+id+`,"unknown_nested":`, 1)
+	}
+	first, second := withID("9007199254740992"), withID("9007199254740993")
+	captureExample(t, s, first, "")
+	captureExample(t, s, second, "")
+	captureExample(t, s, first, "")
+	if err := s.ProcessLive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	priority := 100
+	different := operation("and", operation("present", fieldExpr("left.record.event_id")), operation("present", fieldExpr("right.record.event_id")), operation("ne", fieldExpr("left.record.event_id"), fieldExpr("right.record.event_id")))
+	saveTestRules(t, s, Rule{ID: "native-events", Type: "matching", Subtype: "play", Enabled: true, Priority: &priority, Program: assignWhen(different, "match.play", literalExpr(false))})
+	if count(t, s, "source_records") != 3 || count(t, s, "listens") != 2 {
+		t.Fatal("Native event identifiers were rounded, lost, or unable to separate same-second plays")
+	}
+	captureExample(t, s, first, "")
+	if err := s.ProcessLive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, s, "source_records") != 4 || count(t, s, "listens") != 2 {
+		t.Fatal("Repeated evidence multiplied a native event")
+	}
+}
+
 func TestLiveNowPlayingWithTimestampDoesNotBecomePlay(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

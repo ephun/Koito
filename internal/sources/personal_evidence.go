@@ -26,17 +26,26 @@ func publishPersonalEvidence(ctx context.Context, tx *sql.Tx, plan matchPlan, co
 		return err
 	}
 	defer keys.Close()
+	type evidenceIdentity struct {
+		play   string
+		record int64
+	}
+	stored := map[evidenceIdentity]struct{}{}
 	for key, values := range index.byMusic {
 		for position, value := range values {
 			if err = ctx.Err(); err != nil {
 				return err
 			}
-			raw, err := json.Marshal(value.record)
-			if err != nil {
-				return err
-			}
-			if _, err = entries.ExecContext(ctx, value.play.Key, value.record.ID, string(raw)); err != nil {
-				return err
+			identity := evidenceIdentity{value.play.Key, value.record.ID}
+			if _, exists := stored[identity]; !exists {
+				raw, err := json.Marshal(value.record)
+				if err != nil {
+					return err
+				}
+				if _, err = entries.ExecContext(ctx, value.play.Key, value.record.ID, string(raw)); err != nil {
+					return err
+				}
+				stored[identity] = struct{}{}
 			}
 			if _, err = keys.ExecContext(ctx, key, value.play.Key, value.record.ID, position); err != nil {
 				return err

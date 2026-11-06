@@ -53,11 +53,29 @@ A comparison with the pre-intake database found zero changed or missing baseline
 records and zero missing or size-changed file registrations. Saved filter version
 9 remained selected. Record counts are not unique-play counts.
 
+A separate integrity pass verified all 1,422 registered original files against
+their SHA-256 hashes, covering 3,612,629,613 bytes. No files were missing or damaged.
+The November 6 coverage check found every row in the latest complete Last.fm
+capture (221 completed rows) and Multi-Scrobbler capture (1,354 retained rows)
+already present in the working records. This proves captured-source coverage,
+not listening omitted by upstream services or a configured live destination.
+
 The installed Multi-Scrobbler version is 0.17.2. Its ListenBrainz conversion
 forwards service, player, recording identifiers, and recording duration. It omits
 native event identifiers, device identifiers, and actual listened duration.
 Retaining its API pages preserves richer source evidence alongside submissions.
 The fork cannot reconstruct fields omitted from an incoming request.
+
+`scripts/backup-multi-scrobbler.cjs` creates a SQLite online backup of `ms.db`,
+copies configuration, credential files, and logs, and writes an integrity-checked
+hash manifest. It runs in Multi-Scrobbler's Node environment and keeps the service
+running. The database snapshot includes committed history and persisted queues.
+Other files are copied while the service runs and do not share a database
+transaction. Existing `.bak` files remain in their original location.
+
+The script passed against the actual saved Multi-Scrobbler appdata from November
+2, including its persisted queue table. It has not run against the current
+server. The current appdata path and container name are still needed.
 
 ## Filter controls and native pages
 
@@ -91,6 +109,33 @@ Working-data recovery and performance remain incomplete. A fifteen-minute full
 rebuild is unsuitable for routine live publication. Continuous history capture
 remains running while that is addressed. The GitHub branch is a development
 checkpoint, not a deployment approval.
+
+### Publication performance checkpoint
+
+A controlled rebuild of a disposable working-database copy took 770 seconds
+before optimization and 623 seconds afterward. Both runs processed 1,106,424
+records into 265,498 plays. Hash comparisons of 17 derived tables were identical,
+including interpretations, contributing records, attribution evidence, and scope.
+This establishes equivalent output for that comparison, with about 19% less time.
+It does not establish acceptable per-listen latency.
+
+The changes remove duplicate decoding and repeated attribution environments,
+reuse transaction-local SQL statements, avoid repeated evidence serialization,
+and temporarily enlarge the writer's SQLite page cache. A test verifies that the
+cache setting is restored after commit and failed publication. Later small
+allocation reductions are tested but were not included in the timed comparison.
+
+Explicit retries of already-published records now finish without another full
+rebuild. Their delivery attempts and publication version remain recorded.
+Unidentified repetitions still retain new records and require interpretation.
+Tests also cover distinct native event identifiers at the same second, including
+integers above JavaScript's exact-number range, using an explicit matching filter.
+
+The current rebuild count differs from the earlier working publication because
+the API reader now honors Multi-Scrobbler's source-duplicate state, consistently
+with its database reader. Its original rows remain stored. Personal filter
+version 9 is unchanged. Publishing this checkpoint to the working database and
+addressing routine live-update cost remain unfinished.
 
 ## Acceptance audit
 

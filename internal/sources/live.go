@@ -284,18 +284,20 @@ func (s *Store) ProcessLive(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var stored bool
-		if err = s.DB.QueryRowContext(ctx, `SELECT status='stored' FROM live_submissions WHERE id=?`, entry.ID).Scan(&stored); err != nil {
+		var unpublished bool
+		if err = s.DB.QueryRowContext(ctx, `SELECT status='stored' AND EXISTS(SELECT 1 FROM live_submission_records r WHERE r.submission_id=d.id AND NOT EXISTS(SELECT 1 FROM source_interpretations i WHERE i.record_id=r.record_id AND i.policy=?)) FROM live_submissions d WHERE d.id=?`, Policy, entry.ID).Scan(&unpublished); err != nil {
 			return err
 		}
-		completed = completed || request.ListenType != "playing_now" && stored
+		completed = completed || request.ListenType != "playing_now" && unpublished
 	}
 	if completed {
 		if _, err = s.Rebuild(ctx); err != nil {
 			return err
 		}
 	} else {
-		_, err = s.DB.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=(SELECT version_id FROM filter_state WHERE id=1) WHERE listen_type='playing_now' AND status='stored'`)
+		// Explicit retries can reuse records that are already published. Retain
+		// the delivery and its current version without rebuilding the same view.
+		_, err = s.DB.ExecContext(ctx, `UPDATE live_submissions AS d SET status='projected',version_id=(SELECT version_id FROM filter_state WHERE id=1) WHERE status='stored' AND (listen_type='playing_now' OR NOT EXISTS(SELECT 1 FROM live_submission_records r WHERE r.submission_id=d.id AND NOT EXISTS(SELECT 1 FROM source_interpretations i WHERE i.record_id=r.record_id AND i.policy=?)))`, Policy)
 		if err != nil {
 			return err
 		}

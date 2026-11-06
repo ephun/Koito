@@ -104,6 +104,7 @@ func rulePriority(r Rule) int {
 
 func chooseDirectRule(config RuleConfig, r matchingRecord, from, until time.Time) (*Rule, bool) {
 	var selected *Rule
+	var env filters.Env
 	best := -1
 	conflict := false
 	for _, original := range config.Rules {
@@ -125,12 +126,14 @@ func chooseDirectRule(config RuleConfig, r matchingRecord, from, until time.Time
 					continue
 				}
 			}
-			env := recordEnvironment(r)
-			if !from.IsZero() {
-				env["range.from"] = filters.Timestamp(from)
-			}
-			if !until.IsZero() {
-				env["range.until"] = filters.Timestamp(until)
+			if env == nil {
+				env = recordEnvironment(r)
+				if !from.IsZero() {
+					env["range.from"] = filters.Timestamp(from)
+				}
+				if !until.IsZero() {
+					env["range.until"] = filters.Timestamp(until)
+				}
 			}
 			result, err := compiled.Run(context.Background(), env)
 			if err != nil {

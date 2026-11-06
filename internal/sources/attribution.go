@@ -280,7 +280,13 @@ func applyAttribution(plan *matchPlan, config RuleConfig) {
 		}
 		p.Attribution = combineAttributions(values)
 	}
-	evidence := buildPersonalEvidence(*plan, config)
+	var evidence *evidenceIndex
+	for _, rule := range config.Rules {
+		if rule.Enabled && rule.Type == "attribution" && rule.Subtype == "heuristic" {
+			evidence = buildPersonalEvidence(*plan, config)
+			break
+		}
+	}
 	kept := []plannedPlay{}
 	for _, p := range plan.Plays {
 		if p.Attribution.Listener == "unknown" && p.Attribution.Basis == "unknown listener" && len(p.Attribution.Rules) == 0 {

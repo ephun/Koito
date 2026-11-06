@@ -16,11 +16,17 @@ import (
 func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
+	started := time.Now()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return ProjectionResult{}, err
 	}
 	defer tx.Rollback()
+	restoreCache, err := publicationCache(ctx, tx)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	defer restoreCache()
 	version, err := readRuleVersion(ctx, tx, 0)
 	if err != nil {
 		return ProjectionResult{}, err
@@ -29,6 +35,7 @@ func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 	if err != nil {
 		return ProjectionResult{}, err
 	}
+	logger.FromContext(ctx).Debug().Int("records", len(records)).Dur("elapsed", time.Since(started)).Msg("Loaded records for publication")
 	decisions, err := loadDecisions(ctx, tx)
 	if err != nil {
 		return ProjectionResult{}, err
@@ -37,10 +44,12 @@ func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 	if err != nil {
 		return ProjectionResult{}, err
 	}
+	logger.FromContext(ctx).Debug().Int("plays", len(plan.Plays)).Dur("elapsed", time.Since(started)).Msg("Calculated listening view")
 	result, err := publishPlan(ctx, tx, plan, version.ID)
 	if err != nil {
 		return result, err
 	}
+	restoreCache()
 	return result, tx.Commit()
 }
 
@@ -48,6 +57,13 @@ func (s *Store) Rebuild(ctx context.Context) (ProjectionResult, error) {
 // It never updates source records, legacy aliases or unrelated live listens.
 func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int64) (ProjectionResult, error) {
 	started := time.Now()
+	restoreCache, err := publicationCache(ctx, tx)
+	if err != nil {
+		return ProjectionResult{}, err
+	}
+	defer restoreCache()
+	statements := publicationStatements{tx: tx}
+	defer statements.Close()
 	stage := func(name string) {
 		logger.FromContext(ctx).Debug().Str("stage", name).Dur("elapsed", time.Since(started)).Msg("Rebuilding imported view")
 	}
@@ -74,7 +90,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		`DELETE FROM source_plays WHERE policy IN ('spotify-v1','filters-v1')`,
 		`DELETE FROM source_interpretations WHERE policy IN ('spotify-v1','filters-v1')`,
 	} {
-		if _, err := tx.ExecContext(ctx, query); err != nil {
+		if _, err := statements.ExecContext(ctx, query); err != nil {
 			return result, err
 		}
 	}
@@ -161,7 +177,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		if err != nil {
 			return result, err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO source_play_details(play_key,evidence_level,attribution_json,version_id) VALUES(?,'observed',?,?)`, key, string(raw), versionID); err != nil {
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_details(play_key,evidence_level,attribution_json,version_id) VALUES(?,'observed',?,?)`, key, string(raw), versionID); err != nil {
 			return result, err
 		}
 	}
@@ -181,13 +197,13 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		if err != nil {
 			return result, err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO source_play_context(play_key,context_json) VALUES(?,?)`, key, string(raw)); err != nil {
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_context(play_key,context_json) VALUES(?,?)`, key, string(raw)); err != nil {
 			return result, err
 		}
 	}
 	for _, r := range plan.Records {
 		if key := plan.Keys[r.ID]; key != "" {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, key, r.ID); err != nil {
+			if _, err := statements.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, key, r.ID); err != nil {
 				return result, err
 			}
 		}
@@ -222,11 +238,11 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		}
 		unix := at.Unix()
 		if play.Evidence != "observed" {
-			if _, err = tx.ExecContext(ctx, `UPDATE source_play_details SET evidence_level=?,interval_start=?,interval_end=? WHERE play_key=?`, play.Evidence, optionalTime(play.IntervalStart), optionalTime(play.IntervalEnd), play.Key); err != nil {
+			if _, err = statements.ExecContext(ctx, `UPDATE source_play_details SET evidence_level=?,interval_start=?,interval_end=? WHERE play_key=?`, play.Evidence, optionalTime(play.IntervalStart), optionalTime(play.IntervalEnd), play.Key); err != nil {
 				return result, err
 			}
 			for _, id := range play.Records {
-				if _, err = tx.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, play.Key, id); err != nil {
+				if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_records(play_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, play.Key, id); err != nil {
 					return result, err
 				}
 			}
@@ -240,14 +256,14 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			result.Collisions++
 			disposition = "legacy display overlap"
 		} else {
-			if _, err = tx.ExecContext(ctx, `INSERT INTO listens(track_id,listened_at,user_id,client,play_key) VALUES(?,?,?,'sources:filters-v1',?)`, track, unix, r.UserID, play.Key); err != nil {
+			if _, err = statements.ExecContext(ctx, `INSERT INTO listens(track_id,listened_at,user_id,client,play_key) VALUES(?,?,?,'sources:filters-v1',?)`, track, unix, r.UserID, play.Key); err != nil {
 				return result, err
 			}
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO source_projection(track_id,listened_at,user_id,policy,owned,play_key) VALUES(?,?,?,?,?,?)`, track, unix, r.UserID, Policy, owned, play.Key); err != nil {
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_projection(track_id,listened_at,user_id,policy,owned,play_key) VALUES(?,?,?,?,?,?)`, track, unix, r.UserID, Policy, owned, play.Key); err != nil {
 			return result, err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO source_plays(policy,play_key,source_id,representative_record,track_id,listened_at,disposition,version_id) VALUES(?,?,?,?,?,?,?,?)`, Policy, play.Key, r.SourceID, r.ID, track, unix, disposition, versionID); err != nil {
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_plays(policy,play_key,source_id,representative_record,track_id,listened_at,disposition,version_id) VALUES(?,?,?,?,?,?,?,?)`, Policy, play.Key, r.SourceID, r.ID, track, unix, disposition, versionID); err != nil {
 			return result, err
 		}
 		if len(v.Tags) > 0 {
@@ -255,7 +271,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 			if e != nil {
 				return result, e
 			}
-			if _, err = tx.ExecContext(ctx, `INSERT INTO source_play_tags(play_key,tags_json) VALUES(?,?)`, play.Key, string(raw)); err != nil {
+			if _, err = statements.ExecContext(ctx, `INSERT INTO source_play_tags(play_key,tags_json) VALUES(?,?)`, play.Key, string(raw)); err != nil {
 				return result, err
 			}
 		}
@@ -283,7 +299,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		if err != nil {
 			return result, err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO source_aggregates(aggregate_key,library_key,track_key,representative_record,track_id,user_id,available_count,attributed_count,observed_count,overlap_count,last_played_count,estimated_count,undated_count,details_json,version_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, aggregate.Key, aggregate.LibraryKey, aggregate.TrackKey, aggregate.Representative, track, r.UserID, aggregate.Available, aggregate.Attributed, aggregate.Observed, aggregate.Overlap, aggregate.LastPlayed, aggregate.Estimated, aggregate.Undated, string(raw), versionID); err != nil {
+		if _, err = statements.ExecContext(ctx, `INSERT INTO source_aggregates(aggregate_key,library_key,track_key,representative_record,track_id,user_id,available_count,attributed_count,observed_count,overlap_count,last_played_count,estimated_count,undated_count,details_json,version_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, aggregate.Key, aggregate.LibraryKey, aggregate.TrackKey, aggregate.Representative, track, r.UserID, aggregate.Available, aggregate.Attributed, aggregate.Observed, aggregate.Overlap, aggregate.LastPlayed, aggregate.Estimated, aggregate.Undated, string(raw), versionID); err != nil {
 			return result, err
 		}
 		result.Estimated += aggregate.Estimated
@@ -293,7 +309,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		}
 		result.Undated += aggregate.Undated
 		for _, id := range aggregate.Records {
-			if _, err = tx.ExecContext(ctx, `INSERT INTO source_aggregate_records(aggregate_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, aggregate.Key, id); err != nil {
+			if _, err = statements.ExecContext(ctx, `INSERT INTO source_aggregate_records(aggregate_key,record_id) VALUES(?,?) ON CONFLICT DO NOTHING`, aggregate.Key, id); err != nil {
 				return result, err
 			}
 		}
@@ -380,10 +396,10 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
 		return result, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=? WHERE status='stored'`, versionID); err != nil {
+	if _, err = statements.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=? WHERE status='stored'`, versionID); err != nil {
 		return result, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
+	_, err = statements.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)
 	stage("Complete")
 	return result, err
 }

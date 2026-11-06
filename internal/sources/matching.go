@@ -147,7 +147,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	attachGameCatalog(out)
 	for i := range out {
 		r := &out[i]
-		interpretMatchingRecord(r, config)
+		interpretNormalizedRecord(r, config)
 		if err = applyMusicPrograms(ctx, r, musicPrograms); err != nil {
 			return nil, err
 		}
@@ -158,9 +158,14 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 }
 
 func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
+	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
+	interpretNormalizedRecord(r, config)
+}
+
+// Bulk loading has already decoded the original fields for membership lookup.
+func interpretNormalizedRecord(r *matchingRecord, config RuleConfig) {
 	r.TimeIssues = nil
 	r.timeOffset = nil
-	r.Values = normalizeRecord(json.RawMessage(r.Payload), r.Parser, config.zoneFor(r.SourceID, r.FileHash, r.Service))
 	r.Start = r.Values.Time
 	r.Basis = r.Values.TimeMeaning
 	r.Device, r.LibraryID, r.TrackID = r.Values.Device, r.Values.NativeLibraryID, r.Values.NativeTrackID

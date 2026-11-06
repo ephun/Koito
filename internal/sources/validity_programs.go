@@ -35,12 +35,15 @@ func applyValidity(r *matchingRecord, config RuleConfig) {
 	if r.Values.Reason != "counted" && r.Values.Reason != "not reported complete" && r.Values.Reason != "source duplicate" {
 		return
 	}
-	env := recordEnvironment(*r)
-	env["validity.count"] = filters.Bool(r.Values.Reason != "source duplicate")
+	var env filters.Env
 	assigned := false
 	for _, rule := range config.Rules {
 		if !rule.Enabled || rule.Type != "qualification" || rule.Subtype != "validity" || rule.Program == nil {
 			continue
+		}
+		if env == nil {
+			env = recordEnvironment(*r)
+			env["validity.count"] = filters.Bool(r.Values.Reason != "source duplicate")
 		}
 		compiled := rule.compiled
 		if compiled == nil {
