@@ -609,6 +609,13 @@ as historical imports.
 
 ### 8.1 Preserve incoming data
 
+- Preserve the current server history and Multi-Scrobbler database, queues, and
+  configuration before changing routing. Listening since the last export is
+  part of the migration, including the days spent developing this fork.
+- Backfill that interval from current retained sources with an overlapping
+  boundary, preserving original timestamps and matching repeated evidence.
+- Add the development fork as a separate destination while existing destinations
+  continue receiving listening. Validate connectivity before enabling delivery.
 - Keep complete accepted request bytes and record fields before acknowledging
   completed-listen submissions. Include unknown metadata fields.
 - Retain source/device/app identifiers and original field meanings. Do not
