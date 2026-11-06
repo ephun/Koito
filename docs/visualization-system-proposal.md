@@ -2,6 +2,9 @@
 
 Status: design proposal for discussion. No application behavior changes are included.
 
+The [consolidated vocabulary and navigation proposal](vocabulary-and-navigation.md)
+supersedes the earlier separation between saved Chart and Widget objects.
+
 ## Recommendation
 
 Build an editable chart system alongside Filters. Reference applications supply presets and acceptance examples.
@@ -13,15 +16,16 @@ The following names are proposed additions, rather than previously agreed vocabu
 
 | Term | Meaning |
 |---|---|
-| Query | Selects data and describes calculations producing a result. |
-| Chart | Combines a query with instructions for drawing its result. Includes tables and single statistics. |
-| Preset | An editable starting definition for a query, chart, or dashboard. |
-| Widget | Places a chart or native component within a dashboard. References a definition rather than copying its logic. |
+| Query | The internal data request and calculation plan within a Widget. It initially has no separate saved entity or library. |
+| Chart | A graphical display of a Widget, rather than a separate saved object. |
+| Preset | An editable starting definition for an existing object type. |
+| Widget | A saved presentation containing data selection, calculations, rendering, and exposed parameters. |
 | Dashboard | Saves widget placement, sizes, and shared selections. Home is a designated dashboard. |
 
-Queries can be embedded in charts initially. Named, shared queries can be introduced when reuse warrants them.
-Definitions need stable identifiers and format versions. Reusing a chart shares edits across its placements.
-Duplicating a chart creates an independent definition. A preset update should offer a diff rather than replace personal changes.
+Queries belong within Widgets initially. Widget definitions need stable identifiers and format versions.
+Dashboards reference Widgets and store placement and parameter bindings.
+Reusing a Widget shares definition edits across its placements. Duplicating it creates an independent definition.
+A preset update should offer a diff rather than replace personal changes.
 
 ## Relationship to existing subsystems
 
@@ -30,10 +34,9 @@ flowchart LR
     F[Files and Records] --> E[Filters]
     E --> V[Published View]
     V --> Q[Queries and calculations]
-    Q --> C[Chart definitions]
-    C --> W[Widgets]
+    Q --> W[Widget definitions and rendering]
     W --> D[Home and dashboards]
-    C --> X[Image and data exports]
+    W --> X[Image and data exports]
     M[Metadata Sources] --> E
 ```
 
@@ -140,7 +143,8 @@ A receipt combines ranked rows, text, separator rules, and an export layout.
 
 ## Builder and navigation
 
-Statistics should open a library of personal charts and editable presets, with access to dashboards.
+The admin Widget library contains saved definitions and editable presets.
+Home is the public landing Dashboard. Expanded Widgets and other Dashboards open through contextual links.
 Creating a chart should provide Data, Calculations, Chart, and Appearance controls alongside a live preview.
 These are editor sections, not additional sidebar destinations.
 Fields should be searchable and grouped by meaning. The editor should explain incompatible field choices briefly.
@@ -158,7 +162,7 @@ Narrative text can bind templates to calculated values and conditional expressio
 Every numerical claim should link to its underlying calculation and listening.
 Ongoing periods should compare against the same elapsed portion of the comparison period.
 
-Recommended eventual sidebar: Home, Statistics, Search, and Settings.
+Recommended initial sidebar: Search, Home, and Settings.
 Imports and Filters remain full pages accessible through Settings and existing contextual links.
 Keeping Filters directly accessible during cleaning is reasonable. Optional pinned shortcuts can follow demonstrated need.
 Navigation changes should follow a working prototype, rather than precede the chart design.
@@ -322,7 +326,7 @@ Reusable operators can be implemented in stages while preserving the complete re
 
 The main decisions are:
 
-1. Does Query → Chart → Widget → Dashboard describe the intended separation clearly?
+1. Does View → Widget → Dashboard describe the intended separation clearly, with queries inside Widgets?
 2. Should Home be a designated editable dashboard, retaining native playback widgets?
 3. Is a visual builder with advanced expressions the preferred editing experience?
 4. Should chart edits be shared by reference until explicitly duplicated?
