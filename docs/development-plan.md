@@ -688,6 +688,18 @@ the results from the preserved files/records/rules rather than cached totals.
 
 **Outcome:** the locally verified fork runs on the server with a tested way back.
 
+- Use `fm.ephun.net` as the preferred address for the fork, replacing the
+  current Koito at `stats.ephun.net`. The preferred Multi-Scrobbler interface
+  address is `fm.ephun.net/scrobbler`, pending verification on the installed
+  version. Both applications remain separate services behind the reverse proxy.
+- Test Multi-Scrobbler's subpath support with
+  `BASE_URL=https://fm.ephun.net/scrobbler`, following its
+  [deployment documentation](https://docs.multi-scrobbler.app/installation/).
+  Check dashboard assets, API routes, streaming connections, and authentication
+  callbacks. Update registered callback addresses where needed.
+- Inventory current submission URLs before changing proxy routes. Preserve
+  delivery from existing players and scrobblers throughout the address change.
+  Keep browser redirects separate from API submission routing.
 - Build the fork's image locally and test the same migrations and import/view
   behavior in its Linux environment. Pin the tested build rather than deploying
   upstream's latest image by mistake.
