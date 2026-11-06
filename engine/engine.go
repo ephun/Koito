@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"github.com/gabehf/koito/internal/logger"
 	mbz "github.com/gabehf/koito/internal/mbz"
 	"github.com/gabehf/koito/internal/models"
+	"github.com/gabehf/koito/internal/sources"
 	"github.com/gabehf/koito/internal/utils"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -228,6 +230,16 @@ func RunWithContext(shutdown context.Context, getenv func(string) string, w io.W
 	mux.Use(chimiddleware.Recoverer)
 	mux.Use(chimiddleware.RealIP)
 	bindRoutes(mux, &ready, store, mbzC)
+	if provider, ok := store.(interface{ SourceDatabase() *sql.DB }); ok {
+		live := &sources.Store{DB: provider.SourceDatabase(), Root: path.Join(cfg.ConfigDir(), "sources")}
+		liveContext, stopLive := context.WithCancel(ctx)
+		defer stopLive()
+		go func() { <-shutdown.Done(); stopLive() }()
+		go live.RunLive(liveContext)
+		if cfg.LbzRelayEnabled() {
+			go live.RunLiveRelay(liveContext, cfg.LbzRelayUrl(), cfg.LbzRelayToken())
+		}
+	}
 
 	httpServer := &http.Server{
 		Addr:    cfg.ListenAddr(),

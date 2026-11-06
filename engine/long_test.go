@@ -70,17 +70,12 @@ func getApiKey(t *testing.T, session string) {
 	})
 }
 
-// truncateTestData removes all music data from the server's database, leaving
-// users, sessions, and api_keys intact. Deleting artists cascades to
-// artist_aliases, artist_tracks, and artist_releases; the orphan trigger then
-// deletes releases, which cascade to release_aliases, tracks, and track_aliases.
+// truncateTestData resets the isolated integration fixture, including evidence
+// introduced by live submissions. Production evidence remains append-only.
 func truncateTestData(t *testing.T) {
 	t.Helper()
-	require.NoError(t, store.Exec("DELETE FROM listens"))
-	require.NoError(t, store.Exec("DELETE FROM artists"))
-	// Belt-and-suspenders: delete any releases the trigger may have missed
-	// (e.g. releases that were never associated with an artist).
-	require.NoError(t, store.Exec("DELETE FROM releases"))
+	waitForLivePublication(t)
+	resetMusicFixture(t)
 }
 
 func newTestDB() *sqlite.Sqlite {
@@ -190,8 +185,9 @@ func doSubmitListens(t *testing.T) {
 		require.NoError(t, err)
 		respBytes, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, `{"status": "ok"}`, string(respBytes))
+		assert.JSONEq(t, `{"status": "ok"}`, string(respBytes))
 	}
+	waitForLivePublication(t)
 }
 
 func TestGetters(t *testing.T) {
@@ -714,8 +710,9 @@ func TestManualListen(t *testing.T) {
 	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/listens", strings.NewReader(`{"track_id":1,"unix":`+unix+`}`))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
-	count, _ := store.Count(`SELECT COUNT(*) FROM listens WHERE track_id = $1`, 1)
-	assert.Equal(t, 2, count)
+	track, err := store.GetTrack(context.Background(), db.GetTrackOpts{ID: 1})
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, track.ListenCount)
 
 	// 400
 	unix = strconv.FormatInt(time.Now().Unix()+60, 10)
@@ -770,7 +767,7 @@ func TestNowPlaying(t *testing.T) {
 	require.NoError(t, err)
 	respBytes, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status": "ok"}`, string(respBytes))
+	assert.JSONEq(t, `{"status": "ok"}`, string(respBytes))
 
 	// yes playing
 	resp, err = http.DefaultClient.Get(host() + "/apis/web/v1/now-playing")

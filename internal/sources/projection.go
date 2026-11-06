@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/gabehf/koito/internal/music"
@@ -20,6 +21,7 @@ type ProjectionResult struct {
 	Undated    int64  `json:"undated"`
 }
 type spotifyItem struct {
+	DurationMS  int64    `json:"-"`
 	Platform    string   `json:"platform,omitempty"`
 	Tags        []string `json:"-"`
 	Timestamp   string   `json:"ts"`
@@ -99,6 +101,11 @@ func projectTrack(ctx context.Context, tx *sql.Tx, v spotifyItem) (int64, error)
 	}
 	if err = music.AssignRecording(ctx, tx, track, v.RecordingID, v.URI); err != nil {
 		return 0, err
+	}
+	if seconds := v.DurationMS / 1000; seconds > 0 && seconds <= math.MaxInt32 {
+		if _, err = tx.ExecContext(ctx, `UPDATE tracks SET duration=? WHERE id=? AND duration=0`, seconds, track); err != nil {
+			return 0, err
+		}
 	}
 	return track, nil
 }

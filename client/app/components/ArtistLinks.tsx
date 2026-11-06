@@ -15,12 +15,12 @@ const ArtistLinks: React.FC<ArtistLinksProps> = ({ artists }) => {
     <>
       {artists.map((artist, index) => (
         <span key={artist.id} className="color-fg-secondary">
-          <Link
+          {artist.id > 0 ? <Link
             className="hover:text-(--color-fg-tertiary)"
             to={`/artist/${artist.id}`}
           >
             {artist.name}
-          </Link>
+          </Link> : artist.name}
           {index < artists.length - 1 ? ", " : ""}
         </span>
       ))}

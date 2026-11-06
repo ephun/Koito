@@ -604,6 +604,9 @@ gameplay/concert inclusion can be changed without losing source records.
 
 ## Phase 8: live capture and remaining filter controls
 
+**Status: in progress.** Implementation notes and the completion audit are in
+[Phase 8](phase-8.md).
+
 **Outcome:** ongoing submissions receive the same preservation and rule handling
 as historical imports.
 

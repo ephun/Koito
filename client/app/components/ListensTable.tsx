@@ -8,6 +8,11 @@ import { timeSince } from "~/utils/utils";
 import { useAppContext } from "~/providers/AppProvider";
 import FieldHelp from "./FieldHelp";
 import { calendarDate } from "~/utils/dates";
+import type { ReactNode } from "react";
+
+function CurrentTrackLink({ id, children, className }: { id: number; children: ReactNode; className?: string }) {
+  return id > 0 ? <Link className={className} to={`/track/${id}`}>{children}</Link> : <span className={className}>{children}</span>;
+}
 
 interface ListensTableProps {
   listens: Listen[];
@@ -35,14 +40,14 @@ export default function ListensTable({
         {showNP && npData && (
           <tr className="group border-b border-(--color-bg-tertiary) relative last:border-b-0">
             <td className={imgColSizeClasses}>
-              <Link to={`/track/${npData.track.id}`}>
+              <CurrentTrackLink id={npData.track.id}>
                 <Image
                   src={npData.track.image.small}
                   size={imgSize}
                   alt={npData.track.title}
                   lazy
                 />
-              </Link>
+              </CurrentTrackLink>
             </td>
             <td className="max-w-0 w-full px-2 py-2 align-middle">
               <div>
@@ -52,12 +57,12 @@ export default function ListensTable({
                     {" — "}
                   </>
                 )}
-                <Link
+                <CurrentTrackLink
                   className="hover:text-(--color-fg-secondary)"
-                  to={`/track/${npData.track.id}`}
+                  id={npData.track.id}
                 >
                   {npData.track.title}
-                </Link>
+                </CurrentTrackLink>
               </div>
             </td>
             <td className={timeColClasses}>

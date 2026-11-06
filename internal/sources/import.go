@@ -151,6 +151,10 @@ func (s *Store) importFile(ctx context.Context, input io.Reader, filename, accou
 			} else if snapshotParser(part.parser) {
 				kind = "context"
 				kind = kinds[ordinal]
+			} else if part.parser == MultiAPI {
+				if normalizeMultiAPI(raw).Reason == "forwarding evidence" {
+					kind = "forwarding"
+				}
 			} else if part.service == "spotify" {
 				kind = spotifyKind(raw)
 			} else if normalizeRecord(raw, part.parser, "").NowPlaying {

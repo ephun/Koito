@@ -28,6 +28,7 @@ type matchingRecord struct {
 	FileHash         string       `json:"file_hash"`
 	Ordinal          int          `json:"ordinal"`
 	Parser           string       `json:"parser"`
+	Kind             string       `json:"kind,omitempty"`
 	Payload          string       `json:"payload,omitempty"`
 	UserID           int32        `json:"-"`
 	Values           recordValues `json:"values"`
@@ -98,7 +99,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	if err != nil {
 		return nil, err
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
+	rows, err := reader.QueryContext(ctx, `SELECT r.id,r.source_id,a.service,r.file_hash,r.ordinal,r.parser,r.payload,a.user_id,r.kind FROM source_records r JOIN source_accounts a ON a.id=r.source_id ORDER BY r.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfi
 	out := []matchingRecord{}
 	for rows.Next() {
 		var r matchingRecord
-		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID); err != nil {
+		if err = rows.Scan(&r.ID, &r.SourceID, &r.Service, &r.FileHash, &r.Ordinal, &r.Parser, &r.Payload, &r.UserID, &r.Kind); err != nil {
 			return nil, err
 		}
 		if err = retainRawFields(&r, rawFields); err != nil {
@@ -176,6 +177,10 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	applyContextPrograms(r, config)
 	basis := applyObservedTime(r, config)
 	applyCompletion(r, config)
+	if r.Kind == "now_playing" {
+		r.Values.NowPlaying = true
+		r.Values.Reason = "now playing"
+	}
 	if (r.Service == "spotify" || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard) && r.Values.TimeMeaning == "end" && basis == "estimated_start" && r.Values.Reason == "counted" {
 		// Subtract actual played time, never an assumed recording duration. Guard
 		// duration conversion against overflow and implausible pre-epoch results.

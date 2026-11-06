@@ -135,7 +135,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		return warm[i].ID < warm[j].ID
 	})
 	for _, r := range warm {
-		v, err := applyNaming(ctx, naming, *r, spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID})
+		v, err := applyNaming(ctx, naming, *r, spotifyItem{DurationMS: r.Values.DurationMS, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID})
 		if err != nil {
 			return result, err
 		}
@@ -195,7 +195,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	stage("Plays")
 	for _, play := range plan.Plays {
 		r := byID[play.Representative]
-		v := spotifyItem{Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+		v := spotifyItem{DurationMS: r.Values.DurationMS, Title: r.Values.Title, Artist: r.Values.Artist, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
 		v, err = applyNaming(ctx, naming, *r, v)
 		if err != nil {
 			return result, err
@@ -264,7 +264,7 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 		r := byID[aggregate.Representative]
 		var track any
 		if aggregate.Attributed > 0 {
-			v := spotifyItem{Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
+			v := spotifyItem{DurationMS: r.Values.DurationMS, Artist: r.Values.Artist, Title: r.Values.Title, Album: r.Values.Album, URI: r.Values.URI, RecordingID: r.Values.RecordingID}
 			v, err = applyNaming(ctx, naming, *r, v)
 			if err != nil {
 				return result, err
@@ -378,6 +378,9 @@ func publishPlan(ctx context.Context, tx *sql.Tx, plan matchPlan, versionID int6
 	}
 	stage("Inclusion")
 	if err = music.RefreshScope(ctx, tx, 0, rawConfig); err != nil {
+		return result, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE live_submissions SET status='projected',version_id=? WHERE status='stored'`, versionID); err != nil {
 		return result, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO source_projection_runs(policy,created_at,records,plays,collisions) VALUES(?,?,?,?,?)`, Policy, time.Now().Unix(), result.Records, result.Plays, result.Collisions)

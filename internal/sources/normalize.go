@@ -69,6 +69,9 @@ func itemText(raw json.RawMessage) string {
 }
 
 func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
+	if parser == MultiAPI {
+		return normalizeMultiAPI(raw)
+	}
 	if parser == SetlistJSON {
 		return normalizeConcert(raw)
 	}

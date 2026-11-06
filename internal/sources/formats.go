@@ -66,6 +66,9 @@ func (s *Store) parseFile(ctx context.Context, f File, filenames ...string) (par
 	if part, e := parseMultiHistory(f, clean, filename); !errors.Is(e, ErrUnsupportedFile) {
 		return part, e
 	}
+	if part, e := parseMultiAPI(f, clean); !errors.Is(e, ErrUnsupportedFile) {
+		return part, e
+	}
 	if len(clean) == 0 {
 		if strings.Contains(strings.ToLower(baseFilename(filename)), ".db") {
 			return parsedFile{file: f, service: "database", parser: EmptyDB, records: []json.RawMessage{json.RawMessage(`{"kind":"database","table":"schema","key":"schema","fields":{"empty":true}}`)}}, nil

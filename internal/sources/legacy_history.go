@@ -15,7 +15,7 @@ const MalojaJSON = "maloja-json-v1"
 const KoitoJSON = "koito-json-v1"
 
 func legacyHistoryParser(parser string) bool {
-	return parser == ListenBrainzJSON || parser == ListenBrainzJSONL || parser == MalojaJSON || parser == KoitoJSON
+	return parser == LiveListenBrainz || parser == ListenBrainzJSON || parser == ListenBrainzJSONL || parser == MalojaJSON || parser == KoitoJSON
 }
 
 func parseLegacyHistory(file File, data []byte) (parsedFile, error) {
@@ -130,9 +130,12 @@ func normalizeLegacyHistory(raw json.RawMessage, parser string) recordValues {
 	_ = json.Unmarshal(raw, &row)
 	v := recordValues{Reason: "counted", Origin: "converted", TimeMeaning: "start", Precision: int64(time.Second)}
 	switch parser {
-	case ListenBrainzJSON, ListenBrainzJSONL:
+	case LiveListenBrainz, ListenBrainzJSON, ListenBrainzJSONL:
 		meta := object(row["track_metadata"])
 		extra := object(meta["additional_info"])
+		if parser == LiveListenBrainz {
+			v.Origin = "forwarded"
+		}
 		v.Title, v.Artist, v.Album = valueText(meta["track_name"]), valueText(meta["artist_name"]), valueText(meta["release_name"])
 		v.RecordingID = valueText(extra["recording_mbid"])
 		if v.RecordingID == "" {
@@ -145,6 +148,13 @@ func normalizeLegacyHistory(raw json.RawMessage, parser string) recordValues {
 		v.OriginalService = valueText(extra["music_service_name"])
 		v.Forwarder = valueText(extra["submission_client"])
 		v.Device = valueText(extra["device_name"])
+		v.SourceInput = valueText(extra["source_name"])
+		for _, key := range []string{"listen_msid", "event_id", "scrobble_id"} {
+			if id := valueText(extra[key]); id != "" {
+				v.EventID = key + ":" + v.OriginalService + ":" + id
+				break
+			}
+		}
 		v.DurationMS = numeric(extra["duration_ms"])
 		if v.DurationMS == 0 {
 			v.DurationMS = durationMilliseconds(extra["duration"])

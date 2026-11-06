@@ -56,7 +56,21 @@ func (s *Store) FilePath(hash string) (string, error) {
 // SaveFile writes and syncs a temporary file, then publishes its hash-derived
 // name. Existing bytes are verified; never silently replace a damaged archive.
 func (s *Store) SaveFile(ctx context.Context, input io.Reader) (File, error) {
+	result, err := s.saveContent(ctx, input)
+	if err != nil {
+		return result, err
+	}
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO source_files(hash,size,created_at) VALUES(?,?,?) ON CONFLICT(hash) DO NOTHING`, result.Hash, result.Size, time.Now().Unix())
+	return result, err
+}
+
+// The live journal must remain writable while a view transaction owns SQLite's
+// writer. Its files can be acknowledged before the worker registers them in SQL.
+func (s *Store) saveContent(ctx context.Context, input io.Reader) (File, error) {
 	var result File
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	if err := os.MkdirAll(s.Root, 0700); err != nil {
 		return result, err
 	}
@@ -98,8 +112,7 @@ func (s *Store) SaveFile(ctx context.Context, input io.Reader) (File, error) {
 			return result, errors.New("stored file failed integrity check")
 		}
 	}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO source_files(hash,size,created_at) VALUES(?,?,?) ON CONFLICT(hash) DO NOTHING`, result.Hash, n, time.Now().Unix())
-	return result, err
+	return result, nil
 }
 
 func (s *Store) Receipts(ctx context.Context) ([]Receipt, error) {
