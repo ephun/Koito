@@ -107,7 +107,7 @@ export default function FilterBlockEditor({ program, schema, operators, disabled
 
 type Common = { schema: BlockSchema; operators: BlockOperator[]; disabled: boolean };
 
-function ExpressionEditor({ expression, onChange, choices, artistCredits, ...common }: Common & { expression: Expression; onChange: (value: Expression) => void; choices?: { label: string; value: string }[]; artistCredits?: boolean }) {
+export function ExpressionEditor({ expression, onChange, choices, artistCredits, ...common }: Common & { expression: Expression; onChange: (value: Expression) => void; choices?: { label: string; value: string }[]; artistCredits?: boolean }) {
   const { schema, operators, disabled } = common;
   const args = expression.args || [];
   const operation = operators.find(op => op.id === expression.op);

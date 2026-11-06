@@ -2,6 +2,11 @@
 
 Updated November 6, 2026.
 
+**Current direction: Phase 9 is paused at the user's request.** The user has chosen
+to design a Grafana-based replacement in the sibling `GrafanaMusicVis` project.
+The phases below preserve the Koito fork plan for reference. They are not the
+active implementation objective. See [the pause checkpoint](phase-9-paused.md).
+
 This fork preserves original music data and builds a changeable view of it.
 Development and testing happen locally on Windows. Deployment to the server is
 a separate, final step.
@@ -685,7 +690,8 @@ Rebuild the personal filter set in Phase 13, after the requested features exist.
 **Outcome:** real listening can be explored through saved, editable Widgets that
 use Koito's existing visual style and shared expression vocabulary.
 
-**Status:** next development phase. This document update does not start implementation.
+**Status:** paused at the user's request. Only the preliminary changes described
+in [the checkpoint](phase-9-paused.md) were written. Phase 9 is incomplete.
 
 ### 9.1 Shared data and calculation contract
 
@@ -970,9 +976,9 @@ has implemented them. Summaries were checked while writing this plan.
 
 ## 8. Immediate next work
 
-Phases 1 through 8 are complete. Start the implementation work with Phase 9,
-**Widgets and queries**, when the user invokes the next goal. The suggested
-goal statement is:
+Phases 1 through 8 are complete. Phase 9 is paused. The active work is the design
+and requirements for the sibling `GrafanaMusicVis` replacement project.
+The previous suggested Koito goal is retained below for a possible future resume:
 
 > Complete Phase 9, Widgets and queries, in docs/development-plan.md. Build the
 > shared query foundation and an admin Widget editor using an established chart
