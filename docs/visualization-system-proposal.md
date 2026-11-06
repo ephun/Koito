@@ -7,6 +7,11 @@ supersedes the earlier separation between saved Chart and Widget objects.
 
 ## Recommendation
 
+The [Grafana comparison](grafana-comparison.md) narrows this recommendation to one application.
+Continue with Koito and prove a bounded native editor using an established rendering library.
+Grafana remains an alternative application foundation, which would require moving music behavior into plugins.
+This proposal does not recommend a separate Grafana dashboard beside Koito.
+
 Build an editable chart system alongside Filters. Reference applications supply presets and acceptance examples.
 Each reference chart should be expressible as a saved definition, with editable fields, calculations, and appearance.
 The complete Last.fm Stats inventory is the baseline. LastWave is the next priority.
