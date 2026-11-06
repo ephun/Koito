@@ -40,7 +40,7 @@ export default function ExportModal() {
     <div>
       <SubHeader>Export</SubHeader>
       <AsyncButton loading={loading} onClick={handleExport}>
-        Export Data
+        Export dated plays
       </AsyncButton>
       {error && <p className="error">{error}</p>}
     </div>

@@ -41,6 +41,8 @@ func inspectFilterIssues(ctx context.Context, r matchingRecord, config RuleConfi
 	issues := append(append([]FilterIssue{}, r.TimeIssues...), r.MusicIssues...)
 	issues = append(issues, r.ContextIssues...)
 	issues = append(issues, r.CompletionIssues...)
+	issues = append(issues, r.ValidityIssues...)
+	issues = append(issues, r.RepetitionIssues...)
 	namingEnv := recordEnvironment(r)
 	from, until := recordInterval(r)
 	for _, rule := range config.Rules {

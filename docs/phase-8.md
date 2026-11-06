@@ -44,6 +44,46 @@ The Multi-Scrobbler container on PhunRAID successfully reached the development
 fork through Tailscale and validated its dedicated token. Live delivery has not
 been configured. Existing Last.fm and production Koito destinations remain active.
 
+A continuous local capture saves complete Last.fm history pages from November 1
+and periodic Multi-Scrobbler API pages. These originals include overlap with the
+baseline. The selected backfill added 1,590 records to the working database.
+Repeating those imports added zero records. The working view rebuild remains
+under verification. Record counts are not unique-play counts.
+
+The installed Multi-Scrobbler version is 0.17.2. Its ListenBrainz conversion
+forwards service, player, recording identifiers, and recording duration. It omits
+native event identifiers, device identifiers, and actual listened duration.
+Retaining its API pages preserves richer source evidence alongside submissions.
+The fork cannot reconstruct fields omitted from an incoming request.
+
+## Filter controls and native pages
+
+Qualification now includes Completion, Repetition, and Validity in the existing
+IF/THEN editor. Reported played time, recording duration, skips, and completion
+remain separate fields. Missing facts remain unknown. Repetition examines distinct
+plays after matching and attribution. Count inference reserves observed evidence
+before repetition exclusions, so excluded repeats do not return as estimates.
+
+Inclusion supports evidence level and attribution conditions. Evidence-level
+conditions apply to dated plays and undated cumulative counts. Undated counts
+remain separate from dated plays, retain their original contributions, and pass
+through the same all-time count views used by track, artist, and album reports.
+Disabling an inclusion filter restores its excluded listening.
+
+Manual web submissions preserve their original request and selected track
+snapshot before entering the native intake journal. Dated-play exports use
+displayed listening. Their existing format retains original aliases and omits
+undated counts. Export provenance and presentation parity still need review.
+
+Entry-page typography and layout use stock Koito classes again. Playlist
+membership is hidden from entry pages while imported memberships remain stored.
+The user's saved personal filter configuration has not been replaced.
+
+Backend tests and client type checking/build pass at this checkpoint. The local
+receiver still needs the latest build, browser verification, and working-data
+recovery/performance checks before completion. The GitHub branch is a development
+checkpoint, not a deployment approval.
+
 ## Acceptance audit
 
 | Requirement | Evidence still required before completion |

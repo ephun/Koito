@@ -173,6 +173,9 @@ func calculateView(ctx context.Context, reader sqlReader, records []matchingReco
 		}
 	}
 	if !active {
+		if err := applyRepetition(ctx, &plan, config); err != nil {
+			return plan, err
+		}
 		attachForwardingEvidence(&plan)
 		return plan, nil
 	}
@@ -181,6 +184,9 @@ func calculateView(ctx context.Context, reader sqlReader, records []matchingReco
 		return plan, err
 	}
 	err = inferLibraryContributions(ctx, &plan, libraries, config)
+	if err == nil {
+		err = applyRepetition(ctx, &plan, config)
+	}
 	if err == nil {
 		attachForwardingEvidence(&plan)
 	}

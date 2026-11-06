@@ -19,6 +19,8 @@ type matchingRecord struct {
 	LibraryFields    filters.Env        `json:"-"`
 	ExternalID       string             `json:"external_id,omitempty"`
 	CompletionIssues []FilterIssue      `json:"-"`
+	ValidityIssues   []FilterIssue      `json:"-"`
+	RepetitionIssues []FilterIssue      `json:"-"`
 	MusicIssues      []FilterIssue      `json:"-"`
 	TimeIssues       []FilterIssue      `json:"-"`
 	timeOffset       *time.Duration
@@ -71,6 +73,9 @@ type matchPlan struct {
 }
 
 func loadMatchingRecords(ctx context.Context, reader sqlReader, config RuleConfig, extra ...RuleConfig) ([]matchingRecord, error) {
+	if err := prepareValidityPrograms(config); err != nil {
+		return nil, err
+	}
 	if err := prepareContextPrograms(config); err != nil {
 		return nil, err
 	}
@@ -176,6 +181,7 @@ func interpretMatchingRecord(r *matchingRecord, config RuleConfig) {
 	}
 	applyContextPrograms(r, config)
 	basis := applyObservedTime(r, config)
+	applyValidity(r, config)
 	applyCompletion(r, config)
 	if r.Kind == "now_playing" {
 		r.Values.NowPlaying = true

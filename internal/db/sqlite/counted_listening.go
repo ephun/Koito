@@ -36,6 +36,6 @@ func (s *Sqlite) CountUndatedListens(ctx context.Context, tf db.Timeframe) (int6
 		return 0, nil
 	}
 	var count int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(undated_count),0) FROM source_aggregates a WHERE NOT EXISTS(SELECT 1 FROM track_scope s WHERE s.track_id=a.track_id AND s.included=0)`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(undated_count),0) FROM displayed_aggregates`).Scan(&count)
 	return count, err
 }

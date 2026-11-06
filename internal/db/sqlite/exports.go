@@ -15,7 +15,7 @@ func (s *Sqlite) GetExportPage(ctx context.Context, opts db.GetExportPageOpts) (
 		       t.id AS track_id, COALESCE(t.musicbrainz_id,rec.musicbrainz_id) AS track_mbid, t.duration,
 		       t.release_id,
 		       r.musicbrainz_id AS release_mbid, r.image, r.image_source, r.various_artists
-		FROM listens l
+		FROM displayed_listens l
 		JOIN tracks t ON l.track_id = t.id
 		LEFT JOIN track_recordings tr ON tr.track_id=t.id
 		LEFT JOIN recordings rec ON rec.recording_key=tr.recording_key

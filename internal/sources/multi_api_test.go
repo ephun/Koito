@@ -48,6 +48,25 @@ func TestMultiAPIHistoryReusesNativeEvents(t *testing.T) {
 	}
 }
 
+func TestMultiAPIDuplicateStateRetainsEvidence(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	data := []byte(`{"data":[{"uid":"duplicate-source","componentId":3,"parentId":null,"state":"duped","play":{"data":{"track":"Song","artists":["Artist"],"playDate":"2026-11-05T03:00:00Z"}}},{"uid":"duplicate-delivery","componentId":1,"parentId":7,"parent":{"uid":"original-source"},"state":"duped","play":{"data":{"track":"Song","artists":["Artist"],"playDate":"2026-11-05T03:00:00Z"}}}],"meta":{"limit":100,"offset":0,"total":2}}`)
+	if _, err := s.Import(ctx, bytes.NewReader(data), "duplicates.json", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Rebuild(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, s, "source_records") != 2 || count(t, s, "listens") != 0 {
+		t.Fatal("Source duplicates or delivery evidence contributed an independent play")
+	}
+	delivery := normalizeMultiAPI(json.RawMessage(`{"uid":"duplicate-delivery","parentId":7,"parent":{"uid":"original-source"},"state":"duped","play":{"data":{"track":"Song","artists":["Artist"],"playDate":"2026-11-05T03:00:00Z"}}}`))
+	if delivery.Reason != "forwarding evidence" || delivery.SupportID != "multi:original-source" {
+		t.Fatal("Duplicate delivery lost its supporting relationship")
+	}
+}
+
 // Opt-in local check uses original saved router responses, including all nested
 // metadata and destination attempts. It never changes the source snapshot.
 func TestLocalPhase8Router(t *testing.T) {

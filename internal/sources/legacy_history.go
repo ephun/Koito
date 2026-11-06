@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -127,8 +128,10 @@ func primaryAlias(value any) string {
 
 func normalizeLegacyHistory(raw json.RawMessage, parser string) recordValues {
 	var row map[string]any
-	_ = json.Unmarshal(raw, &row)
-	v := recordValues{Reason: "counted", Origin: "converted", TimeMeaning: "start", Precision: int64(time.Second)}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	_ = decoder.Decode(&row)
+	v := recordValues{MediaType: "music", Reason: "counted", Origin: "converted", TimeMeaning: "start", Precision: int64(time.Second)}
 	switch parser {
 	case LiveListenBrainz, ListenBrainzJSON, ListenBrainzJSONL:
 		meta := object(row["track_metadata"])
@@ -148,6 +151,26 @@ func normalizeLegacyHistory(raw json.RawMessage, parser string) recordValues {
 		v.OriginalService = valueText(extra["music_service_name"])
 		v.Forwarder = valueText(extra["submission_client"])
 		v.Device = valueText(extra["device_name"])
+		v.MediaPlayer = valueText(extra["media_player"])
+		v.MediaType = valueText(extra["media_type"])
+		if v.MediaType == "" {
+			v.MediaType = "music"
+		}
+		for _, key := range []string{"played_ms", "ms_played"} {
+			if value, ok := extra[key]; ok && value != nil {
+				if number, err := strconv.ParseInt(valueText(value), 10, 64); err == nil {
+					v.PlayedMS = number
+					v.PlayedKnown = true
+					break
+				}
+			}
+		}
+		if skipped, ok := extra["skipped"].(bool); ok {
+			v.Skipped = &skipped
+		}
+		if completed, ok := extra["completed"].(bool); ok {
+			v.ReportedComplete = &completed
+		}
 		v.SourceInput = valueText(extra["source_name"])
 		for _, key := range []string{"listen_msid", "event_id", "scrobble_id"} {
 			if id := valueText(extra[key]); id != "" {
@@ -165,6 +188,9 @@ func normalizeLegacyHistory(raw json.RawMessage, parser string) recordValues {
 			v.Time = time.Unix(seconds, 0).UTC()
 		} else {
 			v.Reason = "invalid timestamp"
+		}
+		if v.PlayedKnown && v.PlayedMS < 0 {
+			v.Reason = "invalid played duration"
 		}
 	case MalojaJSON:
 		track := object(row["track"])

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppContext } from "~/providers/AppProvider";
 import MusicTag from "./MusicTag";
 
@@ -18,22 +18,6 @@ export default function MusicStates({
 }) {
   const { user } = useAppContext();
   const [states, setStates] = useState<MusicState[]>([]);
-  const menu = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const closeOutside = (event: PointerEvent) => {
-      if (!menu.current?.contains(event.target as Node))
-        menu.current?.removeAttribute("open");
-    };
-    const closeEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") menu.current?.removeAttribute("open");
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeEscape);
-    };
-  }, []);
   useEffect(() => {
     setStates([]);
     if (user?.role !== "admin") return;
@@ -51,9 +35,8 @@ export default function MusicStates({
       });
     return () => controller.abort();
   }, [kind, id, user?.role]);
-  if (!states.length) return null;
-  const playlists = states.filter((state) => state.kind === "playlist");
-  const music = states.filter((state) => state.kind !== "playlist");
+  const displayedStates = states.filter((state) => state.kind !== "playlist");
+  if (!displayedStates.length) return null;
   const stateLink = (state: MusicState) => {
     const label =
       state.kind === "playlist"
@@ -83,25 +66,8 @@ export default function MusicStates({
     );
   };
   return (
-    <div className="min-w-0 w-full space-y-3" aria-label="Music sources">
-      {!!music.length && (
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {music.map(stateLink)}
-        </div>
-      )}
-      {!!playlists.length && (
-        <details ref={menu} className="relative min-w-0 w-full">
-          <summary className="w-fit cursor-pointer text-sm underline underline-offset-2">
-            Playlists
-          </summary>
-          <div
-            className="absolute left-0 top-full z-20 mt-2 flex max-h-72 w-80 max-w-full flex-wrap items-start gap-2 overflow-y-auto rounded-lg border border-(--color-bg-tertiary) bg-(--color-bg) p-3 shadow-lg"
-            aria-label="Playlists"
-          >
-            {playlists.map(stateLink)}
-          </div>
-        </details>
-      )}
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2" aria-label="Music sources">
+      {displayedStates.map(stateLink)}
     </div>
   );
 }

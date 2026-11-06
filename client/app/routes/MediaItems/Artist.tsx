@@ -59,7 +59,7 @@ export default function Artist() {
               showSeeMore
               className="max-w-[750px] lg:max-w-[450px]"
             />
-            <div className="min-w-0 w-full sm:min-w-[350px] flex-1">
+            <div className="min-w-[350px] flex-1">
               <LastPlayed
                 limit={11}
                 artistId={artist.id}

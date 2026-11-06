@@ -205,7 +205,7 @@ export default function Filters() {
     </>}
     {saved && draft && <section aria-labelledby="qualification-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="qualification-title">Qualification</h2><FieldHelp label="Qualification">Choose which listening meets your counting criteria.</FieldHelp></div>
-      <ProgramFilterManager state={saved} config={draft} busy={saving} type="qualification" subtype="completion" embedded onChange={upsert} onRemove={remove} onMove={move} />
+      {["completion", "repetition", "validity"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="qualification" subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} />)}
     </section>}
     {saved && draft && <section aria-labelledby="presentation-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="presentation-title">Presentation</h2><FieldHelp label="Presentation">Choose how music names and groups appear in the view.</FieldHelp></div>
@@ -213,7 +213,7 @@ export default function Filters() {
     </section>}
     {saved && draft && <section aria-labelledby="inclusion-title" className="space-y-3">
       <div className="flex items-center gap-2"><h2 id="inclusion-title">Inclusion</h2><FieldHelp label="Inclusion">Choose what contributes to the view.</FieldHelp></div>
-      <ProgramFilterManager state={saved} config={draft} busy={saving} type="inclusion" subtype="scope" embedded onChange={upsert} onRemove={remove} onMove={move} focusId={focusedScope ? focusedFilter : undefined} />
+      {["scope", "evidence"].map(subtype => <ProgramFilterManager key={subtype} state={saved} config={draft} busy={saving} type="inclusion" subtype={subtype} embedded onChange={upsert} onRemove={remove} onMove={move} focusId={subtype === "scope" && focusedScope ? focusedFilter : undefined} />)}
     </section>}
   </main>;
 }

@@ -45,6 +45,14 @@ func namingSchema() filters.Schema {
 	})
 	s.Labels["record.source_input"] = "Named source input"
 	s.Help["record.source_input"] = "The input name stored by the forwarding app."
+	for name, kind := range map[string]filters.Type{"record.media_type": filters.Text, "record.media_player": filters.Text, "record.skipped": filters.Boolean} {
+		s.Fields[name] = kind
+	}
+	s.Labels["record.media_type"] = "Media type"
+	s.Labels["record.media_player"] = "Playback app"
+	s.Labels["record.skipped"] = "Reported skip"
+	s.Help["record.played_ms"] = "Actual played time reported by the source. Missing time stays unknown."
+	s.Help["record.completed"] = "Completion reported by the source. Missing completion stays unknown."
 	return s
 }
 
@@ -183,11 +191,22 @@ func recordEnvironment(r matchingRecord) filters.Env {
 	if r.Values.SourceInput != "" {
 		env["record.source_input"] = filters.String(r.Values.SourceInput)
 	}
-	if r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard || r.Values.PlayedMS > 0 {
+	if r.Values.PlayedKnown || r.Service == "spotify" && (r.Parser == Parser || r.Parser == SpotifyStandard) || r.Values.OriginalFormat == Parser || r.Values.OriginalFormat == SpotifyStandard || r.Values.PlayedMS > 0 {
 		env["record.played_ms"] = filters.Integer(r.Values.PlayedMS)
-		if r.Values.ReportedComplete != nil {
-			env["record.completed"] = filters.Bool(*r.Values.ReportedComplete)
-		}
+	}
+	if r.Values.ReportedComplete != nil {
+		env["record.completed"] = filters.Bool(*r.Values.ReportedComplete)
+	}
+	if r.Values.Skipped != nil {
+		env["record.skipped"] = filters.Bool(*r.Values.Skipped)
+	}
+	if r.Values.MediaType != "" {
+		env["record.media_type"] = filters.String(r.Values.MediaType)
+	} else if r.Kind == "play" || r.Values.Reason == "counted" {
+		env["record.media_type"] = filters.String("music")
+	}
+	if r.Values.MediaPlayer != "" {
+		env["record.media_player"] = filters.String(r.Values.MediaPlayer)
 	}
 	if r.Values.Artist != "" {
 		env["original.artists"] = filters.Values(filters.String(r.Values.Artist))

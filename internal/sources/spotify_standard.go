@@ -34,6 +34,11 @@ func normalizeSpotifyStandard(raw json.RawMessage) recordValues {
 		return v
 	}
 	v.Title, v.Artist, v.PlayedMS, v.TimeText = row.Title, row.Artist, row.Played, row.End
+	v.PlayedKnown = true
+	v.MediaType = spotifyKind(raw)
+	if v.MediaType == "play" {
+		v.MediaType = "music"
+	}
 	// Spotify account exports document endTime as UTC. Retain the precision
 	// supplied by the file rather than manufacturing seconds or identifiers.
 	v.Time, v.Precision, v.Reason = interpretTime(row.End, "UTC")

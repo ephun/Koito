@@ -50,7 +50,7 @@ func scopeSnapshot(ctx context.Context, tx *sql.Tx) (map[string]scopeSnapshotIte
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT a.aggregate_key,a.track_id,a.undated_count,COALESCE(s.included,1) FROM source_aggregates a LEFT JOIN track_scope s ON s.track_id=a.track_id WHERE a.undated_count>0 ORDER BY a.aggregate_key`)
+	rows, err = tx.QueryContext(ctx, `SELECT a.aggregate_key,a.track_id,a.undated_count,COALESCE(g.included,s.included,1) FROM source_aggregates a LEFT JOIN track_scope s ON s.track_id=a.track_id LEFT JOIN aggregate_scope g ON g.aggregate_key=a.aggregate_key WHERE a.undated_count>0 ORDER BY a.aggregate_key`)
 	if err != nil {
 		return nil, err
 	}

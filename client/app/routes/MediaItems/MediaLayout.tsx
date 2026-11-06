@@ -70,6 +70,9 @@ export default function MediaLayout(props: Props) {
   const mobileTopMarginClass =
     user || props.musicbrainzId != null ? "mt-12" : "mt-4";
 
+  const headersizeclass =
+    props.title.length > 28 ? "text-2xl lg:text-5xl" : "text-3xl lg:text-7xl";
+
   return (
     <main
       className="w-full flex flex-col grow"
@@ -87,27 +90,42 @@ export default function MediaLayout(props: Props) {
       <meta property="og:title" content={title} />
       <meta name="description" content={title} />
       <div
-        className={`mx-auto w-19/20 min-w-0 max-w-[1600px] sm:w-[calc(100%-5rem)] ${mobileTopMarginClass} sm:mt-12`}
+        className={`mx-auto w-19/20 sm:w-auto sm:mx-10 sm:ml-10 ${mobileTopMarginClass} sm:mt-12`}
       >
-        <header
-          className="flex min-w-0 flex-col items-start gap-6 md:flex-row lg:gap-8"
-          aria-label="Music information"
-        >
-          <div className="aspect-square w-[280px] max-w-full shrink-0 self-start md:w-[320px] xl:w-[360px]">
+        <header className="flex gap-8 flex-wrap md:flex-nowrap relative sm:mb-6" aria-label="Music information">
+          <div className="flex flex-col justify-around">
             <img
               fetchPriority="high"
+              style={{ zIndex: 5 }}
               src={props.img.large}
               srcSet={`${props.img.large} 1x, ${props.img.xl} 2x`}
-              sizes="(min-width: 1280px) 360px, (min-width: 768px) 320px, 280px"
+              sizes="(max-width: 480px) 280px, 385px"
               alt={props.title}
-              className="h-full w-full rounded-(--border-radius) border object-cover"
+              className="md:w-[385px] rounded-(--border-radius) border w-[280px] h-[280px] h-auto"
             />
           </div>
-          <div className="min-w-0 w-full flex-1 space-y-4">
-            <div className="space-y-2">
-              <div className="flex min-h-8 items-center justify-between gap-4">
-                <p className="text-lg text-(--color-fg-secondary)">{props.type}</p>
-                <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <div className="flex flex-col items-start">
+            <h3>{props.type}</h3>
+            <div className="flex">
+              <h5 className={`mt-2 sm:mt-4 mb-1 sm:mb-3 font-semibold ${headersizeclass}`}>
+                {props.title}
+                <span className="text-xl font-medium text-(--color-fg-secondary) pl-2">
+                  {props.rank !== 0 && "#" + props.rank.toLocaleString()}
+                </span>
+              </h5>
+            </div>
+            <div className="flex flex-col gap-1.5 items-start">
+              {props.subContent}
+              {props.listenCount > 0 && <p>{props.listenCount.toLocaleString()} play{props.listenCount > 1 ? "s" : ""}</p>}
+              {props.timeListened !== 0 && <p title={Math.floor(props.timeListened / 3600) + " hours"}>{timeListenedString(props.timeListened)}</p>}
+              {props.firstListen > 0 && <p title={props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleString()}>
+                Listening since{" "}
+                {props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleDateString()}
+              </p>}
+              {props.metadata && <div className="min-w-0 w-full" aria-label="Music metadata">{props.metadata}</div>}
+            </div>
+          </div>
+          <div className="absolute left-1 sm:right-10 sm:left-auto -top-9 sm:top-0 flex gap-3 items-center">
                   {props.musicbrainzId && (
                     <Link
                       title="View on MusicBrainz"
@@ -189,57 +207,6 @@ export default function MediaLayout(props: Props) {
                       />
                     </>
                   )}
-                </div>
-              </div>
-              <h1 className="text-3xl! font-semibold! leading-tight! [overflow-wrap:anywhere] sm:text-4xl! xl:text-5xl!">
-                {props.title}
-                {props.rank !== 0 && (
-                  <span className="ml-2 inline-block text-xl font-medium text-(--color-fg-secondary)">
-                    #{props.rank.toLocaleString()}
-                  </span>
-                )}
-              </h1>
-              {props.subContent && (
-                <div className="space-y-1.5 text-base text-(--color-fg-secondary) [&_a]:text-(--color-fg)">
-                  {props.subContent}
-                </div>
-              )}
-            </div>
-            <dl
-              className="text-xl leading-normal text-(--color-fg-secondary) sm:text-2xl"
-              aria-label="Listening statistics"
-            >
-              <div className="inline">
-                <dt className="sr-only">Plays</dt>
-                <dd className="inline">
-                  {props.listenCount.toLocaleString()}{" "}
-                  {props.listenCount === 1 ? "play" : "plays"}
-                </dd>
-              </div>
-              {props.firstListen > 0 && (
-                <div
-                  className="inline"
-                  title={props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleString()}
-                >
-                  <dt className="sr-only">First listen</dt>
-                  <dd className="inline">
-                    {" "}since{" "}
-                    {props.firstListenDate ? calendarDate(props.firstListenDate) : new Date(props.firstListen * 1000).toLocaleDateString()}
-                  </dd>
-                </div>
-              )}
-              {props.timeListened > 0 && (
-                <div className="inline" title={Math.floor(props.timeListened / 3600) + " hours"}>
-                  <dt className="sr-only">Time listened</dt>
-                  <dd className="inline"> ({timeListenedString(props.timeListened)})</dd>
-                </div>
-              )}
-            </dl>
-            {props.metadata && (
-              <div className="min-w-0 space-y-3" aria-label="Music metadata">
-                {props.metadata}
-              </div>
-            )}
           </div>
         </header>
         {!!props.filterIssues?.length && (

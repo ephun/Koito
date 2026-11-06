@@ -132,11 +132,15 @@ func (s *Store) Filters(ctx context.Context) (FilterState, error) {
 	state.Blocks = ProgramSchema{Operators: filters.Operators, Schemas: map[string]filters.Schema{"presentation:naming": namingSchema(), "attribution:direct": directSchema(), "attribution:aggregate": aggregateSchema(), "attribution:heuristic": heuristicSchema(), "inference:count": countSchema(), "inference:time": timeSchema()}}
 	state.Blocks.Schemas["presentation:grouping"] = music.GroupingSchema()
 	state.Blocks.Schemas["inclusion:scope"] = music.ScopeSchema()
+	state.Blocks.Schemas["inclusion:evidence"] = music.ScopeSchema()
 	state.Blocks.Schemas["matching:play"] = playSchema()
 	state.Blocks.Schemas["matching:music"] = music.MatchingSchema()
 	state.Blocks.Schemas["qualification:completion"] = completionSchema()
+	state.Blocks.Schemas["qualification:validity"] = validitySchema()
+	state.Blocks.Schemas["qualification:repetition"] = repetitionSchema()
 	state.Blocks.Schemas["inference:context"] = contextSchema()
 	state.Blocks.Templates = map[string][]ProgramTemplate{"inference:count": {{"maximum", "Largest reported count", countProgram("maximum", RuleScope{})}, {"latest", "Latest reported count", countProgram("latest", RuleScope{})}, {"reset_total", "Assume decreases restart the counter", countProgram("reset_total", RuleScope{})}}}
+	state.Blocks.Templates["qualification:repetition"] = []ProgramTemplate{{"repeated-plays", "Repeated plays", repetitionProgram()}}
 	state.Blocks.Templates["inference:time"] = []ProgramTemplate{{"lastfm", "Last.fm timezone", legacyTimeProgram(Rule{Scope: RuleScope{Service: "lastfm"}, Settings: RuleSettings{Timezone: "UTC"}})}, {"spotify", "Spotify timestamps", spotifyTimeProgram("estimated_start")}, {"itunes", "iTunes play dates", legacyTimeProgram(Rule{Scope: RuleScope{Service: "itunes"}})}}
 	state.Blocks.Templates["presentation:naming"] = []ProgramTemplate{{"names", "Displayed names", displayedNameProgram()}, {"genres", "Artist genres", artistGenreProgram(0)}, {"source-tags", "Source tags", sourceTagProgram()}}
 	state.Blocks.Templates["presentation:grouping"] = []ProgramTemplate{{"editions", "Group edition suffixes", editionGroupingProgram()}}
@@ -385,7 +389,7 @@ func validateRules(config RuleConfig) error {
 		if rule.Priority != nil && (*rule.Priority < 0 || *rule.Priority > 100000) {
 			return errors.New("Filter priority must be between 0 and 100000.")
 		}
-		if rule.Program != nil && !(rule.Type == "qualification" && rule.Subtype == "completion" || rule.Type == "inclusion" && rule.Subtype == "scope" || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time" || rule.Subtype == "context") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
+		if rule.Program != nil && !(rule.Type == "qualification" && (rule.Subtype == "completion" || rule.Subtype == "validity" || rule.Subtype == "repetition") || rule.Type == "inclusion" && (rule.Subtype == "scope" || rule.Subtype == "evidence") || rule.Type == "presentation" && (rule.Subtype == "naming" || rule.Subtype == "grouping") || rule.Type == "attribution" && (rule.Subtype == "direct" || rule.Subtype == "aggregate" || rule.Subtype == "heuristic") || rule.Type == "inference" && (rule.Subtype == "count" || rule.Subtype == "time" || rule.Subtype == "context") || rule.Type == "matching" && (rule.Subtype == "play" || rule.Subtype == "music")) {
 			return errors.New("This filter type does not support blocks yet.")
 		}
 		if rule.ID == "" || len(rule.ID) > 120 || ids[rule.ID] {
@@ -429,6 +433,26 @@ func validateRules(config RuleConfig) error {
 			return errors.New("The share must be between 0 and 100 percent.")
 		}
 		switch {
+		case rule.Type == "qualification" && rule.Subtype == "repetition":
+			if rule.Program == nil {
+				return errors.New("Repetition filters need IF and SET blocks.")
+			}
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Repetition conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, repetitionSchema()); err != nil {
+				return err
+			}
+		case rule.Type == "qualification" && rule.Subtype == "validity":
+			if rule.Program == nil {
+				return errors.New("Validity filters need IF and SET blocks.")
+			}
+			if rule.Scope != (RuleScope{}) {
+				return errors.New("Move Validity conditions into IF blocks.")
+			}
+			if _, err := filters.CompileProgram(*rule.Program, validitySchema()); err != nil {
+				return err
+			}
 		case rule.Type == "qualification" && rule.Subtype == "completion":
 			if rule.Program == nil {
 				return errors.New("Completion filters need IF and SET blocks.")
@@ -439,7 +463,7 @@ func validateRules(config RuleConfig) error {
 			if _, err := filters.CompileProgram(*rule.Program, completionSchema()); err != nil {
 				return err
 			}
-		case rule.Type == "inclusion" && rule.Subtype == "scope":
+		case rule.Type == "inclusion" && (rule.Subtype == "scope" || rule.Subtype == "evidence"):
 			if rule.Program == nil {
 				return errors.New("Scope filters need IF and SET blocks.")
 			}

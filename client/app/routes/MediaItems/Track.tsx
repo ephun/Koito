@@ -65,7 +65,7 @@ export default function Track() {
       }
     >
       {track.first_listen > 0 && <div className="flex flex-col gap-10 md:gap-20 mt-14">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[350px] flex-1">
           <LastPlayed limit={11} trackId={track.id} musicTrackId={track.music_track_id} showAlbums showNowPlaying showSeeMore />
         </div>
         <div className="flex flex-wrap gap-10">

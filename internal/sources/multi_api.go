@@ -46,6 +46,8 @@ func normalizeMultiAPI(raw json.RawMessage) recordValues {
 		if uid := valueText(parent["uid"]); uid != "" {
 			v.SupportID = "multi:" + uid
 		}
+	} else if valueText(row["state"]) == "duped" {
+		v.Reason = "source duplicate"
 	}
 	return v
 }

@@ -111,6 +111,8 @@ func normalizeMultiPlay(value any) recordValues {
 	data := object(play["data"])
 	meta := object(play["meta"])
 	v := recordValues{Reason: "counted", Origin: "forwarded", TimeMeaning: "start"}
+	v.MediaType = "music"
+	v.MediaPlayer = valueText(meta["mediaPlayerName"])
 	v.Title, v.Album = valueText(data["track"]), valueText(data["album"])
 	v.DurationMS = durationMilliseconds(data["duration"])
 	if artists, ok := data["artists"].([]any); ok {
@@ -150,6 +152,7 @@ func normalizeMultiPlay(value any) recordValues {
 		if listened < 0 || listened >= float64(math.MaxInt64)/1000 {
 			v.Reason = "invalid played duration"
 		} else {
+			v.PlayedKnown = true
 			v.PlayedMS = int64(listened * 1000)
 		}
 	}

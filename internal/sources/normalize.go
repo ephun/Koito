@@ -12,6 +12,10 @@ import (
 )
 
 type recordValues struct {
+	MediaType        string               `json:"media_type,omitempty"`
+	MediaPlayer      string               `json:"media_player,omitempty"`
+	PlayedKnown      bool                 `json:"played_known,omitempty"`
+	Skipped          *bool                `json:"skipped,omitempty"`
 	SourceInput      string               `json:"source_input,omitempty"`
 	TimeEstimated    bool                 `json:"time_estimated,omitempty"`
 	Performance      *performanceValues   `json:"performance,omitempty"`
@@ -121,6 +125,11 @@ func normalizeRecord(raw json.RawMessage, parser, zone string) recordValues {
 		v.Album = item.Album
 		v.URI = item.URI
 		v.PlayedMS = item.Played
+		v.PlayedKnown = true
+		v.MediaType = spotifyKind(raw)
+		if v.MediaType == "play" {
+			v.MediaType = "music"
+		}
 		v.Device = item.Platform
 		if item.ReasonEnd != "" {
 			complete := item.ReasonEnd == "trackdone"

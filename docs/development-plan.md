@@ -648,6 +648,14 @@ recover without loss, and changing rules treats live and imported records
 consistently. This completes the capture portion of
 [#361](https://github.com/gabehf/Koito/issues/361).
 
+### Checkpoint after Phase 8
+
+The user has additional features to address before Phase 9. Finish Phase 8,
+then review that feature list together before starting the full-dump migration.
+Keep the current personal filters during development. Rebuild the personal
+filter set as the last step before production deployment, after the requested
+features are available.
+
 ## Phase 9: full-dump migration, backup, and performance
 
 **Outcome:** the complete collection of supported source data can be imported

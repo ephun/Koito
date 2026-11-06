@@ -46,10 +46,11 @@ func (p ScopePrograms) UsesPlays() bool {
 }
 
 type ScopePlay struct {
-	TrackID, Time int64
-	Key, Client   string
-	Records       []filters.Value
-	Performance   *Performance
+	TrackID, Time                        int64
+	Key, Client                          string
+	Records                              []filters.Value
+	Performance                          *Performance
+	Evidence, Listener, AttributionBasis string
 }
 
 func (play ScopePlay) Environment(base filters.Env) filters.Env {
@@ -60,19 +61,30 @@ func (play ScopePlay) Environment(base filters.Env) filters.Env {
 	env["play.key"], env["play.client"] = filters.String(play.Key), filters.String(play.Client)
 	env["play.time"] = filters.Timestamp(time.Unix(play.Time, 0).UTC())
 	env["play.record_ids"] = filters.Values(play.Records...)
+	evidence := play.Evidence
+	if evidence == "" {
+		evidence = "observed"
+	}
+	listener := play.Listener
+	if listener == "" {
+		listener = "self"
+	}
+	env["play.evidence_level"] = filters.String(evidence)
+	env["play.listener"] = filters.String(listener)
+	env["play.attribution_basis"] = filters.String(play.AttributionBasis)
 	for field, value := range play.Performance.Environment() {
 		env[field] = value
 	}
 	return env
 }
 func ScopePlays(ctx context.Context, db Database, trackID int64) ([]ScopePlay, error) {
-	query := `SELECT track_id,listened_at,play_key,client FROM listens`
+	query := `SELECT l.track_id,l.listened_at,l.play_key,l.client,COALESCE(d.evidence_level,'observed'),COALESCE(json_extract(d.attribution_json,'$.listener'),'self'),COALESCE(json_extract(d.attribution_json,'$.basis'),'existing history') FROM listens l LEFT JOIN source_play_details d ON d.play_key=l.play_key`
 	args := []any{}
 	if trackID != 0 {
-		query += ` WHERE track_id=?`
+		query += ` WHERE l.track_id=?`
 		args = append(args, trackID)
 	}
-	query += ` ORDER BY track_id,listened_at,play_key`
+	query += ` ORDER BY l.track_id,l.listened_at,l.play_key`
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -81,7 +93,7 @@ func ScopePlays(ctx context.Context, db Database, trackID int64) ([]ScopePlay, e
 	wanted := map[string]bool{}
 	for rows.Next() {
 		var play ScopePlay
-		if err = rows.Scan(&play.TrackID, &play.Time, &play.Key, &play.Client); err != nil {
+		if err = rows.Scan(&play.TrackID, &play.Time, &play.Key, &play.Client, &play.Evidence, &play.Listener, &play.AttributionBasis); err != nil {
 			rows.Close()
 			return nil, err
 		}

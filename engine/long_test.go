@@ -710,6 +710,7 @@ func TestManualListen(t *testing.T) {
 	resp, err := makeAuthRequest(t, session, "POST", "/apis/web/v1/listens", strings.NewReader(`{"track_id":1,"unix":`+unix+`}`))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	waitForLivePublication(t)
 	track, err := store.GetTrack(context.Background(), db.GetTrackOpts{ID: 1})
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, track.ListenCount)
