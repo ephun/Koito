@@ -65,10 +65,11 @@ export default function ListensTable({
                 </CurrentTrackLink>
               </div>
             </td>
-            <td className={timeColClasses}>
+            <td className={`text-end whitespace-nowrap ${timeColClasses}`}>
               <div className="flex items-center justify-end gap-2 text-end">
                 <div className="h-1.5 w-1.5 rounded-full bg-(--color-primary)" />
                 {"Now Playing"}
+                {user?.role === "admin" && <span aria-hidden="true" className="h-6 w-6 shrink-0" />}
               </div>
             </td>
           </tr>
