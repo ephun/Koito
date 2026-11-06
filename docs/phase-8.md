@@ -47,8 +47,11 @@ been configured. Existing Last.fm and production Koito destinations remain activ
 A continuous local capture saves complete Last.fm history pages from November 1
 and periodic Multi-Scrobbler API pages. These originals include overlap with the
 baseline. The selected backfill added 1,590 records to the working database.
-Repeating those imports added zero records. The working view rebuild remains
-under verification. Record counts are not unique-play counts.
+Repeating those imports added zero records. The working view rebuild published
+265,537 plays from 1,106,424 records in 901 seconds. It reported zero collisions.
+A comparison with the pre-intake database found zero changed or missing baseline
+records and zero missing or size-changed file registrations. Saved filter version
+9 remained selected. Record counts are not unique-play counts.
 
 The installed Multi-Scrobbler version is 0.17.2. Its ListenBrainz conversion
 forwards service, player, recording identifiers, and recording duration. It omits
@@ -79,9 +82,14 @@ Entry-page typography and layout use stock Koito classes again. Playlist
 membership is hidden from entry pages while imported memberships remain stored.
 The user's saved personal filter configuration has not been replaced.
 
-Backend tests and client type checking/build pass at this checkpoint. The local
-receiver still needs the latest build, browser verification, and working-data
-recovery/performance checks before completion. The GitHub branch is a development
+Backend tests and client type checking/build pass at this checkpoint. The latest
+local receiver runs migration 29. Browser checks verified stock entry-page title,
+cover, rank, and spacing classes at desktop and mobile widths. Filter headings,
+the repetition draft editor, mobile width, and unchanged saved version also pass.
+
+Working-data recovery and performance remain incomplete. A fifteen-minute full
+rebuild is unsuitable for routine live publication. Continuous history capture
+remains running while that is addressed. The GitHub branch is a development
 checkpoint, not a deployment approval.
 
 ## Acceptance audit
@@ -93,9 +101,9 @@ checkpoint, not a deployment approval.
 | Separate now-playing from completed plays | Unit checks cover timestamped updates, expiry, stop, ordering, completion, and restart. Verify rendered behavior. |
 | Preserve source, device, app, and native identifiers | Initial ListenBrainz fields retained and interpreted. Verify Multi-Scrobbler's actual outgoing fields and distinct event behavior. |
 | Preserve current history, database, queues, and configuration | Existing historical backups and current API pages located. Confirm current configuration and queue backup coverage before editing the server. |
-| Backfill since the last export with overlap | Reader tested on original saved pages. Import into the working database, compare coverage with current destinations, and investigate gaps. |
+| Backfill since the last export with overlap | Imported 1,590 actual records. Reimport added zero. Rebuild and baseline-record comparison pass. Compare coverage with current destinations and investigate gaps. |
 | Add the fork as another destination | Connectivity and authentication verified. Configure and observe real delivery after receiver verification. |
-| Remaining qualification and inclusion controls | Implement and test repetition, validity, source/date/media conditions, evidence level, and uncertain attribution where missing. |
+| Remaining qualification and inclusion controls | Repetition, validity, played time, media/app facts, and evidence-level conditions implemented and tested. Undated inclusion also tested. Complete working-data inspection of source/date and uncertain-attribution conditions. |
 | Repeat limits after matching and attribution | Verify distinct plays remain distinct and shared listening does not trigger false loop limits. |
 | Consistent history, search, statistics, charts, and exports | Verify every affected read path against the same applied filters. |
 | Existing native behavior | Finish integration checks, preserve manual submissions, and verify any configured relay behavior. |
