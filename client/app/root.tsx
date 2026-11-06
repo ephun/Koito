@@ -49,6 +49,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 try {
                   var bg = localStorage.getItem("bgcolor");
                   document.documentElement.style.backgroundColor = bg;
+                  var theme = localStorage.getItem("theme");
+                  if (theme) document.documentElement.setAttribute("data-theme", theme);
+                  if (theme === "custom") {
+                    var custom = JSON.parse(localStorage.getItem("custom-theme") || "null");
+                    if (custom && typeof custom.bg === "string" && typeof custom.fg === "string") {
+                      document.documentElement.style.setProperty("--color-bg", custom.bg);
+                      document.documentElement.style.setProperty("--color-fg", custom.fg);
+                    }
+                  }
                 } catch (e) {
                   console.log(e);
                 }

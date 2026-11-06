@@ -69,9 +69,9 @@ export default function ListensTable({
               <div className="flex items-center justify-end gap-2 text-end">
                 <div className="h-1.5 w-1.5 rounded-full bg-(--color-primary)" />
                 {"Now Playing"}
-                {user?.role === "admin" && <span aria-hidden="true" className="h-6 w-6 shrink-0" />}
               </div>
             </td>
+            {user?.role === "admin" && <td aria-hidden="true" className="w-10 min-w-10 px-2 text-center align-middle" />}
           </tr>
         )}
         {listens.map((item) => (
@@ -116,9 +116,9 @@ export default function ListensTable({
               <span className="inline-flex items-center justify-end gap-2">
               {user?.role === "admin" && item.record_id ? <Link className="hover:underline underline-offset-2" title="View records" to={`/imports?record=${item.record_id}`}>{item.date_only && item.local_date ? calendarDate(item.local_date) : timeSince(new Date(item.time))}</Link> : item.date_only && item.local_date ? calendarDate(item.local_date) : timeSince(new Date(item.time))}
               {item.time_estimated && <FieldHelp label="Estimated time">This time comes from an enabled Time filter.</FieldHelp>}
-              {user?.role === "admin" && <Link aria-label="Edit play inclusion" title="Edit play inclusion" to={`/filters?listen_track=${item.track.id}&listen_time=${encodeURIComponent(item.time)}&listen_key=${encodeURIComponent(item.play_key || "")}${item.record_id && (!item.evidence || item.evidence === "observed") ? `&play_record=${item.record_id}` : ""}`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"><EyeOff size={14} /></Link>}
               </span>
             </td>
+            {user?.role === "admin" && <td className="w-10 min-w-10 px-2 text-center align-middle"><Link aria-label="Edit play inclusion" title="Edit play inclusion" to={`/filters?listen_track=${item.track.id}&listen_time=${encodeURIComponent(item.time)}&listen_key=${encodeURIComponent(item.play_key || "")}${item.record_id && (!item.evidence || item.evidence === "observed") ? `&play_record=${item.record_id}` : ""}`} className="inline-flex h-6 w-6 items-center justify-center align-middle sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"><EyeOff size={14} /></Link></td>}
           </tr>
         ))}
       </tbody>
