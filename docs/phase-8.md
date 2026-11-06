@@ -92,7 +92,12 @@ The user ran setup successfully on November 6 at 20:55 UTC. The development
 destination is configured and all six explicit source routes include it. Token
 validation succeeds. Multi-Scrobbler restarted and its development client reports
 running. Backlog submissions receive HTTP 200 and their original requests are
-preserved. Verification of a newly completed listen remains in progress.
+preserved. Newly completed listens also reached publication. Checks linked each
+completed submission, including "Kiss Off" and "The Second Waltz, Op. 99a", to
+exactly one displayed play. Their now-playing records linked to zero plays.
+Fifteen completed submissions and ten now-playing submissions were projected
+before the local restart test. A further accepted submission survived that
+restart and is undergoing replay. Recovery publication remains unverified.
 
 `scripts/backup-koito.cjs` creates a verified online snapshot of the original
 Koito database and copies its configuration files. It passed against the saved
