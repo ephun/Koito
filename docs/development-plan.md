@@ -650,6 +650,11 @@ consistently. This completes the capture portion of
 
 ### Checkpoint after Phase 8
 
+The [visualization system proposal](visualization-system-proposal.md) reviews the
+requested reference applications and proposes editable queries, charts, widgets,
+dashboards, and a richer Rewind. Its vocabulary and implementation sequence are
+under discussion. It does not authorize starting Phase 9 or replacing personal filters.
+
 The user has additional features to address before Phase 9. Finish Phase 8,
 then review that feature list together before starting the full-dump migration.
 Keep the current personal filters during development. Rebuild the personal
