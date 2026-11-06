@@ -44,7 +44,7 @@ export async function clientLoader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const { year, month } = parseParams(url.searchParams);
 
-  const res = await fetch(`/apis/web/v1/summary?year=${year}&month=${month}`);
+  const res = await fetch(`/apis/web/v1/summary?year=${year}&month=${month}`, { signal: request.signal });
   if (!res.ok) throw new Response("Failed to load summary", { status: 500 });
 
   const stats: RewindStats = await res.json();

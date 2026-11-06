@@ -7,8 +7,8 @@ import { timeListenedString } from "~/utils/utils";
 import InterestGraph from "~/components/InterestGraph";
 import MusicStates from "~/components/MusicStates";
 
-export async function clientLoader({ params }: LoaderFunctionArgs) {
-  const res = await fetch(`/apis/web/v1/track/${params.id}`);
+export async function clientLoader({ params, request }: LoaderFunctionArgs) {
+  const res = await fetch(`/apis/web/v1/track/${params.id}`, { signal: request.signal });
   if (!res.ok) {
     throw new Response("Failed to load track", { status: res.status });
   }

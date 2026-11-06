@@ -7,8 +7,8 @@ import ActivityGrid from "~/components/ActivityGrid";
 import InterestGraph from "~/components/InterestGraph";
 import MusicStates from "~/components/MusicStates";
 
-export async function clientLoader({ params }: LoaderFunctionArgs) {
-  const res = await fetch(`/apis/web/v1/album/${params.id}`);
+export async function clientLoader({ params, request }: LoaderFunctionArgs) {
+  const res = await fetch(`/apis/web/v1/album/${params.id}`, { signal: request.signal });
   if (!res.ok) {
     throw new Response("Failed to load album", { status: 500 });
   }

@@ -6,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
   useRouteError,
+  useNavigation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -85,14 +86,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const navigation = useNavigation();
+  const navigating = navigation.state !== "idle";
   return (
     <>
+      {navigating && <div role="status" aria-label="Loading page" className="fixed inset-x-0 top-0 z-[100] h-1 animate-pulse bg-(--color-fg-secondary)"><span className="sr-only">Loading page</span></div>}
       <AppProvider>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <div className="flex-col flex sm:flex-row">
               <Sidebar />
-              <div className="flex flex-col items-center mx-auto w-full ml-0 sm:ml-[58px]">
+              <div aria-busy={navigating} className="flex flex-col items-center mx-auto w-full ml-0 sm:ml-[58px]">
                 <Outlet />
                 <Footer />
               </div>

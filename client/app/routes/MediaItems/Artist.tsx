@@ -10,8 +10,8 @@ import InterestGraph from "~/components/InterestGraph";
 import MusicTag from "~/components/MusicTag";
 import { useAppContext } from "~/providers/AppProvider";
 
-export async function clientLoader({ params }: LoaderFunctionArgs) {
-  const res = await fetch(`/apis/web/v1/artist/${params.id}`);
+export async function clientLoader({ params, request }: LoaderFunctionArgs) {
+  const res = await fetch(`/apis/web/v1/artist/${params.id}`, { signal: request.signal });
   if (!res.ok) {
     throw new Response("Failed to load artist", { status: 500 });
   }
